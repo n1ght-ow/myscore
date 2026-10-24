@@ -300,6 +300,7 @@ public final class MainActivity extends Activity {
         body.addView(calendar);
         section("偏好与帮助");LinearLayout options=ui.column();options.setBackground(ui.shape(ui.surface,14));
         settingRow(options,"外观",themeName(),this::themeChoice);
+        settingRow(options,"检查更新","当前版本 "+BuildConfig.VERSION_NAME,()->startActivity(new Intent(this,UpdateActivity.class)));
         settingRow(options,"数据来源与连接",snapshot.failed()?"部分来源未更新":"查看来源状态",this::sourceStatus);
         settingRow(options,"使用帮助","日历提醒与数据说明",this::help);body.addView(options);
         ui.gap(body,18);TextView hint=ui.text("在比赛卡上点日历图标，即可订阅单场比赛。",12,ui.muted,false);hint.setPadding(ui.dp(4),0,ui.dp(4),0);body.addView(hint);

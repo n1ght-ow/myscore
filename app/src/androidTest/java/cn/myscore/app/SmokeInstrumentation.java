@@ -41,6 +41,7 @@ public final class SmokeInstrumentation extends Instrumentation {
             check(findText(activity.getWindow().getDecorView(),"MyScore")!=null,"sport filters stay interactive during network loads");
             calendarChecks();
             checks+=UiChecks.run(this,activity);
+            checks+=UpdateChecks.run(this,context);
             if(details){DetailChecks.run(this,context);checks+=DetailChecks.checks;}
             if(network){LocalDate day=Match.today(System.currentTimeMillis());Repository.Snapshot snapshot=new Repository(context).fetch(day,day,"全部",true);StringBuilder sources=new StringBuilder();for(Repository.Batch batch:snapshot.batches){sources.append(batch.competition.id).append(": ").append(batch.error.isEmpty()?"OK "+batch.matches.size():batch.error).append('\n');check(batch.error.isEmpty(),"device source: "+batch.competition.id+" "+batch.error);}report.putString("sources",sources.toString());}
             report.putInt("checks",checks);report.putString("stream","\nPASS: "+checks+" Android runtime checks.\n");

@@ -40,12 +40,13 @@ final class UiChecks {
         test.runOnMainSync(original::recreate);
         Activity recreated=test.waitForMonitorWithTimeout(monitor,8000);test.removeMonitor(monitor);
         require(recreated!=null,"activity recreates");test.waitForIdleSync();checks++;
-        require(find(recreated.getWindow().getDecorView(),"单场订阅")!=null,"settings remains selected after recreation");checks++;
+        require(hasText(test,recreated,"单场订阅"),"settings remains selected after recreation");checks++;
         test.runOnMainSync(()->click(recreated.getWindow().getDecorView(),"比赛"));test.waitForIdleSync();
-        require(find(recreated.getWindow().getDecorView(),"MyScore")!=null,"matches remain reachable after recreation");checks++;
+        require(hasText(test,recreated,"MyScore"),"matches remain reachable after recreation");checks++;
         return checks;
     }
     private static Field field(String name)throws Exception{Field field=MainActivity.class.getDeclaredField(name);field.setAccessible(true);return field;}
+    private static boolean hasText(Instrumentation test,Activity activity,String text){boolean[] visible=new boolean[1];test.runOnMainSync(()->visible[0]=find(activity.getWindow().getDecorView(),text)!=null);return visible[0];}
     private static void require(boolean value,String message){if(!value)throw new AssertionError(message);android.util.Log.i("MyScoreUiTests","PASS "+message);}
     private static TextView find(View view,String text){if(view instanceof TextView&&text.contentEquals(((TextView)view).getText()))return(TextView)view;if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){TextView result=find(group.getChildAt(i),text);if(result!=null)return result;}}return null;}
     private static void click(View root,String text){View view=find(root,text);require(view!=null,"control exists: "+text);while(!view.isClickable()&&view.getParent() instanceof View)view=(View)view.getParent();view.performClick();}

@@ -20,6 +20,8 @@ android
 
 ## Capabilities and Constraints
 
+- 0.6.0 起在设置中检查 GitHub Releases 正式更新，使用系统后台下载，校验文件及签名后由用户确认覆盖安装；保留设置和日历关联。首次需先手动覆盖安装带此入口的版本，不提供静默安装，不要求共享存储权限或 GitHub 登录。
+
 - 英超、欧冠、Carabao Cup、FA Cup、NBA、NFL、F1。
 - CS2 仅 Team Spirit 主队；LOL 仅每年的 Worlds 世界赛。
 - 体育在前台自动刷新来源给出的计时、节次、圈数、排名和比分；不以本地推算伪装为来源实时计时。

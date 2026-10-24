@@ -60,15 +60,16 @@ public final class Repository {
     public Snapshot fetch(LocalDate from, LocalDate to, String group, boolean force, java.util.function.Consumer<Batch> onBatch) {
         Snapshot result=new Snapshot();
         java.util.concurrent.CompletionService<Batch> completed=new java.util.concurrent.ExecutorCompletionService<>(NETWORK);
+        Map<Future<Batch>,Competition> tasks=new HashMap<>();
         int count=0;
-        for(Competition c:Competition.ALL) if(group.equals("全部")||c.group.equals(group)) {completed.submit(()->fetchOne(c,from,to,force));count++;}
+        for(Competition c:Competition.ALL) if(group.equals("全部")||c.group.equals(group)) {tasks.put(completed.submit(()->fetchOne(c,from,to,force)),c);count++;}
         for(int i=0;i<count;i++) {
             try {
-                Batch batch=completed.take().get();
+                Future<Batch> task=completed.take();Batch batch;
+                try{batch=task.get();}catch(ExecutionException e){batch=load(tasks.get(task),from,to);batch.error="来源暂不可用，请稍后重试";android.util.Log.w("MyScore","Source task failed",e.getCause());}
                 result.batches.add(batch);
                 if(onBatch!=null)onBatch.accept(batch);
-            } catch(InterruptedException e) {Thread.currentThread().interrupt();break;}
-            catch(ExecutionException e) {android.util.Log.w("MyScore","Source task failed",e.getCause());}
+            } catch(InterruptedException e) {for(Future<Batch> task:tasks.keySet())task.cancel(true);Thread.currentThread().interrupt();break;}
         }
         return result;
     }

@@ -212,6 +212,7 @@ final class Sheet {
         if (window != null) {
             window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT);
             window.getDecorView().setPadding(0, 0, 0, 0);
+            Ui.highRefresh(window);
         }
     }
     private static final class MaxScroll extends ScrollView {

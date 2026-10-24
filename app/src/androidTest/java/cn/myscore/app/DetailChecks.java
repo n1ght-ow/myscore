@@ -32,6 +32,9 @@ final class DetailChecks {
                 // Two football snapshots suffice for a shared adapter, but source checks cover all cups.
                 if(!d.match.league.equals("epl")&&d.match.group.equals("足球"))continue;
                 activity=test.startActivitySync(new Intent(c,DetailActivity.class).putExtra("match",d.match.json().toString()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));test.waitForIdleSync();
+                long until=android.os.SystemClock.uptimeMillis()+5000;
+                while(fieldDetail()==null&&android.os.SystemClock.uptimeMillis()<until){Thread.sleep(40);test.waitForIdleSync();}
+                check(fieldDetail()!=null,"cached detail loads asynchronously "+d.match.league);
                 check(find(activity.getWindow().getDecorView(),"总览")!=null,"full detail opens "+d.match.league+" "+theme);
                 check(find(activity.getWindow().getDecorView(),"左右滑动查看完整数据")==null,"tables keep all columns visible "+d.match.league+" "+theme);
                 if(d.match.league.equals("epl"))capture("football-overview-"+theme);
@@ -44,6 +47,7 @@ final class DetailChecks {
         c.getSharedPreferences("settings",0).edit().putString("theme","dark").commit();c.getResources().getConfiguration();
         activity=test.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));test.waitForIdleSync();check(find(activity.getWindow().getDecorView(),"我的比赛")!=null,"system Back leaves full detail and score list can resume");
     }
+    private static Object fieldDetail()throws Exception{java.lang.reflect.Field field=DetailActivity.class.getDeclaredField("detail");field.setAccessible(true);Object[] result=new Object[1];instrumentation.runOnMainSync(()->{try{result[0]=field.get(activity);}catch(IllegalAccessException e){throw new AssertionError(e);}});return result[0];}
     private static void click(String text){TextView found=find(activity.getWindow().getDecorView(),text);check(found!=null,"tab control exists: "+text);instrumentation.runOnMainSync(()->{View target=found;while(target!=null&&!target.isClickable())target=target.getParent() instanceof View?(View)target.getParent():null;if(target!=null)target.performClick();});instrumentation.waitForIdleSync();}
     private static TextView find(View root,String s){if(root instanceof TextView&&((TextView)root).getText().toString().equals(s))return (TextView)root;if(root instanceof ViewGroup){ViewGroup group=(ViewGroup)root;for(int i=0;i<group.getChildCount();i++){TextView v=find(group.getChildAt(i),s);if(v!=null)return v;}}return null;}
     private static void capture(String name)throws Exception {instrumentation.waitForIdleSync();Thread.sleep(600);Bitmap b=instrumentation.getUiAutomation().takeScreenshot();check(b!=null,"native capture "+name);File dir=new File(context.getExternalFilesDir(null),"review-v2");dir.mkdirs();try(FileOutputStream out=new FileOutputStream(new File(dir,name+".png"))){b.compress(Bitmap.CompressFormat.PNG,100,out);}b.recycle();}

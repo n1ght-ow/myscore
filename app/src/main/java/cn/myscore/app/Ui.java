@@ -15,6 +15,18 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 final class Ui {
+    /** A window hint only: Android still owns power, thermal and user refresh policy. */
+    static void highRefresh(android.view.Window window) {
+        if(window==null)return;
+        android.view.Display display=window.getDecorView().getDisplay();
+        if(display==null)return;
+        android.view.Display.Mode current=display.getMode();float best=current.getRefreshRate();
+        for(android.view.Display.Mode mode:display.getSupportedModes())
+            if(mode.getPhysicalWidth()==current.getPhysicalWidth()&&mode.getPhysicalHeight()==current.getPhysicalHeight())best=Math.max(best,mode.getRefreshRate());
+        android.view.WindowManager.LayoutParams params=window.getAttributes();
+        if(params.preferredDisplayModeId==0&&Math.abs(params.preferredRefreshRate-best)<0.1f)return;
+        params.preferredDisplayModeId=0;params.preferredRefreshRate=best;window.setAttributes(params);
+    }
     final Context c;
     final int bg,surface,text,muted,primary,onPrimary,tonal,line,error;
     Ui(Context c,boolean dark) {
@@ -48,8 +60,8 @@ final class Ui {
     View divider(){View d=new View(c);d.setBackgroundColor(line);d.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(1)));return d;}
     void gap(LinearLayout into,int h){View space=new View(c);into.addView(space,new LinearLayout.LayoutParams(1,dp(h)));}
     static final class Icon extends View {
-        private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);private final String kind;private final int color;
-        Icon(Context c,String kind,int color){super(c);this.kind=kind;this.color=color;setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);private final String kind;private final int color;private final Path refreshArrow=new Path();
+        Icon(Context c,String kind,int color){super(c);this.kind=kind;this.color=color;refreshArrow.moveTo(19,3);refreshArrow.lineTo(19,9);refreshArrow.lineTo(13,9);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
         @Override protected void onDraw(Canvas canvas){
             super.onDraw(canvas);canvas.save();float scale=Math.min(getWidth(),getHeight())/24f;
             canvas.translate((getWidth()-24*scale)/2,(getHeight()-24*scale)/2);canvas.scale(scale,scale);
@@ -57,7 +69,7 @@ final class Ui {
             if(kind.equals("back")){canvas.drawLine(20,12,4,12,p);canvas.drawLine(4,12,11,5,p);canvas.drawLine(4,12,11,19,p);}
             else if(kind.equals("check")){canvas.drawLine(5,12,10,17,p);canvas.drawLine(10,17,19,7,p);}
             else if(kind.equals("chevron")){canvas.drawLine(9,6,15,12,p);canvas.drawLine(15,12,9,18,p);}
-            else if(kind.equals("refresh")) {canvas.drawArc(4,4,20,20,35,285,false,p);Path path=new Path();path.moveTo(19,3);path.lineTo(19,9);path.lineTo(13,9);canvas.drawPath(path,p);}
+            else if(kind.equals("refresh")) {canvas.drawArc(4,4,20,20,35,285,false,p);canvas.drawPath(refreshArrow,p);}
             else if(kind.equals("calendar")) {canvas.drawRoundRect(4,5,20,21,2,2,p);canvas.drawLine(8,3,8,7,p);canvas.drawLine(16,3,16,7,p);canvas.drawLine(4,10,20,10,p);canvas.drawLine(8,14,10,14,p);canvas.drawLine(14,14,16,14,p);canvas.drawLine(8,17,10,17,p);}
             else if(kind.equals("calendar-add")) {canvas.drawRoundRect(4,6,20,21,2,2,p);canvas.drawLine(8,4,8,8,p);canvas.drawLine(16,4,16,8,p);canvas.drawLine(4,11,20,11,p);canvas.drawLine(16,14,16,20,p);canvas.drawLine(13,17,19,17,p);}
             else if(kind.equals("calendar-check")) {canvas.drawRoundRect(4,6,20,21,2,2,p);canvas.drawLine(8,4,8,8,p);canvas.drawLine(16,4,16,8,p);canvas.drawLine(4,11,20,11,p);canvas.drawLine(11,17,14,20,p);canvas.drawLine(14,20,19,14,p);}

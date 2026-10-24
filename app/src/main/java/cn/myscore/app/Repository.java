@@ -42,7 +42,7 @@ public final class Repository {
             batches.add(batch);
         }
     }
-    private static final ExecutorService NETWORK=Executors.newFixedThreadPool(6);
+    private static final ExecutorService NETWORK=Executors.newFixedThreadPool(10);
     private static final ExecutorService DATES=Executors.newFixedThreadPool(8);
     private final Context context;
     private static final Object CACHE_LOCK=new Object();

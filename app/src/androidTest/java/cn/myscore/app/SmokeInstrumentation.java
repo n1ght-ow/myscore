@@ -36,7 +36,6 @@ public final class SmokeInstrumentation extends Instrumentation {
             originalLinks=new java.util.HashMap<>(context.getSharedPreferences("calendar-links",0).getAll());
             activity=startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));waitForIdleSync();
             check(findText(activity.getWindow().getDecorView(),"我的比赛")!=null,"native match screen opens");
-            click("赛程");check(findText(activity.getWindow().getDecorView(),"未来赛程")!=null,"schedule navigation");
             click("设置");check(findText(activity.getWindow().getDecorView(),"单场订阅")!=null,"settings navigation");
             click("比赛");click("CS2");click("LOL");click("全部");
             check(findText(activity.getWindow().getDecorView(),"我的比赛")!=null,"sport filters stay interactive during network loads");
@@ -64,7 +63,7 @@ public final class SmokeInstrumentation extends Instrumentation {
         Uri created=context.getContentResolver().insert(syncUri(CalendarContract.Calendars.CONTENT_URI),cv);
         check(created!=null,"disposable local calendar created");calendar=ContentUris.parseId(created);
         SharedPreferences prefs=context.getSharedPreferences("settings",0);prefs.edit().putLong("calendar_id",calendar).remove("calendar_enabled").remove("sync_epl").remove("remind_minutes").commit();
-        CalendarSync sync=new CalendarSync(context);check(!sync.calendars().isEmpty(),"writable calendars enumerated");
+        CalendarSync sync=new CalendarSync(context);check(!sync.calendars().isEmpty(),"writable calendars enumerated");check(sync.bestCalendar()!=null,"a default writable calendar is selected without a chooser");
         long now=System.currentTimeMillis();Match m=new Match();m.id="espn:epl:instrumentation:1";m.league="epl";m.group="足球";m.source="TEST ONLY";
         m.home="Test home";m.away="Test away";m.state="scheduled";m.timeConfirmed=true;m.start=Match.today(now).plusDays(1).atTime(19,0).atZone(Match.ZONE).toInstant().toEpochMilli();
         check(sync.subscribe(m,now).inserted==1,"single match subscribes to the calendar");

@@ -51,6 +51,14 @@ public final class CalendarSync {
     public long calendarId() {return preferences.getLong("calendar_id",-1);}
     public String calendarName() {return preferences.getString("calendar_name","");}
     public void chooseCalendar(long id,String name) {preferences.edit().putLong("calendar_id",id).putString("calendar_name",name).apply();}
+    public CalendarChoice bestCalendar() {
+        List<CalendarChoice> all=calendars();
+        return all.isEmpty()?null:all.get(0);
+    }
+    public boolean hasCalendar(long id) {
+        for(CalendarChoice choice:calendars())if(choice.id==id)return true;
+        return false;
+    }
     public boolean hasSubscriptions() {return !subscribedIds().isEmpty();}
     public boolean isSubscribed(String id) {return links.contains("match:"+id);}
     public Set<String> subscribedIds() {
@@ -87,7 +95,7 @@ public final class CalendarSync {
                 list.add(new CalendarChoice(id,name,detail,local,xiaomi));
             }
         } catch(RuntimeException ignored) {}
-        list.sort(Comparator.comparing((CalendarChoice c)->!c.local).thenComparing(c->!c.xiaomi).thenComparing(c->c.name));
+        list.sort(Comparator.comparing((CalendarChoice c)->!c.xiaomi).thenComparing(c->!c.local).thenComparing(c->c.name));
         return list;
     }
     private static String displayName(String display,String account,String type,boolean local) {

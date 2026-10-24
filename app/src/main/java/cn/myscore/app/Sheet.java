@@ -15,11 +15,15 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
+import java.util.Locale;
 
 /** One in-app sheet language for every secondary menu. No platform AlertDialog. */
 final class Sheet {
     interface Pick { void onPick(int index); }
+    interface PickDate { void onDate(LocalDate date); }
     interface Action { void run(); }
     static final class Item {
         final String title, detail;
@@ -68,8 +72,62 @@ final class Sheet {
         show(activity, dialog, content);
     }
 
-    static void message(Activity activity, String title, String message) {
-        Ui ui = ui(activity);
+    static void date(Activity activity, LocalDate selected, PickDate pick) {
+        Ui ui=ui(activity);
+        Dialog dialog=base(activity,ui);
+        LinearLayout content=content(activity,ui,dialog,"选择日期","可查看任意一天的赛程与比分。");
+        YearMonth[] month={YearMonth.from(selected)};
+        LinearLayout nav=ui.row();
+        FrameLayout prev=new FrameLayout(activity);
+        prev.addView(new Ui.Icon(activity,"back",ui.primary),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
+        ui.clickable(prev,ui.tonal,24);prev.setFocusable(true);prev.setContentDescription("上一个月");
+        nav.addView(prev,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
+        TextView title=ui.text("",16,ui.text,true);title.setGravity(Gravity.CENTER);
+        nav.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        FrameLayout next=new FrameLayout(activity);
+        next.addView(new Ui.Icon(activity,"chevron",ui.primary),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
+        ui.clickable(next,ui.tonal,24);next.setFocusable(true);next.setContentDescription("下一个月");
+        nav.addView(next,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
+        content.addView(nav);
+        LinearLayout weekdays=ui.row();
+        for(String label:new String[]{"一","二","三","四","五","六","日"}){TextView d=ui.text(label,11,ui.muted,false);d.setGravity(Gravity.CENTER);d.setPadding(0,ui.dp(6),0,ui.dp(6));weekdays.addView(d,new LinearLayout.LayoutParams(0,-2,1));}
+        content.addView(weekdays);
+        LinearLayout grid=ui.column();content.addView(grid);
+        Runnable[] draw=new Runnable[1];
+        draw[0]=()-> {
+            title.setText(String.format(Locale.CHINA,"%d年%d月",month[0].getYear(),month[0].getMonthValue()));
+            grid.removeAllViews();
+            LocalDate first=month[0].atDay(1);
+            int offset=first.getDayOfWeek().getValue()-1;
+            int days=month[0].lengthOfMonth();
+            int rows=Math.max(5,(offset+days+6)/7);
+            int day=1;
+            for(int r=0;r<rows;r++) {
+                LinearLayout line=ui.row();
+                for(int c=0;c<7;c++) {
+                    int index=r*7+c;
+                    if(index<offset||index>=offset+days){line.addView(new View(activity),new LinearLayout.LayoutParams(0,ui.dp(42),1));continue;}
+                    LocalDate value=month[0].atDay(day++);
+                    boolean picked=value.equals(selected),today=value.equals(Match.today(System.currentTimeMillis()));
+                    TextView cell=ui.text(String.valueOf(value.getDayOfMonth()),14,picked?ui.onPrimary:today?ui.primary:ui.text,picked||today);
+                    cell.setGravity(Gravity.CENTER);cell.setMinHeight(ui.dp(42));ui.clickable(cell,picked?ui.primary:today?ui.tonal:Color.TRANSPARENT,21);
+                    cell.setFocusable(true);
+                    cell.setContentDescription(value.getMonthValue()+"月"+value.getDayOfMonth()+"日"+(picked?"，已选中":today?"，今天":""));
+                    cell.setOnClickListener(v->{dialog.dismiss();pick.onDate(value);});
+                    line.addView(cell,new LinearLayout.LayoutParams(0,ui.dp(42),1));
+                }
+                grid.addView(line);
+            }
+        };
+        prev.setOnClickListener(v->{month[0]=month[0].minusMonths(1);draw[0].run();});
+        next.setOnClickListener(v->{month[0]=month[0].plusMonths(1);draw[0].run();});
+        TextView cancel=ui.button("取消",false,dialog::dismiss);
+        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.topMargin=ui.dp(12);content.addView(cancel,cp);
+        draw[0].run();
+        show(activity,dialog,content);
+    }
+
+    static void message(Activity activity, String title, String message) {        Ui ui = ui(activity);
         Dialog dialog = base(activity, ui);
         LinearLayout content = content(activity, ui, dialog, title, message);
         content.addView(actions(activity, ui, dialog, "知道了", () -> {}, null));

@@ -17,7 +17,7 @@ import java.util.concurrent.*;
 
 /** Actual source crests, bounded memory/disk cache. Initials are explicitly a fallback. */
 final class Logos {
-    private static final ExecutorService POOL=Executors.newFixedThreadPool(3);
+    private static final ExecutorService POOL=Executors.newFixedThreadPool(8);
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     // Session cache avoids the initials flash when a card is rebuilt or its detail opens.
     private static final ConcurrentHashMap<String,Bitmap> SESSION=new ConcurrentHashMap<>();
@@ -47,7 +47,7 @@ final class Logos {
         File dir=new File(c.getCacheDir(),"crests-v1");if(!dir.exists()&&!dir.mkdirs())throw new IOException();
         byte[] digest=MessageDigest.getInstance("SHA-256").digest(url.getBytes(java.nio.charset.StandardCharsets.UTF_8));StringBuilder key=new StringBuilder();for(byte b:digest)key.append(String.format(java.util.Locale.ROOT,"%02x",b));File file=new File(dir,key.toString());
         byte[] bytes=null;if(file.exists())try(InputStream in=new FileInputStream(file)){bytes=bounded(in);}
-        if(bytes==null){HttpURLConnection con=(HttpURLConnection)new URL(url).openConnection();try{con.setConnectTimeout(10000);con.setReadTimeout(12000);con.setRequestProperty("User-Agent","MyScore-Personal/0.2 Android");con.setRequestProperty("Accept","image/*");con.setInstanceFollowRedirects(false);if(con.getResponseCode()!=200)throw new IOException("Image HTTP "+con.getResponseCode());try(InputStream in=con.getInputStream()){bytes=bounded(in);}}finally{con.disconnect();}}
+        if(bytes==null){HttpURLConnection con=(HttpURLConnection)new URL(url).openConnection();try{con.setConnectTimeout(6000);con.setReadTimeout(8000);con.setRequestProperty("User-Agent","MyScore-Personal/0.4 Android");con.setRequestProperty("Accept","image/*");con.setInstanceFollowRedirects(false);if(con.getResponseCode()!=200)throw new IOException("Image HTTP "+con.getResponseCode());try(InputStream in=con.getInputStream()){bytes=bounded(in);}}finally{con.disconnect();}}
         BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(bytes,0,bytes.length,bounds);if(bounds.outWidth<1||bounds.outWidth>4096||bounds.outHeight>4096)throw new IOException();
         BitmapFactory.Options options=new BitmapFactory.Options();while(bounds.outWidth/(options.inSampleSize==0?1:options.inSampleSize)>256){options.inSampleSize=options.inSampleSize==0?2:options.inSampleSize*2;}
         Bitmap bitmap=BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);if(bitmap==null){file.delete();throw new IOException("Image decode failed");}

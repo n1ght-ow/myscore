@@ -1,0 +1,16 @@
+# 构建产物与本地环境
+.gradle/
+build/
+app/build/
+local.properties
+
+# 签名与密钥
+*.jks
+*.keystore
+*.env
+.env*
+
+# 设计工具工作缓存、原始接口抓包、验收产物
+.impeccable/
+detail-probes/
+artifacts/

@@ -1,0 +1,38 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'cn.myscore.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'cn.myscore.app'
+        minSdk 28
+        targetSdk 35
+        versionCode 2
+        versionName '0.2.0'
+        testInstrumentationRunner 'cn.myscore.app.SmokeInstrumentation'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildTypes { release { minifyEnabled false } }
+    lint { abortOnError true }
+    testOptions { unitTests.returnDefaultValues = true }
+}
+
+dependencies {
+    // Test-only JSON implementation; production uses Android's org.json.
+    testImplementation 'org.json:json:20180813'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+tasks.register('verifyLiveSources', JavaExec) {
+    dependsOn 'testDebugUnitTest'
+    doFirst {
+        classpath = tasks.named('testDebugUnitTest').get().classpath
+    }
+    mainClass = 'cn.myscore.app.LiveProbe'
+    ['https.proxyHost', 'https.proxyPort', 'http.proxyHost', 'http.proxyPort'].each { key ->
+        if (System.getProperty(key)) systemProperty key, System.getProperty(key)
+    }
+}

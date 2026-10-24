@@ -1,0 +1,15 @@
+# 统一换行：文本以 LF 存入仓库并在检出时保持 LF
+* text=auto eol=lf
+
+# Windows 批处理必须保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件，跳过换行转换与文本差异
+*.jar binary
+*.apk binary
+*.png binary
+*.webp binary
+*.jpg binary
+*.jks binary
+*.keystore binary

@@ -35,10 +35,10 @@ public final class SmokeInstrumentation extends Instrumentation {
             originalSettings=new java.util.HashMap<>(context.getSharedPreferences("settings",0).getAll());
             originalLinks=new java.util.HashMap<>(context.getSharedPreferences("calendar-links",0).getAll());
             activity=startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));waitForIdleSync();
-            check(findText(activity.getWindow().getDecorView(),"我的比赛")!=null,"native match screen opens");
+            check(findText(activity.getWindow().getDecorView(),"MyScore")!=null,"native match screen opens");
             click("设置");check(findText(activity.getWindow().getDecorView(),"单场订阅")!=null,"settings navigation");
             click("比赛");click("CS2");click("LOL");click("全部");
-            check(findText(activity.getWindow().getDecorView(),"我的比赛")!=null,"sport filters stay interactive during network loads");
+            check(findText(activity.getWindow().getDecorView(),"MyScore")!=null,"sport filters stay interactive during network loads");
             calendarChecks();
             checks+=UiChecks.run(this,activity);
             if(details){DetailChecks.run(this,context);checks+=DetailChecks.checks;}

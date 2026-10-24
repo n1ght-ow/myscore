@@ -71,8 +71,11 @@ final class Ui {
             else if(kind.equals("chevron")){canvas.drawLine(9,6,15,12,p);canvas.drawLine(15,12,9,18,p);}
             else if(kind.equals("refresh")) {canvas.drawArc(4,4,20,20,35,285,false,p);canvas.drawPath(refreshArrow,p);}
             else if(kind.equals("calendar")) {canvas.drawRoundRect(4,5,20,21,2,2,p);canvas.drawLine(8,3,8,7,p);canvas.drawLine(16,3,16,7,p);canvas.drawLine(4,10,20,10,p);canvas.drawLine(8,14,10,14,p);canvas.drawLine(14,14,16,14,p);canvas.drawLine(8,17,10,17,p);}
-            else if(kind.equals("calendar-add")) {canvas.drawRoundRect(4,6,20,21,2,2,p);canvas.drawLine(8,4,8,8,p);canvas.drawLine(16,4,16,8,p);canvas.drawLine(4,11,20,11,p);canvas.drawLine(16,14,16,20,p);canvas.drawLine(13,17,19,17,p);}
-            else if(kind.equals("calendar-check")) {canvas.drawRoundRect(4,6,20,21,2,2,p);canvas.drawLine(8,4,8,8,p);canvas.drawLine(16,4,16,8,p);canvas.drawLine(4,11,20,11,p);canvas.drawLine(11,17,14,20,p);canvas.drawLine(14,20,19,14,p);}
+            else if(kind.equals("calendar-add")||kind.equals("calendar-check")) {
+                canvas.drawRoundRect(4.5f,6,19.5f,20.5f,2,2,p);canvas.drawLine(8.5f,3.5f,8.5f,8,p);canvas.drawLine(15.5f,3.5f,15.5f,8,p);canvas.drawLine(4.5f,10.5f,19.5f,10.5f,p);
+                if(kind.equals("calendar-add")){canvas.drawLine(9,15.5f,15,15.5f,p);canvas.drawLine(12,12.5f,12,18.5f,p);}
+                else{canvas.drawLine(8.5f,15,11,17.5f,p);canvas.drawLine(11,17.5f,15.5f,13,p);}
+            }
             else if(kind.equals("settings")) {for(int i=0;i<3;i++){int y=6+i*6;canvas.drawLine(4,y,20,y,p);p.setStyle(Paint.Style.FILL);canvas.drawCircle(i==1?9:15,y,2.8f,p);p.setStyle(Paint.Style.STROKE);}}
             else {canvas.drawRoundRect(3,5,21,20,2,2,p);canvas.drawLine(6,10,12,10,p);canvas.drawLine(6,15,12,15,p);canvas.drawLine(17,9,17,11,p);canvas.drawLine(17,14,17,16,p);}
             canvas.restore();

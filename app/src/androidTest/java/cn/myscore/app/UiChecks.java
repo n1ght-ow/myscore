@@ -42,7 +42,7 @@ final class UiChecks {
         require(recreated!=null,"activity recreates");test.waitForIdleSync();checks++;
         require(find(recreated.getWindow().getDecorView(),"单场订阅")!=null,"settings remains selected after recreation");checks++;
         test.runOnMainSync(()->click(recreated.getWindow().getDecorView(),"比赛"));test.waitForIdleSync();
-        require(find(recreated.getWindow().getDecorView(),"我的比赛")!=null,"matches remain reachable after recreation");checks++;
+        require(find(recreated.getWindow().getDecorView(),"MyScore")!=null,"matches remain reachable after recreation");checks++;
         return checks;
     }
     private static Field field(String name)throws Exception{Field field=MainActivity.class.getDeclaredField(name);field.setAccessible(true);return field;}

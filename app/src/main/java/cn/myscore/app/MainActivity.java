@@ -182,11 +182,11 @@ public final class MainActivity extends Activity {
     private void header(LinearLayout parent) {
         LinearLayout header=ui.row();header.setPadding(ui.dp(20),ui.dp(12),ui.dp(12),ui.dp(6));
         LinearLayout titles=ui.row();titles.setGravity(Gravity.CENTER_VERTICAL);
-        String title=tab==0?"我的比赛":"设置";
+        String title=tab==0?"MyScore":"设置";
         titles.addView(ui.text(title,22,ui.text,true));
-        TextView meta=ui.text(tab==1?"MyScore · "+BuildConfig.VERSION_NAME:"北京时间",11,ui.muted,false);
-        meta.setMaxLines(1);meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,-2,1);mp.setMarginStart(ui.dp(10));titles.addView(meta,mp);
+        if(tab==1){TextView meta=ui.text("MyScore · "+BuildConfig.VERSION_NAME,11,ui.muted,false);
+            meta.setMaxLines(1);meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,-2,1);mp.setMarginStart(ui.dp(10));titles.addView(meta,mp);}
         header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
         if(tab==0){FrameLayout refresh=new FrameLayout(this);Ui.Icon icon=new Ui.Icon(this,"refresh",ui.primary);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER);refresh.addView(icon,ip);ui.clickable(refresh,Color.TRANSPARENT,24);refresh.setContentDescription("刷新比赛");refresh.setFocusable(true);refresh.setOnClickListener(v->load(true));header.addView(refresh,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));}
         parent.addView(header);
@@ -265,12 +265,12 @@ public final class MainActivity extends Activity {
         }
         ui.gap(card,8);
         LinearLayout footRow=ui.row();
-        TextView foot=ui.text(footnote(m),11,ui.muted,false);timestamps.put(m.id,foot);visibleMatches.put(m.id,m);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
+        TextView foot=ui.text(footnote(m),12,ui.muted,false);timestamps.put(m.id,foot);visibleMatches.put(m.id,m);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
         boolean isSubscribed=subscribed.contains(m.id);boolean canSubscribe=m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis();
         FrameLayout sub=new FrameLayout(this);
-        Ui.Icon subIcon=new Ui.Icon(this,isSubscribed?"calendar-check":"calendar-add",isSubscribed?ui.onPrimary:(canSubscribe?ui.primary:ui.muted));
+        Ui.Icon subIcon=new Ui.Icon(this,isSubscribed?"calendar-check":"calendar-add",isSubscribed||canSubscribe?ui.primary:ui.muted);
         sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
-        ui.clickable(sub,isSubscribed?ui.primary:(canSubscribe?ui.tonal:Color.TRANSPARENT),24);
+        ui.clickable(sub,Color.TRANSPARENT,24);
         sub.setFocusable(true);
         sub.setContentDescription(isSubscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
         sub.setOnClickListener(v->toggleSubscription(m));
@@ -279,7 +279,7 @@ public final class MainActivity extends Activity {
         if(stale&&m.live()){ui.gap(card,6);card.addView(ui.text("上次记录为进行中，当前状态待刷新",12,ui.error,false));}
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=ui.dp(6);body.addView(card,cp);
     }
-    private String footnote(Match m){return (m.timeConfirmed?m.time():"时间待定")+" · "+m.source+"\n"+(System.currentTimeMillis()-m.updated>120_000?"缓存 · ":"")+(m.updated>0?formatInstant(m.updated,"M月d日 HH:mm:ss")+" 更新":"尚未获取");}
+    private String footnote(Match m){return m.timeConfirmed?m.time():"时间待定";}
     private void teamRow(LinearLayout into,String name,String logo,String score) {
         LinearLayout row=ui.row();row.addView(Logos.view(ui,logo,name,25));TextView team=ui.text(name,15,ui.text,true);LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,-2,1);tp.setMarginStart(ui.dp(10));row.addView(team,tp);
         TextView number=ui.text(score,20,ui.text,true);number.setGravity(Gravity.END);number.setMinWidth(ui.dp(32));LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.setMarginStart(ui.dp(12));row.addView(number,sp);into.addView(row);

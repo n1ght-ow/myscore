@@ -1,3 +1,28 @@
+# MyScore 0.5.1 验证记录
+
+日期：2026-10-25，北京时间。
+
+## 交付与变化
+
+- APK：`artifacts/MyScore-0.5.1.apk`，776,452 字节；SHA-256：`DB810D0F0929C2FB14FD62B9A2846056A295D87B1F640F381B1380E3DE315231`。
+- 包名 `cn.myscore.app`，versionCode 7、versionName 0.5.1，minSdk 28、targetSdk 35。
+- apksigner 验证通过，签名证书与 0.5.0 相同，可覆盖升级，保留原设置和日历关联。延续个人使用的 debug 签名版本。
+- 首页标题改为 MyScore，删除标题旁的「北京时间」提示。
+- 所有比赛卡底部只保留开赛时间；时间未确认时显示「时间待定」。来源与更新时间仍可在详情和连接状态查看，独立的过期进行中警告保留。
+- 订阅按钮改为无圆底的日历线框，加号/勾选居中，48dp 点击区域与状态描述保持可用。
+- 同步更新界面标题断言、设计说明和 README 下载链接。
+
+## 验证
+
+- JDK 17 / Gradle 8.14 / Android Gradle Plugin 8.11.1 / SDK 35；无新增依赖。
+- `:app:testDebugUnitTest`：33 项通过。
+- `:app:lintDebug`：通过，0 errors、14 warnings，均记录在报告中。
+- `:app:assembleDebug`、`:app:assembleDebugAndroidTest` 通过；日志 `artifacts/build-0.5.1.log`。
+- 最终 0.5.1 APK 在 API 35 模拟器覆盖安装后，50 项 Android 界面/日历运行检查通过，含图标、自适应刷新率请求、视图复用、导航重建和日历事件保护。日志 `artifacts/android-tests-051.txt`。
+- 本次界面调整的浅/深色截图与人工核对见 `.impeccable/review/ui-refinement/`；此前的九来源实时/详情全面验证见下方 0.5.0 历史记录。本次 50 项运行检查不包含可选实时网络和详情检查。
+- 未连接 K80 Pro，不把模拟器验证视为真机高帧率或小米日历通知验收。
+
+---
 # MyScore 0.5.0 验证记录
 
 日期：2026-10-25，北京时间。

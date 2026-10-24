@@ -37,9 +37,13 @@ public final class Repository {
             return all;
         }
         public boolean failed() {for(Batch b:batches)if(!b.error.isEmpty())return true;return false;}
+        public void merge(Batch batch) {
+            for(int i=0;i<batches.size();i++)if(batches.get(i).competition.id.equals(batch.competition.id)) {batches.set(i,batch);return;}
+            batches.add(batch);
+        }
     }
-    private static final ExecutorService NETWORK=Executors.newFixedThreadPool(4);
-    private static final ExecutorService DATES=Executors.newFixedThreadPool(6);
+    private static final ExecutorService NETWORK=Executors.newFixedThreadPool(6);
+    private static final ExecutorService DATES=Executors.newFixedThreadPool(8);
     private final Context context;
     private static final Object CACHE_LOCK=new Object();
     public Repository(Context c) {context=c.getApplicationContext();}
@@ -50,11 +54,20 @@ public final class Repository {
         return result;
     }
     public Snapshot fetch(LocalDate from, LocalDate to, String group, boolean force) {
-        Snapshot result=new Snapshot();List<Future<Batch>> futures=new ArrayList<>();
-        for(Competition c:Competition.ALL) if(group.equals("全部")||c.group.equals(group)) futures.add(NETWORK.submit(()->fetchOne(c,from,to,force)));
-        for(Future<Batch> f:futures) {
-            try {result.batches.add(f.get());}
-            catch(InterruptedException e) {Thread.currentThread().interrupt();break;}
+        return fetch(from,to,group,force,null);
+    }
+    /** Reports each source as soon as it finishes, so the first cards do not wait for every feed. */
+    public Snapshot fetch(LocalDate from, LocalDate to, String group, boolean force, java.util.function.Consumer<Batch> onBatch) {
+        Snapshot result=new Snapshot();
+        java.util.concurrent.CompletionService<Batch> completed=new java.util.concurrent.ExecutorCompletionService<>(NETWORK);
+        int count=0;
+        for(Competition c:Competition.ALL) if(group.equals("全部")||c.group.equals(group)) {completed.submit(()->fetchOne(c,from,to,force));count++;}
+        for(int i=0;i<count;i++) {
+            try {
+                Batch batch=completed.take().get();
+                result.batches.add(batch);
+                if(onBatch!=null)onBatch.accept(batch);
+            } catch(InterruptedException e) {Thread.currentThread().interrupt();break;}
             catch(ExecutionException e) {android.util.Log.w("MyScore","Source task failed",e.getCause());}
         }
         return result;
@@ -135,9 +148,9 @@ public final class Repository {
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
         try {
             if(!headers.isEmpty())connection.setInstanceFollowRedirects(false);
-            connection.setConnectTimeout(10_000);connection.setReadTimeout(12_000);
+            connection.setConnectTimeout(6_000);connection.setReadTimeout(8_000);
             connection.setRequestProperty("Accept","application/json");
-            connection.setRequestProperty("User-Agent","MyScore-Personal/0.1 Android");
+            connection.setRequestProperty("User-Agent","MyScore-Personal/0.3 Android");
             for(Map.Entry<String,String> h:headers.entrySet())connection.setRequestProperty(h.getKey(),h.getValue());
             if(connection.getResponseCode()!=200)throw new Exception("来源返回 HTTP "+connection.getResponseCode());
             try(InputStream in=connection.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()) {

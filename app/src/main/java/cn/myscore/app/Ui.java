@@ -55,6 +55,7 @@ final class Ui {
             canvas.translate((getWidth()-24*scale)/2,(getHeight()-24*scale)/2);canvas.scale(scale,scale);
             p.setColor(color);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.8f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
             if(kind.equals("back")){canvas.drawLine(20,12,4,12,p);canvas.drawLine(4,12,11,5,p);canvas.drawLine(4,12,11,19,p);}
+            else if(kind.equals("check")){canvas.drawLine(5,12,10,17,p);canvas.drawLine(10,17,19,7,p);}
             else if(kind.equals("chevron")){canvas.drawLine(9,6,15,12,p);canvas.drawLine(15,12,9,18,p);}
             else if(kind.equals("refresh")) {canvas.drawArc(4,4,20,20,35,285,false,p);Path path=new Path();path.moveTo(19,3);path.lineTo(19,9);path.lineTo(13,9);canvas.drawPath(path,p);}
             else if(kind.equals("calendar")) {canvas.drawRoundRect(4,5,20,21,2,2,p);canvas.drawLine(8,3,8,7,p);canvas.drawLine(16,3,16,7,p);canvas.drawLine(4,10,20,10,p);canvas.drawLine(8,14,10,14,p);canvas.drawLine(14,14,16,14,p);canvas.drawLine(8,17,10,17,p);}

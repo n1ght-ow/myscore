@@ -72,6 +72,7 @@ rounded:
   card: "12dp"
   date: "12dp"
   container: "14dp"
+  sheet: "22dp"
   pill: "24dp"
 spacing:
   small: "8dp"
@@ -140,6 +141,40 @@ components:
     textColor: "{colors.primary-dark}"
     typography: "{typography.action}"
     rounded: "{rounded.date}"
+  subscribe-pill:
+    backgroundColor: "{colors.primary-light}"
+    textColor: "{colors.on-primary-light}"
+    typography: "{typography.metadata}"
+    rounded: "{rounded.pill}"
+    padding: "0dp 12dp"
+  subscribe-pill-dark:
+    backgroundColor: "{colors.primary-dark}"
+    textColor: "{colors.on-primary-dark}"
+    typography: "{typography.metadata}"
+    rounded: "{rounded.pill}"
+    padding: "0dp 12dp"
+  subscribe-pill-selected:
+    backgroundColor: "{colors.tonal-light}"
+    textColor: "{colors.primary-light}"
+    typography: "{typography.metadata}"
+    rounded: "{rounded.pill}"
+    padding: "0dp 12dp"
+  subscribe-pill-selected-dark:
+    backgroundColor: "{colors.tonal-dark}"
+    textColor: "{colors.primary-dark}"
+    typography: "{typography.metadata}"
+    rounded: "{rounded.pill}"
+    padding: "0dp 12dp"
+  sheet:
+    backgroundColor: "{colors.surface-light}"
+    textColor: "{colors.text-light}"
+    rounded: "{rounded.sheet}"
+    padding: "20dp"
+  sheet-dark:
+    backgroundColor: "{colors.surface-dark}"
+    textColor: "{colors.text-dark}"
+    rounded: "{rounded.sheet}"
+    padding: "20dp"
   match-card:
     backgroundColor: "{colors.surface-light}"
     textColor: "{colors.text-light}"
@@ -193,14 +228,16 @@ components:
 
 MyScore 像一份只印黑、白与灰的比赛节目单：白色纸张承载浅色模式，石墨表面承载深色模式。信息按节目单的栏位排列——赛事与状态在上，队名与比分在中，来源和数据时间压在下缘。比分、选中态和主操作使用同一支"墨"，因此界面没有品牌色块，也没有装饰性插画；唯一的彩色来自来源提供的真实队标，以及错误提示的红色。
 
-界面沿用 Android 平台字体、原生控件和系统返回手势。视觉重点来自字号对比、对齐的比分轴、留白与表面明暗，而不是阴影、描边或渐变。旧版的绿色球场导视世界已被用户明确拒绝，本文记录的是 0.2.0 实际采用的白/石墨单色世界。
+界面沿用 Android 平台字体、原生控件和系统返回手势。视觉重点来自字号对比、对齐的比分轴、留白与表面明暗，而不是阴影、描边或渐变。旧版的绿色球场导视世界已被用户明确拒绝；本文记录从 0.2.0 起采用、在 0.3.0 加入单场订阅与统一 sheet 的白/石墨单色世界。
 
 **Key Characteristics:**
 - 白色浅色模式、石墨深色模式的单色外壳，主题成对切换。
 - 固定的"队名在左、比分在右"比分轴，列表与详情一致。
 - 真实来源队标，白色底板保证深色队标在两种主题下都可读。
 - 每张比赛卡和详情页都保留来源与数据时间。
+- 比赛卡上的订阅药丸把单场比赛写入日历，提前 5 分钟提醒。
 - 详情是完整原生 Activity，按运动显示 3–4 个分栏承载阵容、统计与进程。
+- 所有二级菜单使用同一套底部 sheet，不出现平台 AlertDialog。
 - 平坦的自绘表面，无自定义阴影；触控目标不小于 48dp。
 
 ## Colors
@@ -252,7 +289,7 @@ MyScore 像一份只印黑、白与灰的比赛节目单：白色纸张承载浅
 
 首页在比分列表前不再插入说明行；只有正在更新时才出现 11sp 的"正在更新比赛…"，空闲首屏直接进入分区和卡片。赛程页保留"未来 7 天 · 赛程可能改期"提示。
 
-比赛卡占满正文宽度，以内容决定高度，卡片间距 6dp。卡内是：赛事与状态行、两行队名比分（F1 为标题加前二名）、底部来源时间行。队标 25dp，与队名间隔 10dp；队名取得剩余宽度，比分最小宽 32dp、右对齐并保留 12dp 起始间隔。列表按状态分区，分区标题前 18dp、后 10dp。
+比赛卡占满正文宽度，以内容决定高度，卡片间距 6dp。卡内是：赛事与状态行、两行队名比分（F1 为标题加前二名）、底部来源时间行。队标 25dp，与队名间隔 10dp；队名取得剩余宽度，比分最小宽 32dp、右对齐并保留 12dp 起始间隔。可订阅的未开始比赛在来源行右侧显示 64×48dp 的订阅药丸，其余状态不显示；已订阅的比赛即使后来开始或结束仍保留药丸，便于取消。列表按状态分区，分区标题前 18dp、后 10dp。
 
 详情页顶部为 48dp 返回与刷新按钮、16sp 居中赛事名；其下是 hero：状态行、两行队标/队名/36sp 比分、11sp 时间注脚。hero 下方是等宽分栏：足球/NBA/NFL 为"总览、阵容/球员、统计、进程"，CS2/LOL 为"总览、选手/阵容、统计、小局"，F1 为"总览、车手、成绩"三栏。每项最小高 48dp，选中项在文字下显示 2dp、28dp 宽指示线。
 
@@ -264,11 +301,15 @@ MyScore 像一份只印黑、白与灰的比赛节目单：白色纸张承载浅
 
 **The Complete Row Rule.** 数据表的每一列都必须在默认视口内可见；列多时改为字段块，不以横向滚动或"左右滑动"提示隐藏关键数据。
 
+**The Single-Match Rule.** 日历只按单场比赛订阅；不在设置里按赛事项目批量导入。每场订阅写入一个事件，开赛前 5 分钟提醒，取消时只移除该事件。
+
+**The One Sheet Rule.** 应用内所有二级菜单——日历、订阅、外观、来源、确认、结果——使用同一套底部 sheet；不得混用平台 AlertDialog 或系统列表对话框。
+
 **The Source Lane Rule.** 比赛卡底部和详情页顶部始终保留来源与数据时间；缓存、旧进行中或失败状态必须用文字说明，不能用空白、颜色或省略来代替。
 
 ## Elevation & Depth
 
-应用自绘的卡片、按钮、导航和表格没有阴影、描边或 elevation。深度只来自三种表面：页面底色、`surface` 内容表面、`tonal` 选中/摘要表面，以及 1dp 的 `line` 分隔线。系统 `AlertDialog`、权限界面和原生 `Switch` 的阴影与形状由 Android 主题决定，不从截图反推为应用 token。
+应用自绘的卡片、按钮、导航、订阅药丸和表格没有阴影、描边或 elevation。深度只来自三种表面：页面底色、`surface` 内容表面、`tonal` 选中/摘要表面，以及 1dp 的 `line` 分隔线。应用内的二级菜单是自绘 sheet，不使用平台 `AlertDialog`；系统权限对话框和跳转到系统日历的界面仍由 Android 决定，不从截图反推为应用 token。
 
 **The Flat Surface Rule.** 不新增装饰性阴影、渐变、玻璃或描边。需要分层时先换表面色，再考虑间距，最后才考虑分隔线。
 
@@ -288,9 +329,13 @@ MyScore 像一份只印黑、白与灰的比赛节目单：白色纸张承载浅
 
 ### Cards / Containers
 
-比赛卡由赛事/状态、两行队名比分、底部来源时间组成，使用 `surface`、12dp 圆角、10dp 垂直与 12dp 水平内边距，无描边无阴影。整卡可点击进入详情，波纹覆盖整卡。进行中状态不会仅靠颜色表达：状态文字保留，数据超过两分钟时追加"缓存"文字，旧进行中记录追加 error 色的"上次记录为进行中，当前状态待刷新"。
+比赛卡由赛事/状态、两行队名比分、底部来源时间与订阅按钮组成，使用 `surface`、12dp 圆角、10dp 垂直与 12dp 水平内边距，无描边无阴影。整卡可点击进入详情，波纹覆盖整卡；订阅按钮独立消费点击，不打开详情。进行中状态不会仅靠颜色表达：状态文字保留，数据超过两分钟时追加"缓存"文字，旧进行中记录追加 error 色的"上次记录为进行中，当前状态待刷新"。
 
-设置卡使用 `surface` 与 14dp 圆角，内部承载原生 Switch、三个次按钮和一个主按钮。赛程页日历摘要使用 `tonal` 与 14dp 圆角，承载 18sp 标题、13sp 说明和主操作。数据表放在 10dp 圆角的 `surface` 中，行间使用 `line`。
+设置卡使用 `surface` 与 14dp 圆角，内部承载日历选择、已订阅列表、检查按钮和说明。赛程页日历摘要使用 `tonal` 与 14dp 圆角，承载 18sp 标题、13sp 说明和"管理日历"主操作。数据表放在 10dp 圆角的 `surface` 中，行间使用 `line`。
+
+### Subscription Pill
+
+比赛卡底部的订阅按钮是 64×48dp、24dp 圆角的药丸，文字 12sp medium：未订阅为 `primary` 实心与 `on-primary` 字，已订阅为 `tonal` 底与 `primary` 字。按钮文案分别是"订阅"/"已订阅"，可访问描述补充比赛名和"提前 5 分钟提醒"。点击"订阅"先检查权限与目标日历；点击"已订阅"先弹出统一确认 sheet。
 
 ### Detail Header
 
@@ -308,9 +353,13 @@ MyScore 像一份只印黑、白与灰的比赛节目单：白色纸张承载浅
 
 底部入口为"比赛""赛程""设置"，使用代码绘制的 1.8dp 线性图标和 12sp 标签。当前项使用整格 `tonal` 背景、`primary` 图标与 medium 文字；其他项使用 `surface` 和 `muted`。图标本身不进入可访问树，入口容器提供中文名称和"已选中"描述。
 
-### Native Controls
+### Sheets
 
-日历开关、单选、多选、权限和同步结果使用 Android 平台 `Switch`、`AlertDialog` 与系统权限界面。应用沿用 `Theme.Material.Light.NoActionBar` / `Theme.Material.NoActionBar`（M1）而不引入 Material Components 依赖；因此 Switch、对话框和同步结果保持平台 M1 外观，这是有意的依赖与包体积约束，不是未完成的迁移。可访问行为、焦点与系统返回保持原生。
+所有二级菜单统一使用底部 sheet：`surface` 背景、顶部 22dp 圆角、20dp 水平内边距、顶部 38×4dp 拖动条、20sp medium 标题、13sp 说明、56dp 选项行（15sp 标题 + 12sp 说明 + 右侧 20dp 勾选）与 48dp 按钮。sheet 从底部滑入并带 46% 遮罩；列表可滚动，最高约屏幕 75%。用于日历选择、已订阅列表、外观、来源状态、订阅确认和同步结果。日历选项按本机、小米、其他可写账户排序，`calendar_displayname_xiaomi` 等系统资源键显示为可读名称。取消使用 `tonal` 全宽按钮；确认使用 `primary`/`tonal` 双按钮。不使用平台 `AlertDialog`、单选列表或多选对话框。
+
+### Platform Controls
+
+系统日历权限对话框、跳转到系统日历以及系统通知设置不属于应用自绘范围；应用在首次订阅时直接请求系统日历权限，其余说明与结果使用 sheet。应用沿用 `Theme.Material.Light.NoActionBar` / `Theme.Material.NoActionBar`（M1）而不引入 Material Components 依赖，这是有意的依赖与包体积约束；业务菜单不再暴露 M1 的 `AlertDialog` 外观。
 
 ### Empty / Error States
 
@@ -323,6 +372,8 @@ MyScore 像一份只印黑、白与灰的比赛节目单：白色纸张承载浅
 - **Do** 保持队名在左、比分在右、来源时间在卡底或详情顶部的阅读顺序。
 - **Do** 为列表和详情使用同一比分轴、同一队标尺寸体系和同一来源时间格式。
 - **Do** 让数据表的所有列默认可见：3–5 列按内容适配宽度，6 列以上改用字段块。
+- **Do** 用 64×48dp 的订阅药丸管理单场比赛，文案在“订阅”和“已订阅”之间切换。
+- **Do** 所有二级菜单使用同一套底部 sheet；选项行提供 15sp 标题、12sp 说明和 20dp 勾选。
 - **Do** 显示来源真实队标；下载失败时退回首字母缩写并保留队名，刷新可重试。
 - **Do** 为所有触控操作保留至少 48dp 高度，并让筛选横向滚动、正文纵向滚动。
 - **Do** 在缓存、失败、未知时间和大字号下保留明确文字与完整布局。
@@ -336,5 +387,7 @@ MyScore 像一份只印黑、白与灰的比赛节目单：白色纸张承载浅
 - **Don't** 虚构比分、阵容、统计或补零；缺失字段显示未知或明确的"暂无"。
 - **Don't** 固定比赛卡高度、缩小触控目标或把 10sp 用于任何文本；系统最小字号是 11sp。
 - **Don't** 使用横向滚动表格、让关键列默认落在屏外，或用"左右滑动"提示代替可见数据。
+- **Don't** 按赛事项目批量导入日历，或在比赛卡之外暗地里创建日程。
+- **Don't** 使用平台 AlertDialog、系统单选/多选列表，或让二级菜单与应用主题脱节。
 - **Don't** 在深色表面沿用浅色选中面，或把 `crest-backing` 当作可主题化的表面。
 - **Don't** 添加当前原生实现不存在的平板分栏、网页断点、悬停动画或自定义字体。

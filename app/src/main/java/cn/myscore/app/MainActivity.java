@@ -2,7 +2,6 @@ package cn.myscore.app;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
@@ -12,7 +11,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.provider.CalendarContract;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
@@ -21,8 +19,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -38,8 +39,11 @@ public final class MainActivity extends Activity {
     private TextView loadingText;
     private int tab=0,dayOffset=0;
     private String group="全部";
-    private boolean active=false,busy=false,calendarBusy=false,pending=false,pendingCalendarPermission=false;
+    private boolean active=false,busy=false,calendarBusy=false,pending=false,cacheReady=false;
     private LocalDate loadedDay;
+    private CalendarSync calendarSync;
+    private final Set<String> subscribed=new HashSet<>();
+    private Match pendingSubscription;
     private final Runnable tick=()->load(false);
     private static final String[] GROUPS={"全部","足球","NBA","NFL","F1","CS2","LOL"};
 
@@ -47,7 +51,7 @@ public final class MainActivity extends Activity {
         prefs=getSharedPreferences("settings",MODE_PRIVATE);
         boolean dark=switch(prefs.getString("theme","system")) {case "dark"->true;case "light"->false;default->(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;};
         setTheme(dark?R.style.AppThemeDark:R.style.AppTheme);
-        super.onCreate(state);ui=new Ui(this,dark);repository=new Repository(this);
+        super.onCreate(state);ui=new Ui(this,dark);repository=new Repository(this);calendarSync=new CalendarSync(this);
         if(state!=null){tab=state.getInt("tab");dayOffset=state.getInt("offset");group=state.getString("group","全部");}
         getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.surface);
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
@@ -58,10 +62,18 @@ public final class MainActivity extends Activity {
             return insets;
         });
         root.requestApplyInsets();loadedDay=Match.today(System.currentTimeMillis());
-        snapshot=repository.cached(from(),to(),group);render(false);CalendarJob.schedule(this);
+        refreshSubscribed();busy=true;render(false);CalendarJob.schedule(this);
+        executor.submit(()-> {
+            Repository.Snapshot cached=repository.cached(from(),to(),group);
+            handler.post(()-> {
+                if(isDestroyed())return;
+                snapshot=cached;cacheReady=true;busy=false;
+                if(cached.matches().isEmpty())load(false);else{render(false);load(false);}
+            });
+        });
     }
     @Override protected void onSaveInstanceState(Bundle b){super.onSaveInstanceState(b);b.putInt("tab",tab);b.putInt("offset",dayOffset);b.putString("group",group);}
-    @Override public void onResume(){super.onResume();active=true;load(false);if(prefs.getBoolean("calendar_enabled",false)&&System.currentTimeMillis()-prefs.getLong("calendar_checked",0)>60*60_000L)syncCalendar(false);}
+    @Override public void onResume(){super.onResume();active=true;if(cacheReady)load(false);if(calendarSync.hasSubscriptions()&&System.currentTimeMillis()-prefs.getLong("calendar_checked",0)>60*60_000L)syncSubscriptions(false);}
     @Override public void onPause(){active=false;handler.removeCallbacks(tick);super.onPause();}
     @Override public void onDestroy(){executor.shutdownNow();super.onDestroy();}
     private LocalDate from(){return Match.today(System.currentTimeMillis()).plusDays(tab==1?0:dayOffset);}
@@ -73,12 +85,17 @@ public final class MainActivity extends Activity {
         if(tab==2 || !active)return;
         if(!loadedDay.equals(Match.today(System.currentTimeMillis()))){loadedDay=Match.today(System.currentTimeMillis());snapshot=repository.cached(from(),to(),group);render(false);}
         if(busy){pending=true;return;}
-        busy=true;pending=false;String tag=queryTag();LocalDate f=from(),t=to();String g=group;
+        busy=true;pending=false;String tag=queryTag();LocalDate f=from(),t=to();String g=group;long started=System.currentTimeMillis();final boolean[] first={true};
         if(loadingText!=null)loadingText.setText("正在更新比赛…");
         executor.submit(()-> {
-            Repository.Snapshot next=repository.fetch(f,t,g,force);
+            Repository.Snapshot next=repository.fetch(f,t,g,force,batch -> handler.post(()-> {
+                if(first[0]){first[0]=false;android.util.Log.i("MyScorePerf","first source "+batch.competition.id+" in "+(System.currentTimeMillis()-started)+"ms");}
+                if(isDestroyed()||!active||!tag.equals(queryTag()))return;
+                snapshot.merge(batch);render(true);
+            }));
             handler.post(()-> {
                 busy=false;if(isDestroyed())return;
+                android.util.Log.i("MyScorePerf","all sources in "+(System.currentTimeMillis()-started)+"ms");
                 if(tag.equals(queryTag())){snapshot=next;if(active)render(true);}
                 if(active){if(pending || !tag.equals(queryTag()))load(false);else handler.postDelayed(tick,tab==1?300_000:next.failed()?60_000:15_000);}
             });
@@ -103,7 +120,7 @@ public final class MainActivity extends Activity {
         LinearLayout header=ui.row();header.setPadding(ui.dp(20),ui.dp(18),ui.dp(12),ui.dp(12));
         LinearLayout titles=ui.column();String title=tab==0?"我的比赛":tab==1?"未来赛程":"设置";
         titles.addView(ui.text(title,24,ui.text,true));ui.gap(titles,6);
-        titles.addView(ui.text(tab==2?"MyScore · 0.2.0":DateTimeFormatter.ofPattern("M月d日 EEEE",Locale.CHINA).format(from())+" · 北京时间",12,ui.muted,false));
+        titles.addView(ui.text(tab==2?"MyScore · 0.3.0":DateTimeFormatter.ofPattern("M月d日 EEEE",Locale.CHINA).format(from())+" · 北京时间",12,ui.muted,false));
         header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
         if(tab!=2){FrameLayout refresh=new FrameLayout(this);Ui.Icon icon=new Ui.Icon(this,"refresh",ui.primary);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(ui.dp(23),ui.dp(23),Gravity.CENTER);refresh.addView(icon,ip);ui.clickable(refresh,Color.TRANSPARENT,24);refresh.setContentDescription("刷新比赛");refresh.setFocusable(true);refresh.setOnClickListener(v->load(true));header.addView(refresh,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));}
         root.addView(header);
@@ -175,7 +192,18 @@ public final class MainActivity extends Activity {
         }
         ui.gap(card,8);String time=m.timeConfirmed?m.time():"开赛时间待定";
         String sourceAge=m.updated>0?formatInstant(m.updated,"HH:mm:ss")+" 更新":"未获取";
-        TextView foot=ui.text(time+"  ·  "+(stale?"缓存 · ":"")+m.source+" "+sourceAge,11,ui.muted,false);card.addView(foot);
+        LinearLayout footRow=ui.row();
+        TextView foot=ui.text(time+"  ·  "+(stale?"缓存 · ":"")+m.source+" "+sourceAge,11,ui.muted,false);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
+        boolean isSubscribed=subscribed.contains(m.id);boolean canSubscribe=m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis();
+        if(canSubscribe||isSubscribed){
+            TextView pill=ui.text(isSubscribed?"已订阅":"订阅",12,isSubscribed?ui.primary:ui.onPrimary,true);
+            pill.setGravity(Gravity.CENTER);pill.setMinWidth(ui.dp(64));pill.setMinHeight(ui.dp(48));pill.setPadding(ui.dp(12),0,ui.dp(12),0);
+            ui.clickable(pill,isSubscribed?ui.tonal:ui.primary,24);pill.setFocusable(true);
+            pill.setContentDescription((isSubscribed?"取消订阅 ":"订阅 ")+m.displayTitle()+"，提前 5 分钟提醒");
+            pill.setOnClickListener(v->toggleSubscription(m));
+            LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-2,ui.dp(48));pp.setMarginStart(ui.dp(8));footRow.addView(pill,pp);
+        }
+        card.addView(footRow);
         if(stale&&m.live()){ui.gap(card,6);card.addView(ui.text("上次记录为进行中，当前状态待刷新",12,ui.error,false));}
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=ui.dp(6);body.addView(card,cp);
     }
@@ -188,82 +216,114 @@ public final class MainActivity extends Activity {
     }
     private void calendarSummary() {
         LinearLayout block=ui.column();block.setPadding(ui.dp(16),ui.dp(16),ui.dp(16),ui.dp(16));block.setBackground(ui.shape(ui.tonal,14));
-        block.addView(ui.text("让日历提醒下一场",18,ui.text,true));ui.gap(block,8);
-        boolean enabled=prefs.getBoolean("calendar_enabled",false);
-        block.addView(ui.text(enabled?"赛前一天同步 · 开赛前 "+prefs.getInt("remind_minutes",15)+" 分钟提醒":"启用后，关注赛事会在前一天写入手机日历。",13,ui.muted,false));ui.gap(block,14);
-        block.addView(ui.button(enabled?"现在同步日历":"设置日历提醒",true,()->{if(enabled)syncCalendar(true);else beginCalendar();}));body.addView(block);
+        block.addView(ui.text("单场订阅",18,ui.text,true));ui.gap(block,8);
+        block.addView(ui.text("在比赛卡上点“订阅”，写入手机日历并提前 5 分钟提醒。已订阅 "+calendarSync.linkedEvents()+" 场。",13,ui.muted,false));ui.gap(block,14);
+        block.addView(ui.button("管理日历 · "+calendarName(),true,()->select(2,group,dayOffset)));body.addView(block);
     }
     private void settings() {
         loadingText=null;
-        section("日历提醒");
-        LinearLayout calendar=ui.column();calendar.setPadding(ui.dp(16),ui.dp(8),ui.dp(16),ui.dp(16));calendar.setBackground(ui.shape(ui.surface,14));
-        Switch toggle=new Switch(this);toggle.setText("自动同步至日历");toggle.setTextColor(ui.text);toggle.setTextSize(16);toggle.setMinHeight(ui.dp(56));toggle.setChecked(prefs.getBoolean("calendar_enabled",false));
-        toggle.setOnCheckedChangeListener((b,checked)->{if(checked)beginCalendar();else{prefs.edit().putBoolean("calendar_enabled",false).apply();CalendarJob.schedule(this);render(true);}});calendar.addView(toggle);
-        ui.gap(calendar,8);calendar.addView(ui.text("比赛前一天导入，提醒由系统日历发送。关闭同步后，已导入日程仍保留。",13,ui.muted,false));ui.gap(calendar,12);
-        calendar.addView(ui.button(prefs.getString("calendar_name","选择手机日历"),false,this::beginCalendar));ui.gap(calendar,10);
-        calendar.addView(ui.button("提前 "+prefs.getInt("remind_minutes",15)+" 分钟提醒",false,this::reminderChoice));ui.gap(calendar,10);
-        calendar.addView(ui.button("选择同步赛事",false,this::competitionChoice));ui.gap(calendar,10);
-        calendar.addView(ui.button(calendarBusy?"正在同步…":"现在同步日历",true,()->syncCalendar(true)));
-        long checked=prefs.getLong("calendar_checked",0);if(checked>0){ui.gap(calendar,12);calendar.addView(ui.text("最近同步 "+formatInstant(checked,"M月d日 HH:mm")+"\n"+prefs.getString("calendar_result",""),12,ui.muted,false));}
+        section("单场订阅");
+        LinearLayout calendar=ui.column();calendar.setPadding(ui.dp(16),ui.dp(14),ui.dp(16),ui.dp(16));calendar.setBackground(ui.shape(ui.surface,14));
+        calendar.addView(ui.text("把某一场比赛加入日历",18,ui.text,true));ui.gap(calendar,8);
+        calendar.addView(ui.text("在比赛卡上点“订阅”，写入系统日历，并在开赛前 5 分钟提醒。再次点击“已订阅”可取消。",13,ui.muted,false));ui.gap(calendar,6);
+        calendar.addView(ui.text("更换日历只影响之后的新订阅；已写入的事件保留在原日历。",12,ui.muted,false));ui.gap(calendar,14);
+        calendar.addView(ui.button("日历 · "+calendarName(),false,this::calendarChoice));ui.gap(calendar,10);
+        calendar.addView(ui.button("已订阅 "+calendarSync.linkedEvents()+" 场",false,this::subscribedList));ui.gap(calendar,10);
+        calendar.addView(ui.button(calendarBusy?"正在检查…":"检查已订阅比赛",true,()->syncSubscriptions(true)));
+        long checked=prefs.getLong("calendar_checked",0);if(checked>0){ui.gap(calendar,12);calendar.addView(ui.text("最近检查 "+formatInstant(checked,"M月d日 HH:mm")+"\n"+prefs.getString("calendar_result",""),12,ui.muted,false));}
         body.addView(calendar);
         section("显示与连接");body.addView(ui.button("外观 · "+themeName(),false,this::themeChoice));ui.gap(body,12);body.addView(ui.button("查看数据来源状态",false,this::sourceStatus));
         ui.gap(body,18);body.addView(ui.text("体育：ESPN\nCS2：5EPlay · 仅 Spirit 主队\nLOL：英雄联盟赛事官网 · 仅 Worlds\n前台体育约 15 秒刷新，电竞来源至少间隔 60 秒。网络失败时保留缓存和数据时间。",13,ui.muted,false));
-        ui.gap(body,18);body.addView(ui.text("无需 Google 服务。后台日历同步受系统省电调度影响，打开应用会补同步。请在系统日历中允许通知及悬浮提醒。",13,ui.muted,false));
+        ui.gap(body,18);body.addView(ui.text("无需 Google 服务。提醒由系统日历发送；小米 / 澎湃 OS 请在系统设置中允许日历通知与后台运行，否则提醒可能被拦截。",13,ui.muted,false));
         ui.gap(body,18);body.addView(ui.button("打开系统日历",false,()->{Intent i=new Intent(Intent.ACTION_VIEW).setData(Uri.parse("content://com.android.calendar/time/"+System.currentTimeMillis()));try{startActivity(i);}catch(android.content.ActivityNotFoundException e){message("没有找到日历应用","请先在手机中安装或启用系统日历。");}}));
     }
-    private void beginCalendar() {
-        if(!CalendarSync.permitted(this)){pendingCalendarPermission=true;requestPermissions(new String[]{Manifest.permission.READ_CALENDAR,Manifest.permission.WRITE_CALENDAR},42);return;}
-        try {
-            List<CalendarSync.CalendarChoice> choices=new CalendarSync(this).calendars();
-            if(choices.isEmpty()){message("没有可写入的日历","请先打开手机日历，启用一个本地或账号日历后重试。");render(true);return;}
-            String[] names=new String[choices.size()];for(int i=0;i<names.length;i++)names[i]=choices.get(i).name;
-            new AlertDialog.Builder(this).setTitle("选择接收赛事的日历").setItems(names,(d,w)->{
-                CalendarSync.CalendarChoice chosen=choices.get(w);
-                prefs.edit().putLong("calendar_id",chosen.id).putString("calendar_name",chosen.name).putBoolean("calendar_enabled",true).apply();
-                CalendarJob.schedule(this);render(true);syncCalendar(true);
-            }).setNegativeButton("取消",(d,w)->render(true)).setOnCancelListener(d->render(true)).show();
-        }catch(RuntimeException e){message("无法读取手机日历","请检查日历权限和系统日历状态。");}
-    }
-    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==42&&pendingCalendarPermission){pendingCalendarPermission=false;if(CalendarSync.permitted(this))beginCalendar();else{render(true);message("未开启日历权限","比分查看不受影响。需要自动导入时，可在系统应用权限中开启日历读写。");}}}
-    private void reminderChoice() {
-        int[] minutes={0,5,15,30,60};String[] labels={"开赛时","提前 5 分钟","提前 15 分钟","提前 30 分钟","提前 1 小时"};int selected=2;for(int i=0;i<minutes.length;i++)if(minutes[i]==prefs.getInt("remind_minutes",15))selected=i;
-        new AlertDialog.Builder(this).setTitle("日历提醒时间").setSingleChoiceItems(labels,selected,(d,w)->{prefs.edit().putInt("remind_minutes",minutes[w]).apply();d.dismiss();render(true);syncCalendar(false);}).setNegativeButton("取消",null).show();
-    }
-    private void competitionChoice() {
-        String[] labels=new String[Competition.ALL.length];boolean[] selected=new boolean[labels.length];
-        for(int i=0;i<labels.length;i++){labels[i]=Competition.ALL[i].name;selected[i]=prefs.getBoolean("sync_"+Competition.ALL[i].id,true);}
-        new AlertDialog.Builder(this).setTitle("哪些赛事写入日历").setMultiChoiceItems(labels,selected,(d,w,on)->selected[w]=on).setPositiveButton("保存",(d,w)->{SharedPreferences.Editor e=prefs.edit();for(int i=0;i<labels.length;i++)e.putBoolean("sync_"+Competition.ALL[i].id,selected[i]);e.apply();syncCalendar(false);}).setNegativeButton("取消",null).show();
-    }
-    private void syncCalendar(boolean feedback) {
-        if(calendarBusy)return;
-        if(!prefs.getBoolean("calendar_enabled",false)||!CalendarSync.permitted(this)){if(feedback)beginCalendar();return;}
-        calendarBusy=true;
-        if(feedback){if(loadingText!=null)loadingText.setText("正在同步至手机日历…");if(tab==2)render(true);}
-        executor.submit(()->{
-            String text;
-            try {
-                LocalDate f=Match.today(System.currentTimeMillis());Repository.Snapshot data=repository.fetch(f,f.plusDays(7),"全部",feedback);
-                List<Match> confirmed=new ArrayList<>();for(Repository.Batch b:data.batches)if(b.error.isEmpty())confirmed.addAll(b.matches);
-                CalendarSync.Result result=new CalendarSync(this).sync(confirmed,System.currentTimeMillis());
-                text=result.message()+(data.failed()?"\n部分来源连接失败，对应日程未改动。":"")+"\n请在系统日历检查提醒和通知权限。";
-            }catch(RuntimeException e){text="同步失败，请检查网络和日历权限后重试。";}
-            String finalText=text;
-            handler.post(()->{calendarBusy=false;if(isDestroyed())return;if(active){render(true);if(feedback)message("日历同步结果",finalText);}});
+    private String calendarName(){String name=calendarSync.calendarName();return name==null||name.isBlank()?"选择手机日历":name;}
+    private void calendarChoice(){chooseCalendar(null);}
+    private void chooseCalendar(Runnable after) {
+        if(!CalendarSync.permitted(this)){requestPermissions(new String[]{Manifest.permission.READ_CALENDAR,Manifest.permission.WRITE_CALENDAR},42);return;}
+        List<CalendarSync.CalendarChoice> choices=calendarSync.calendars();
+        if(choices.isEmpty()){Sheet.message(this,"没有可写入的日历","请先在系统日历中启用一个本地日历或可写账户，再回来选择。");return;}
+        List<Sheet.Item> items=new ArrayList<>();int selected=-1;
+        for(int i=0;i<choices.size();i++){CalendarSync.CalendarChoice choice=choices.get(i);if(choice.id==calendarSync.calendarId())selected=i;items.add(new Sheet.Item(choice.name,choice.local?"本机日历":"可写账户",choice.id==calendarSync.calendarId()));}
+        Sheet.choose(this,"选择接收比赛的日历","订阅的比赛会写入这个日历，并提前 5 分钟提醒。",items,selected,index->{
+            CalendarSync.CalendarChoice choice=choices.get(index);
+            calendarSync.chooseCalendar(choice.id,choice.name);CalendarJob.schedule(this);render(true);
+            if(after!=null)after.run();
         });
     }
+    private void toggleSubscription(Match m) {
+        if(subscribed.contains(m.id)) {
+            Sheet.confirm(this,"取消订阅","从手机日历中移除「"+m.displayTitle()+"」及其提醒？","取消订阅",()->{
+                CalendarSync.Result result=calendarSync.unsubscribe(m.id);
+                refreshSubscribed();render(true);CalendarJob.schedule(this);
+                if(result.failed>0)Sheet.message(this,"未能取消订阅",result.error.isEmpty()?"请检查日历权限后重试。":result.error);
+                else Toast.makeText(this,"已取消订阅",Toast.LENGTH_SHORT).show();
+            });
+            return;
+        }
+        if(!(m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis())){Sheet.message(this,"暂时不能订阅","这场比赛的开赛时间未确定、已开始或已结束。");return;}
+        pendingSubscription=m;
+        if(!CalendarSync.permitted(this)){requestPermissions(new String[]{Manifest.permission.READ_CALENDAR,Manifest.permission.WRITE_CALENDAR},42);return;}
+        if(calendarSync.calendarId()<0){chooseCalendar(this::subscribePending);return;}
+        subscribePending();
+    }
+    private void subscribePending() {
+        Match m=pendingSubscription;if(m==null)return;pendingSubscription=null;
+        CalendarSync.Result result=calendarSync.subscribe(m,System.currentTimeMillis());
+        refreshSubscribed();render(true);CalendarJob.schedule(this);
+        if(result.inserted+result.updated>0)Toast.makeText(this,"已加入日历 · 提前 5 分钟提醒",Toast.LENGTH_SHORT).show();
+        else Sheet.message(this,"未能加入日历",result.error.isEmpty()?"请检查日历权限和目标日历。":result.error);
+    }
+    private void subscribedList() {
+        List<Match> list=calendarSync.subscriptions();
+        if(list.isEmpty()){Sheet.message(this,"还没有订阅","在比赛卡上点“订阅”，把单场比赛加入手机日历。");return;}
+        List<Sheet.Item> items=new ArrayList<>();
+        for(Match m:list)items.add(new Sheet.Item(m.displayTitle(),formatInstant(m.start,"M月d日 HH:mm")+" · "+(Competition.find(m.league)==null?m.league:Competition.find(m.league).name),false));
+        Sheet.choose(this,"已订阅的比赛","点选一场可取消订阅。提醒由系统日历发送。",items,-1,index->{
+            Match m=list.get(index);
+            Sheet.confirm(this,"取消订阅","移除「"+m.displayTitle()+"」的日历事件和提醒？","取消订阅",()->{
+                calendarSync.unsubscribe(m.id);refreshSubscribed();render(true);CalendarJob.schedule(this);Toast.makeText(this,"已取消订阅",Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
+    private void syncSubscriptions(boolean feedback) {
+        if(calendarBusy)return;
+        if(!calendarSync.hasSubscriptions()){if(feedback)Sheet.message(this,"还没有订阅","在比赛卡上点“订阅”，把单场比赛加入手机日历。");return;}
+        calendarBusy=true;if(feedback&&tab==2)render(true);
+        executor.submit(()->{
+            String text;
+            try{CalendarSync.Result result=calendarSync.sync(Collections.emptyList(),System.currentTimeMillis());text=result.message();}
+            catch(RuntimeException e){text="检查失败，请检查网络和日历权限后重试。";}
+            String finalText=text;
+            handler.post(()->{calendarBusy=false;if(isDestroyed())return;if(active){refreshSubscribed();render(true);if(feedback)Sheet.message(this,"订阅检查结果",finalText+"\n请在系统日历确认提醒已显示。");}});
+        });
+    }
+    private void refreshSubscribed(){subscribed.clear();subscribed.addAll(calendarSync.subscribedIds());}
     private String themeName(){return switch(prefs.getString("theme","system")){case "dark"->"深色";case "light"->"浅色";default->"跟随系统";};}
-    private void themeChoice(){String[] values={"system","light","dark"};new AlertDialog.Builder(this).setTitle("外观").setItems(new String[]{"跟随系统","浅色","深色"},(d,w)->{prefs.edit().putString("theme",values[w]).apply();recreate();}).setNegativeButton("取消",null).show();}
+    private void themeChoice(){
+        String[] values={"system","light","dark"};String[] labels={"跟随系统","浅色","深色"};String current=prefs.getString("theme","system");int selected=0;
+        for(int i=0;i<values.length;i++)if(values[i].equals(current))selected=i;
+        List<Sheet.Item> items=new ArrayList<>();for(int i=0;i<labels.length;i++)items.add(new Sheet.Item(labels[i],i==selected?"当前使用":"",i==selected));
+        Sheet.choose(this,"外观","跟随系统会随手机的浅色 / 深色模式切换。",items,selected,index->{prefs.edit().putString("theme",values[index]).apply();recreate();});
+    }
+    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
+        super.onRequestPermissionsResult(code,permissions,results);
+        if(code!=42)return;
+        if(!CalendarSync.permitted(this)){pendingSubscription=null;Sheet.message(this,"未开启日历权限","比分查看不受影响。需要订阅时，请在系统应用权限中允许日历读写。");return;}
+        if(pendingSubscription!=null){if(calendarSync.calendarId()<0)chooseCalendar(this::subscribePending);else subscribePending();}
+        else chooseCalendar(null);
+    }
     private void sourceStatus() {
         StringBuilder content=new StringBuilder();
         for(Repository.Batch b:snapshot.batches){content.append(b.competition.name).append("\n").append(b.fetched>0?"上次成功 "+formatInstant(b.fetched,"M月d日 HH:mm:ss")+" · "+b.matches.size()+" 场":"尚未成功获取");if(!b.error.isEmpty())content.append("\n").append(b.error);content.append("\n\n");}
         content.append("当前来源：ESPN、5EPlay、英雄联盟赛事官网。网站接口可能调整或限制访问。HLTV / SofaScore / BO3.gg 不作为默认来源。模拟器测试不等于手机移动网络验收。");
-        message("数据来源与连接",content.toString());
+        Sheet.message(this,"数据来源与连接",content.toString());
     }
     private void navigation() {
         nav=ui.row();nav.setBackgroundColor(ui.surface);String[] labels={"比赛","赛程","设置"},icons={"scores","calendar","settings"};
         for(int i=0;i<3;i++){int index=i;LinearLayout item=ui.column();item.setGravity(Gravity.CENTER);item.setPadding(0,ui.dp(10),0,ui.dp(10));ui.clickable(item,tab==i?ui.tonal:ui.surface,0);item.setFocusable(true);item.setSelected(tab==i);item.setContentDescription(labels[i]+(tab==i?"，已选中":""));item.addView(new Ui.Icon(this,icons[i],tab==i?ui.primary:ui.muted),new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));ui.gap(item,5);TextView label=ui.text(labels[i],12,tab==i?ui.primary:ui.muted,tab==i);label.setGravity(Gravity.CENTER);item.addView(label);item.setOnClickListener(v->select(index,group,dayOffset));nav.addView(item,new LinearLayout.LayoutParams(0,-2,1));}root.addView(nav);
     }
-    private void message(String title,String text){if(!isFinishing()&&!isDestroyed())new AlertDialog.Builder(this).setTitle(title).setMessage(text).setPositiveButton("知道了",null).show();}
+    private void message(String title,String text){if(!isFinishing()&&!isDestroyed())Sheet.message(this,title,text);}
     private void openLink(String url){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(android.content.ActivityNotFoundException e){message("无法打开链接","手机没有可用的浏览器。");}}
     private static String formatInstant(long millis,String pattern){return millis>0?DateTimeFormatter.ofPattern(pattern,Locale.CHINA).withZone(Match.ZONE).format(Instant.ofEpochMilli(millis)):"未获取";}
 }

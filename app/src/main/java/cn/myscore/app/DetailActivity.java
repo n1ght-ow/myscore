@@ -56,7 +56,7 @@ public final class DetailActivity extends Activity {
         TextView state=ui.text(match.status+(match.timeConfirmed?" · "+time(match.start,"M月d日 HH:mm"):" · 时间待定"),12,ui.muted,true);state.setGravity(Gravity.CENTER);hero.addView(state);ui.gap(hero,14);
         if(match.group.equals("F1")){TextView title=ui.text(match.displayTitle(),22,ui.text,true);title.setGravity(Gravity.CENTER);hero.addView(title);}
         else {LinearLayout sides=ui.row();sides.setGravity(Gravity.CENTER);sides.addView(team(match.home,match.homeLogo),new LinearLayout.LayoutParams(0,-2,1));TextView score=ui.text(match.hasScore()?match.homeScore+" : "+match.awayScore:"VS",match.hasScore()?36:25,ui.text,true);score.setGravity(Gravity.CENTER);score.setPadding(ui.dp(12),0,ui.dp(12),0);sides.addView(score,new LinearLayout.LayoutParams(-2,-2));sides.addView(team(match.away,match.awayLogo),new LinearLayout.LayoutParams(0,-2,1));hero.addView(sides);}
-        ui.gap(hero,10);TextView timestamp=ui.text((match.updated>0?"比分 "+time(match.updated,"HH:mm:ss")+" · ":"")+"北京时间",11,ui.muted,false);timestamp.setGravity(Gravity.CENTER);hero.addView(timestamp);root.addView(hero);
+        ui.gap(hero,10);TextView timestamp=ui.text((match.updated>0?"比分更新于 "+time(match.updated,"HH:mm:ss")+" · ":"")+"北京时间",11,ui.muted,false);timestamp.setGravity(Gravity.CENTER);hero.addView(timestamp);root.addView(hero);
     }
     private LinearLayout team(String name,String logo){LinearLayout side=ui.column();side.setGravity(Gravity.CENTER);side.addView(Logos.view(ui,logo,name,44));ui.gap(side,8);TextView t=ui.text(name,13,ui.text,true);t.setGravity(Gravity.CENTER);side.addView(t,new LinearLayout.LayoutParams(-1,-2));return side;}
     private String lineupName(){return switch(match.group){case "足球","LOL"->"阵容";case "F1"->"车手";case "CS2"->"选手";default->"球员";};}
@@ -69,7 +69,7 @@ public final class DetailActivity extends Activity {
         if(!detail.events.isEmpty()){heading("最新进程");for(int i=0;i<Math.min(3,detail.events.size());i++)event(detail.events.get(i));}
         ui.gap(body,22);body.addView(ui.text("比分与统计依来源发布，可能存在延迟。空缺表示尚未提供。",12,ui.muted,false));ui.gap(body,12);if(!match.url.isBlank())body.addView(ui.button("在来源网站查看",false,()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(match.url)));}catch(android.content.ActivityNotFoundException e){status.setText("手机没有可用的浏览器");}}));
     }
-    private void fact(String label,String value){if(label.length()>10){LinearLayout block=ui.column();block.setPadding(0,ui.dp(10),0,ui.dp(10));block.addView(ui.text(label,12,ui.muted,false));ui.gap(block,5);block.addView(ui.text(value,14,ui.text,true));body.addView(block);}else{LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setPadding(0,ui.dp(9),0,ui.dp(9));TextView l=ui.text(label,13,ui.muted,false);row.addView(l,new LinearLayout.LayoutParams(ui.dp(80),-2));TextView v=ui.text(value,14,ui.text,false);row.addView(v,new LinearLayout.LayoutParams(0,-2,1));body.addView(row);}body.addView(ui.divider());}
+    private void fact(String label,String value){if(label.length()>6){LinearLayout block=ui.column();block.setPadding(0,ui.dp(10),0,ui.dp(10));block.addView(ui.text(label,12,ui.muted,false));ui.gap(block,5);block.addView(ui.text(value,14,ui.text,true));body.addView(block);}else{LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setPadding(0,ui.dp(9),0,ui.dp(9));TextView l=ui.text(label,13,ui.muted,false);row.addView(l,new LinearLayout.LayoutParams(ui.dp(80),-2));TextView v=ui.text(value,14,ui.text,false);row.addView(v,new LinearLayout.LayoutParams(0,-2,1));body.addView(row);}body.addView(ui.divider());}
     private void statistics(){if(!detail.stats.isEmpty()){heading("球队技术统计");LinearLayout names=ui.row();TextView home=ui.text(match.home,12,ui.muted,true),away=ui.text(match.away,12,ui.muted,true);away.setGravity(Gravity.END);names.addView(home,new LinearLayout.LayoutParams(0,-2,1));names.addView(away,new LinearLayout.LayoutParams(0,-2,1));body.addView(names);ui.gap(body,14);for(MatchDetail.Stat s:detail.stats)stat(s);}boolean has=tables("stats");if(!has&&detail.stats.isEmpty()){if(match.group.equals("CS2")){empty("选手统计在“选手”分栏", "包含全场及各图的 K/D/A、ADR、KAST 和 Rating。");body.addView(ui.button("查看选手统计",false,()->{tab="lineup";render(false);}));}else empty("暂无本场技术统计",missing());}}
     private void stat(MatchDetail.Stat s){LinearLayout row=ui.row();TextView h=ui.text(s.home(),16,ui.text,true),label=ui.text(s.label(),12,ui.muted,false),a=ui.text(s.away(),16,ui.text,true);h.setGravity(Gravity.START);a.setGravity(Gravity.END);label.setGravity(Gravity.CENTER);row.addView(h,new LinearLayout.LayoutParams(0,-2,1));row.addView(label,new LinearLayout.LayoutParams(0,-2,2));row.addView(a,new LinearLayout.LayoutParams(0,-2,1));body.addView(row);ui.gap(body,8);double hv=numeric(s.home()),av=numeric(s.away());if(hv>=0&&av>=0){if(hv+av>0){LinearLayout bar=ui.row();bar.addView(track(ui.text),new LinearLayout.LayoutParams(0,ui.dp(3),(float)hv));bar.addView(track(ui.tonal),new LinearLayout.LayoutParams(0,ui.dp(3),(float)av));body.addView(bar);}else body.addView(track(ui.line),new LinearLayout.LayoutParams(-1,ui.dp(3)));}else body.addView(ui.divider());ui.gap(body,18);}
     private View track(int color){View v=new View(this);v.setBackground(ui.shape(color,2));return v;}
@@ -78,15 +78,21 @@ public final class DetailActivity extends Activity {
     private void table(MatchDetail.Table table){
         int cols=table.columns.size();boolean gear=cols==2&&table.columns.get(1).equals("装备");
         if(gear){for(java.util.List<String> r:table.rows){LinearLayout block=ui.column();block.setPadding(ui.dp(14),ui.dp(12),ui.dp(14),ui.dp(12));block.setBackground(ui.shape(ui.surface,10));block.addView(ui.text(r.get(0),14,ui.text,true));ui.gap(block,7);block.addView(ui.text(r.size()>1?r.get(1):"—",13,ui.muted,false));body.addView(block);ui.gap(body,6);}return;}
-        if(cols>=6&&table.rows.size()>3){blockTable(table);return;}
+        if(cols>=6){blockTable(table);return;}
         LinearLayout data=ui.column();data.setBackground(ui.shape(ui.surface,10));
         int avail=getResources().getDisplayMetrics().widthPixels-ui.dp(40)-ui.dp(24);
-        int[] widths=new int[cols];int first=Math.max(ui.dp(70),avail-(cols-1)*ui.dp(40));first=Math.min(first,ui.dp(150));widths[0]=first;
-        int other=Math.max(ui.dp(32),(avail-first)/Math.max(1,cols-1));
-        for(int i=1;i<cols;i++)widths[i]=other;
+        int[] widths=fitWidths(table,avail);
         addTableRow(data,table.columns,widths,true);for(java.util.List<String> row:table.rows){data.addView(ui.divider());addTableRow(data,row,widths,false);}
         body.addView(data,new LinearLayout.LayoutParams(-1,-2));
     }
+    private int[] fitWidths(MatchDetail.Table table,int avail){
+        int cols=table.columns.size();int[] need=new int[cols];
+        for(int i=0;i<cols;i++){int n=textWidth(table.columns.get(i));for(java.util.List<String> r:table.rows)if(i<r.size())n=Math.max(n,textWidth(r.get(i)));need[i]=Math.max(ui.dp(38),n);}
+        int total=0;for(int n:need)total+=n;int[] widths=new int[cols];
+        for(int i=0;i<cols;i++)widths[i]=Math.max(ui.dp(32),need[i]*avail/Math.max(1,total));
+        return widths;
+    }
+    private int textWidth(String s){if(s==null||s.isEmpty())return 0;int w=0;for(int i=0;i<s.length();i++){char ch=s.charAt(i);w+=ch>0x2E80?ui.dp(13):ui.dp(7);}return w+ui.dp(8);}
     private void blockTable(MatchDetail.Table table){
         int cols=table.columns.size();
         for(java.util.List<String> row:table.rows){

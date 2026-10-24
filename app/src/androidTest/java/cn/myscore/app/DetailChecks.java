@@ -33,10 +33,11 @@ final class DetailChecks {
                 if(!d.match.league.equals("epl")&&d.match.group.equals("足球"))continue;
                 activity=test.startActivitySync(new Intent(c,DetailActivity.class).putExtra("match",d.match.json().toString()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));test.waitForIdleSync();
                 check(find(activity.getWindow().getDecorView(),"总览")!=null,"full detail opens "+d.match.league+" "+theme);
+                check(find(activity.getWindow().getDecorView(),"左右滑动查看完整数据")==null,"tables keep all columns visible "+d.match.league+" "+theme);
                 if(d.match.league.equals("epl"))capture("football-overview-"+theme);
-                String line=switch(d.match.group){case "足球","LOL"->"阵容";case "F1"->"车手";case "CS2"->"选手";default->"球员";};click(line);check(find(activity.getWindow().getDecorView(),line)!=null,"native lineup tab "+d.match.league);capture(d.match.league+"-lineup-"+theme);
-                click("统计");check(find(activity.getWindow().getDecorView(),"统计")!=null,"native statistics tab "+d.match.league);if(d.match.league.equals("epl")||d.match.league.equals("f1")||d.match.league.equals("lol"))capture(d.match.league+"-stats-"+theme);
-                String events=d.match.group.equals("CS2")||d.match.group.equals("LOL")?"小局":"进程";click(events);check(find(activity.getWindow().getDecorView(),events)!=null,"native events tab "+d.match.league);if(d.match.league.equals("epl"))capture("football-events-"+theme);
+                String line=switch(d.match.group){case "足球","LOL"->"阵容";case "F1"->"车手";case "CS2"->"选手";default->"球员";};click(line);check(find(activity.getWindow().getDecorView(),line)!=null,"native lineup tab "+d.match.league);if(d.match.league.equals("f1")){check(find(activity.getWindow().getDecorView(),"名次")!=null,"F1 lineup keeps position column "+theme);check(find(activity.getWindow().getDecorView(),"车号")!=null,"F1 lineup keeps car number "+theme);}capture(d.match.league+"-lineup-"+theme);
+                String statTab=d.match.league.equals("f1")?"成绩":"统计";click(statTab);check(find(activity.getWindow().getDecorView(),statTab)!=null,"native statistics tab "+d.match.league);if(d.match.league.equals("epl")||d.match.league.equals("f1")||d.match.league.equals("lol"))capture(d.match.league+"-stats-"+theme);if(d.match.league.equals("f1"))check(find(activity.getWindow().getDecorView(),"Q1")!=null,"F1 results show qualifying fields "+theme);
+                if(!d.match.league.equals("f1")){String events=d.match.group.equals("CS2")||d.match.group.equals("LOL")?"小局":"进程";click(events);check(find(activity.getWindow().getDecorView(),events)!=null,"native events tab "+d.match.league);if(d.match.league.equals("epl"))capture("football-events-"+theme);}
                 test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);test.waitForIdleSync();
             }
         }

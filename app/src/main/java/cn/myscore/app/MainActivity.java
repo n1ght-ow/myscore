@@ -109,16 +109,17 @@ public final class MainActivity extends Activity {
         root.addView(header);
     }
     private void filters() {
-        FrameLayout holder=new FrameLayout(this);
+        LinearLayout holder=ui.row();
         HorizontalScrollView horizontal=new HorizontalScrollView(this);horizontal.setHorizontalScrollBarEnabled(false);
-        LinearLayout chips=ui.row();chips.setPadding(ui.dp(20),0,ui.dp(48),0);
+        LinearLayout chips=ui.row();chips.setPadding(ui.dp(20),0,ui.dp(12),0);
         for(String g:GROUPS){TextView chip=ui.text(g,14,g.equals(group)?ui.onPrimary:ui.muted,g.equals(group));chip.setGravity(Gravity.CENTER);chip.setMinWidth(ui.dp(56));chip.setMinHeight(ui.dp(48));chip.setPadding(ui.dp(14),0,ui.dp(14),0);ui.clickable(chip,g.equals(group)?ui.primary:ui.bg,24);chip.setSelected(g.equals(group));chip.setFocusable(true);chip.setContentDescription(g+(g.equals(group)?"，已选中":"，筛选赛事"));chip.setOnClickListener(v->select(tab,g,dayOffset));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,-2);cp.setMarginEnd(ui.dp(8));chips.addView(chip,cp);}
-        horizontal.addView(chips);holder.addView(horizontal,new FrameLayout.LayoutParams(-1,-2));
-        FrameLayout more=new FrameLayout(this);Ui.Icon chevron=new Ui.Icon(this,"chevron",ui.muted);more.addView(chevron,new FrameLayout.LayoutParams(ui.dp(16),ui.dp(16),Gravity.CENTER));
-        more.setBackground(new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,new int[]{ui.bg&0x00FFFFFF,ui.bg}));
+        horizontal.addView(chips);LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,-2,1);hp.setMarginEnd(ui.dp(8));holder.addView(horizontal,hp);
+        FrameLayout more=new FrameLayout(this);more.addView(new Ui.Icon(this,"chevron",ui.muted),new FrameLayout.LayoutParams(ui.dp(18),ui.dp(18),Gravity.CENTER));
         more.setContentDescription("更多赛事筛选");more.setFocusable(true);more.setOnClickListener(v->horizontal.smoothScrollBy(ui.dp(180),0));
-        holder.addView(more,new FrameLayout.LayoutParams(ui.dp(48),ui.dp(48),Gravity.END|Gravity.CENTER_VERTICAL));
-        final boolean[] overflow={false};Runnable refresh=()->{View child=horizontal.getChildAt(0);int max=child==null?0:Math.max(0,child.getWidth()-horizontal.getWidth());overflow[0]=max>0;more.setVisibility(overflow[0]&&horizontal.getScrollX()<max-1?View.VISIBLE:View.GONE);};
+        holder.addView(more,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
+        int selectedIndex=0;for(int i=0;i<GROUPS.length;i++)if(GROUPS[i].equals(group))selectedIndex=i;
+        final int current=selectedIndex;horizontal.post(()->{View selected=chips.getChildAt(current);if(selected!=null&&selected.getRight()>horizontal.getWidth())horizontal.scrollTo(selected.getRight()-horizontal.getWidth()+ui.dp(8),0);});
+        final boolean[] overflow={false};Runnable refresh=()->{View child=horizontal.getChildAt(0);int max=child==null?0:Math.max(0,child.getWidth()-horizontal.getWidth());overflow[0]=max>0;more.setVisibility(overflow[0]&&horizontal.getScrollX()<max-1?View.VISIBLE:View.INVISIBLE);};
         horizontal.getViewTreeObserver().addOnGlobalLayoutListener(refresh::run);horizontal.setOnScrollChangeListener((v,x,y,ox,oy)->refresh.run());
         root.addView(holder);
     }

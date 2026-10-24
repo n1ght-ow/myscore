@@ -19,7 +19,9 @@ import java.util.concurrent.*;
 final class Logos {
     private static final ExecutorService POOL=Executors.newFixedThreadPool(3);
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
-    private static final LruCache<String,Bitmap> MEMORY=new LruCache<String,Bitmap>(6*1024*1024){@Override protected int sizeOf(String k,Bitmap b){return b.getByteCount();}};
+    // Session cache avoids the initials flash when a card is rebuilt or its detail opens.
+    private static final ConcurrentHashMap<String,Bitmap> SESSION=new ConcurrentHashMap<>();
+    private static final LruCache<String,Bitmap> MEMORY=new LruCache<String,Bitmap>(24*1024*1024){@Override protected int sizeOf(String k,Bitmap b){return b.getByteCount();}};
     private static final ConcurrentHashMap<String,Long> FAILED=new ConcurrentHashMap<>();
     static FrameLayout view(Ui ui,String url,String name,int size) {
         FrameLayout box=new FrameLayout(ui.c);box.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -29,10 +31,11 @@ final class Logos {
         TextView fallback=ui.text(initials(name),size>40?16:10,0xff656870,true);fallback.setGravity(Gravity.CENTER);box.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
         ImageView image=new ImageView(ui.c);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setPadding(ui.dp(3),ui.dp(3),ui.dp(3),ui.dp(3));box.addView(image,new FrameLayout.LayoutParams(-1,-1));
         if(!allowed(url))return box;
-        Bitmap memory=MEMORY.get(url);if(memory!=null){image.setImageBitmap(memory);fallback.setVisibility(android.view.View.GONE);return box;}
+        Bitmap memory=SESSION.get(url);if(memory==null)memory=MEMORY.get(url);
+        if(memory!=null){MEMORY.put(url,memory);SESSION.put(url,memory);image.setImageBitmap(memory);fallback.setVisibility(android.view.View.GONE);return box;}
         if(System.currentTimeMillis()-FAILED.getOrDefault(url,0L)<30_000)return box;
         Context app=ui.c.getApplicationContext();
-        POOL.submit(()->{try{Bitmap b=load(app,url);MEMORY.put(url,b);MAIN.post(()->{image.setImageBitmap(b);fallback.setVisibility(android.view.View.GONE);});}catch(Exception e){FAILED.put(url,System.currentTimeMillis());android.util.Log.i("MyScoreCrests","Crest unavailable on "+URI.create(url).getHost()+": "+e.getClass().getSimpleName());}});
+        POOL.submit(()->{try{Bitmap b=load(app,url);MEMORY.put(url,b);SESSION.put(url,b);MAIN.post(()->{image.setImageBitmap(b);fallback.setVisibility(android.view.View.GONE);});}catch(Exception e){FAILED.put(url,System.currentTimeMillis());android.util.Log.i("MyScoreCrests","Crest unavailable on "+URI.create(url).getHost()+": "+e.getClass().getSimpleName());}});
         return box;
     }
     static boolean allowed(String url) {

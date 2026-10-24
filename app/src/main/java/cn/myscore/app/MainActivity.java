@@ -34,10 +34,11 @@ public final class MainActivity extends Activity {
     private Repository.Snapshot snapshot=new Repository.Snapshot();
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService executor=Executors.newSingleThreadExecutor();
-    private LinearLayout root,body,nav;
+    private LinearLayout root,body,nav,headerView;
+    private FrameLayout stage;
     private ScrollView scroll;
     private TextView loadingText;
-    private int tab=0,dayOffset=0;
+    private int tab=0,dayOffset=0,headerHeight=0,headerOffset=0;
     private String group="全部";
     private boolean active=false,busy=false,calendarBusy=false,pending=false,cacheReady=false;
     private LocalDate loadedDay;
@@ -45,6 +46,7 @@ public final class MainActivity extends Activity {
     private final Set<String> subscribed=new HashSet<>();
     private Match pendingSubscription;
     private final Runnable tick=()->load(false);
+    private final Runnable renderSoon=()->{if(active&&!isDestroyed())render(true);};
     private static final String[] GROUPS={"全部","足球","NBA","NFL","F1","CS2","LOL"};
 
     @Override public void onCreate(Bundle state) {
@@ -91,41 +93,64 @@ public final class MainActivity extends Activity {
             Repository.Snapshot next=repository.fetch(f,t,g,force,batch -> handler.post(()-> {
                 if(first[0]){first[0]=false;android.util.Log.i("MyScorePerf","first source "+batch.competition.id+" in "+(System.currentTimeMillis()-started)+"ms");}
                 if(isDestroyed()||!active||!tag.equals(queryTag()))return;
-                snapshot.merge(batch);render(true);
+                snapshot.merge(batch);handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,90);
             }));
             handler.post(()-> {
                 busy=false;if(isDestroyed())return;
                 android.util.Log.i("MyScorePerf","all sources in "+(System.currentTimeMillis()-started)+"ms");
+                handler.removeCallbacks(renderSoon);
                 if(tag.equals(queryTag())){snapshot=next;if(active)render(true);}
                 if(active){if(pending || !tag.equals(queryTag()))load(false);else handler.postDelayed(tick,tab==1?300_000:next.failed()?60_000:15_000);}
             });
         });
     }
     private void select(int nextTab,String nextGroup,int offset) {
-        handler.removeCallbacks(tick);tab=nextTab;group=nextGroup;dayOffset=offset;
+        handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);tab=nextTab;group=nextGroup;dayOffset=offset;headerOffset=0;
         snapshot=repository.cached(from(),to(),group);render(false);load(false);
     }
     private void render(boolean preserveScroll) {
         int oldY=preserveScroll&&scroll!=null?scroll.getScrollY():0;
-        root.removeAllViews();header();
-        if(tab!=2){filters();if(tab==0)dateSelector();}
+        root.removeAllViews();
+        stage=new FrameLayout(this);root.addView(stage,new LinearLayout.LayoutParams(-1,0,1));
         scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setClipToPadding(false);
+        scroll.setPadding(0,ui.dp(tab==2?50:tab==1?98:154),0,0);
         body=ui.column();body.setPadding(ui.dp(16),ui.dp(4),ui.dp(16),ui.dp(24));scroll.addView(body);
-        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        stage.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
+        headerView=ui.column();headerView.setBackgroundColor(ui.bg);
+        header(headerView);
+        if(tab!=2){filters(headerView);if(tab==0)dateSelector(headerView);}
+        headerView.addView(ui.divider());
+        stage.addView(headerView,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
+        headerView.setTranslationY(-Math.min(headerOffset,headerHeight));
         if(tab==2)settings();else matches();
         root.addView(ui.divider());navigation();
-        if(preserveScroll)scroll.post(()->scroll.scrollTo(0,oldY));
+        scroll.post(()-> {
+            headerHeight=headerView.getHeight();scroll.setPadding(0,headerHeight,0,0);
+            headerOffset=Math.min(headerOffset,headerHeight);headerView.setTranslationY(-headerOffset);
+            if(preserveScroll)scroll.scrollTo(0,oldY);
+            headerOffset=Math.min(headerOffset,scroll.getScrollY());headerView.setTranslationY(-headerOffset);
+            scroll.setOnScrollChangeListener((v,x,y,ox,oy)-> {
+                if(headerHeight<=0)return;
+                int delta=y-oy;
+                if(delta>0)headerOffset=Math.min(headerHeight,headerOffset+delta);
+                else if(delta<0)headerOffset=0;
+                headerView.setTranslationY(-headerOffset);
+            });
+        });
     }
-    private void header() {
-        LinearLayout header=ui.row();header.setPadding(ui.dp(20),ui.dp(18),ui.dp(12),ui.dp(12));
-        LinearLayout titles=ui.column();String title=tab==0?"我的比赛":tab==1?"未来赛程":"设置";
-        titles.addView(ui.text(title,24,ui.text,true));ui.gap(titles,6);
-        titles.addView(ui.text(tab==2?"MyScore · 0.3.0":DateTimeFormatter.ofPattern("M月d日 EEEE",Locale.CHINA).format(from())+" · 北京时间",12,ui.muted,false));
+    private void header(LinearLayout parent) {
+        LinearLayout header=ui.row();header.setPadding(ui.dp(20),ui.dp(12),ui.dp(12),ui.dp(6));
+        LinearLayout titles=ui.row();titles.setGravity(Gravity.CENTER_VERTICAL);
+        String title=tab==0?"我的比赛":tab==1?"未来赛程":"设置";
+        titles.addView(ui.text(title,22,ui.text,true));
+        TextView meta=ui.text(tab==2?"MyScore · 0.3.1":DateTimeFormatter.ofPattern("M月d日 EEE",Locale.CHINA).format(from()),11,ui.muted,false);
+        meta.setMaxLines(1);meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,-2,1);mp.setMarginStart(ui.dp(10));titles.addView(meta,mp);
         header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
-        if(tab!=2){FrameLayout refresh=new FrameLayout(this);Ui.Icon icon=new Ui.Icon(this,"refresh",ui.primary);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(ui.dp(23),ui.dp(23),Gravity.CENTER);refresh.addView(icon,ip);ui.clickable(refresh,Color.TRANSPARENT,24);refresh.setContentDescription("刷新比赛");refresh.setFocusable(true);refresh.setOnClickListener(v->load(true));header.addView(refresh,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));}
-        root.addView(header);
+        if(tab!=2){FrameLayout refresh=new FrameLayout(this);Ui.Icon icon=new Ui.Icon(this,"refresh",ui.primary);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER);refresh.addView(icon,ip);ui.clickable(refresh,Color.TRANSPARENT,24);refresh.setContentDescription("刷新比赛");refresh.setFocusable(true);refresh.setOnClickListener(v->load(true));header.addView(refresh,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));}
+        parent.addView(header);
     }
-    private void filters() {
+    private void filters(LinearLayout parent) {
         LinearLayout holder=ui.row();
         HorizontalScrollView horizontal=new HorizontalScrollView(this);horizontal.setHorizontalScrollBarEnabled(false);
         LinearLayout chips=ui.row();chips.setPadding(ui.dp(20),0,ui.dp(12),0);
@@ -138,12 +163,12 @@ public final class MainActivity extends Activity {
         final int current=selectedIndex;horizontal.post(()->{View selected=chips.getChildAt(current);if(selected!=null&&selected.getRight()>horizontal.getWidth())horizontal.scrollTo(selected.getRight()-horizontal.getWidth()+ui.dp(8),0);});
         final boolean[] overflow={false};Runnable refresh=()->{View child=horizontal.getChildAt(0);int max=child==null?0:Math.max(0,child.getWidth()-horizontal.getWidth());overflow[0]=max>0;more.setVisibility(overflow[0]&&horizontal.getScrollX()<max-1?View.VISIBLE:View.INVISIBLE);};
         horizontal.getViewTreeObserver().addOnGlobalLayoutListener(refresh::run);horizontal.setOnScrollChangeListener((v,x,y,ox,oy)->refresh.run());
-        root.addView(holder);
+        parent.addView(holder);
     }
-    private void dateSelector() {
-        LinearLayout dates=ui.row();dates.setPadding(ui.dp(20),ui.dp(8),ui.dp(20),0);
+    private void dateSelector(LinearLayout parent) {
+        LinearLayout dates=ui.row();dates.setPadding(ui.dp(20),ui.dp(4),ui.dp(20),ui.dp(4));
         for(int i=-1;i<=1;i++){int offset=i;TextView b=ui.text(i==-1?"昨天":i==0?"今天":"明天",14,dayOffset==i?ui.primary:ui.muted,dayOffset==i);b.setGravity(Gravity.CENTER);b.setMinHeight(ui.dp(48));ui.clickable(b,dayOffset==i?ui.tonal:ui.bg,12);b.setSelected(dayOffset==i);b.setFocusable(true);b.setOnClickListener(v->select(0,group,offset));LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,-2,1);if(i<1)bp.setMarginEnd(ui.dp(8));dates.addView(b,bp);}
-        root.addView(dates);
+        parent.addView(dates);
     }
     private void matches() {
         if(tab==1){calendarSummary();ui.gap(body,16);}
@@ -195,14 +220,14 @@ public final class MainActivity extends Activity {
         LinearLayout footRow=ui.row();
         TextView foot=ui.text(time+"  ·  "+(stale?"缓存 · ":"")+m.source+" "+sourceAge,11,ui.muted,false);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
         boolean isSubscribed=subscribed.contains(m.id);boolean canSubscribe=m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis();
-        if(canSubscribe||isSubscribed){
-            TextView pill=ui.text(isSubscribed?"已订阅":"订阅",12,isSubscribed?ui.primary:ui.onPrimary,true);
-            pill.setGravity(Gravity.CENTER);pill.setMinWidth(ui.dp(64));pill.setMinHeight(ui.dp(48));pill.setPadding(ui.dp(12),0,ui.dp(12),0);
-            ui.clickable(pill,isSubscribed?ui.tonal:ui.primary,24);pill.setFocusable(true);
-            pill.setContentDescription((isSubscribed?"取消订阅 ":"订阅 ")+m.displayTitle()+"，提前 5 分钟提醒");
-            pill.setOnClickListener(v->toggleSubscription(m));
-            LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-2,ui.dp(48));pp.setMarginStart(ui.dp(8));footRow.addView(pill,pp);
-        }
+        FrameLayout sub=new FrameLayout(this);
+        Ui.Icon subIcon=new Ui.Icon(this,isSubscribed?"calendar-check":"calendar-add",isSubscribed?ui.onPrimary:(canSubscribe?ui.primary:ui.muted));
+        sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
+        ui.clickable(sub,isSubscribed?ui.primary:(canSubscribe?ui.tonal:Color.TRANSPARENT),24);
+        sub.setFocusable(true);
+        sub.setContentDescription(isSubscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
+        sub.setOnClickListener(v->toggleSubscription(m));
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));pp.setMarginStart(ui.dp(8));footRow.addView(sub,pp);
         card.addView(footRow);
         if(stale&&m.live()){ui.gap(card,6);card.addView(ui.text("上次记录为进行中，当前状态待刷新",12,ui.error,false));}
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=ui.dp(6);body.addView(card,cp);
@@ -217,7 +242,7 @@ public final class MainActivity extends Activity {
     private void calendarSummary() {
         LinearLayout block=ui.column();block.setPadding(ui.dp(16),ui.dp(16),ui.dp(16),ui.dp(16));block.setBackground(ui.shape(ui.tonal,14));
         block.addView(ui.text("单场订阅",18,ui.text,true));ui.gap(block,8);
-        block.addView(ui.text("在比赛卡上点“订阅”，写入手机日历并提前 5 分钟提醒。已订阅 "+calendarSync.linkedEvents()+" 场。",13,ui.muted,false));ui.gap(block,14);
+        block.addView(ui.text("在比赛卡上点日历加号图标，写入手机日历并提前 5 分钟提醒。已订阅 "+calendarSync.linkedEvents()+" 场。",13,ui.muted,false));ui.gap(block,14);
         block.addView(ui.button("管理日历 · "+calendarName(),true,()->select(2,group,dayOffset)));body.addView(block);
     }
     private void settings() {
@@ -225,7 +250,7 @@ public final class MainActivity extends Activity {
         section("单场订阅");
         LinearLayout calendar=ui.column();calendar.setPadding(ui.dp(16),ui.dp(14),ui.dp(16),ui.dp(16));calendar.setBackground(ui.shape(ui.surface,14));
         calendar.addView(ui.text("把某一场比赛加入日历",18,ui.text,true));ui.gap(calendar,8);
-        calendar.addView(ui.text("在比赛卡上点“订阅”，写入系统日历，并在开赛前 5 分钟提醒。再次点击“已订阅”可取消。",13,ui.muted,false));ui.gap(calendar,6);
+        calendar.addView(ui.text("在比赛卡上点日历加号图标，写入系统日历，并在开赛前 5 分钟提醒。图标变为日历勾选后可再次点按取消。",13,ui.muted,false));ui.gap(calendar,6);
         calendar.addView(ui.text("更换日历只影响之后的新订阅；已写入的事件保留在原日历。",12,ui.muted,false));ui.gap(calendar,14);
         calendar.addView(ui.button("日历 · "+calendarName(),false,this::calendarChoice));ui.gap(calendar,10);
         calendar.addView(ui.button("已订阅 "+calendarSync.linkedEvents()+" 场",false,this::subscribedList));ui.gap(calendar,10);

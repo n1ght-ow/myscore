@@ -21,6 +21,7 @@
 - 截图：常规字号 6 张 `artifacts/review-team-1.1/`（EPL 深 / 浅、CS2、LOL、赛程打开详情、队标直达）；360dp / 1.3 字号 6 张 `artifacts/review-team-1.1-360dp-large/`；320dp / 2 倍字号 6 张 `artifacts/review-team-1.1-320dp-2x/`。首页队标布局另见 `artifacts/main-1.1-crest.png`。
 - 本地 APK：`artifacts/MyScore-1.1.apk`，1,285,980 字节；包名 `cn.myscore.app`，versionCode 17、versionName 1.1，minSdk 28 / targetSdk 35；SHA-256 `625b361cdfa45f31379bebbadb8cc1f979319be498a64ae2841d877b34d70982`；校验文件 `artifacts/SHA256SUMS-1.1.txt`。`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`，与 1.0 相同，可覆盖安装并保留数据。从模拟器拉回的 `artifacts/installed-1.1.apk` 哈希一致。
 - 发布：提交 `1c4c932` 已推送 `origin/main`；GitHub Release [`v1.1`](https://github.com/n1ght-ow/myscore/releases/tag/v1.1) 为 latest，非 draft / prerelease，标签指向该提交。上传的 `MyScore-1.1.apk` 大小 1,285,980 字节、GitHub 资产 digest `sha256:625b361cdfa45f31379bebbadb8cc1f979319be498a64ae2841d877b34d70982`，`SHA256SUMS-1.1.txt` digest 为 `sha256:128946c1e5cfb01cf23e4ceae52dc71349583deae461adfc4eae8fb77ae851c8`；经本地代理下载公开发布资产返回 HTTP 200，APK SHA-256 与本地交付包一致。应用内更新所需的版本号、资产名、大小和 digest 均由该 release 提供。
+- 应用内更新页在模拟器实际读取该 release：显示「当前版本 1.1」「当前已是最新版本」「已发布的最新版本 1.1」，截图 `artifacts/update-check-1.1.png`；证明更新器能解析并比较已发布版本，不只是本地安装包。
 
 ## 未验证边界
 

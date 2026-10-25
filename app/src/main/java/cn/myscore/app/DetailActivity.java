@@ -18,7 +18,8 @@ import java.util.concurrent.*;
 public final class DetailActivity extends Activity {
     private Ui ui;private Match match;private MatchDetail detail;private DetailRepository repository;
     private LinearLayout root,body;private ScrollView scroll;private TextView status;
-    private TextView headerTitle,headerState,headerStart,headerHome,headerAway,headerScore;
+    private TextView headerTitle,headerState,headerStart,headerHome,headerAway;
+    private Ui.ScoreText headerScore;
     private TextView[] tabLabels;private View[] tabRules;private String[] tabKeys,tabNames;
     private String tab="overview",error="";private boolean busy,active,chromeBuilt,fingerDown;private int selectedGame=-1,failures;
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -28,7 +29,7 @@ public final class DetailActivity extends Activity {
     private long lastScroll;private String teamFilter="all",categoryFilter="",sortColumn="";private boolean descending=true;private int metricsX,eventsLimit=50,playerLimit=16;
     private final Runnable update=()->{if(active&&!isDestroyed())render(true);};
     @Override public void onCreate(Bundle saved){
-        String theme=getSharedPreferences("settings",0).getString("theme","system");boolean dark=theme.equals("dark")||theme.equals("system")&&(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
+        boolean dark=Ui.isDark(this);
         setTheme(dark?R.style.AppThemeDark:R.style.AppTheme);super.onCreate(saved);ui=new Ui(this,dark);
         try{match=Match.fromJson(new JSONObject(getIntent().getStringExtra("match")));if(match.id.isBlank())throw new IllegalArgumentException();}catch(Exception e){finish();return;}
         if(saved!=null){tab=saved.getString("tab","overview");selectedGame=saved.getInt("game",-1);teamFilter=saved.getString("team","all");categoryFilter=saved.getString("category","");sortColumn=saved.getString("sort","");descending=saved.getBoolean("descending",true);metricsX=saved.getInt("metricsX");eventsLimit=saved.getInt("eventsLimit",50);playerLimit=saved.getInt("playerLimit",16);}if((match.group.equals("F1")||match.group.equals("LOL"))&&tab.equals("events"))tab="overview";repository=new DetailRepository(this);
@@ -47,7 +48,7 @@ public final class DetailActivity extends Activity {
             if(needsCache){MatchDetail cached=repository.cached(requested);if(cached!=null)handler.post(()->{if(isDestroyed())return;detail=cached;match=cached.match;if(active)render(true);});}
             MatchDetail next=null;String problem="";try{next=repository.fetch(requested,force);}catch(Exception e){problem=e.getMessage()==null?"网络连接失败":e.getMessage();}MatchDetail result=next;String failure=problem;handler.post(()->{busy=false;if(isDestroyed())return;error=failure;failures=failure.isEmpty()?0:failures+1;if(result!=null){detail=result;match=result.match;}if(active){render(true);if(!match.finalised()&&!match.cancelled()||!failure.isEmpty()){long interval=RefreshPolicy.detail(match);long elapsed=result==null?SystemClock.elapsedRealtime()-started:Math.max(0,System.currentTimeMillis()-result.fetched);handler.postDelayed(tick,RefreshPolicy.remaining(RefreshPolicy.retry(interval,failures),elapsed));}}});});
     }
-    private FrameLayout iconButton(String kind,String description,Runnable click){FrameLayout b=new FrameLayout(this);b.addView(new Ui.Icon(this,kind,ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));ui.clickable(b,ui.bg,24);b.setContentDescription(description);b.setFocusable(true);b.setOnClickListener(v->click.run());b.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));return b;}
+    private FrameLayout iconButton(String kind,String description,Runnable click){FrameLayout b=new FrameLayout(this);b.addView(new Ui.Icon(this,kind,ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));ui.clickable(b,ui.tonal,Ui.CONTROL_RADIUS);b.setContentDescription(description);b.setFocusable(true);b.setOnClickListener(v->click.run());b.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));return b;}
     private void render(boolean preserve){
         if(isFinishing()||isDestroyed())return;
         if(preserve&&(fingerDown||SystemClock.uptimeMillis()-lastScroll<200)){handler.removeCallbacks(update);handler.postDelayed(update,200);return;}
@@ -76,15 +77,15 @@ public final class DetailActivity extends Activity {
         chromeBuilt=true;
     }
     private void buildScoreHeader(){
-        LinearLayout card=ui.column();card.setBackground(ui.shape(ui.surface,16));card.setPadding(ui.dp(12),ui.dp(12),ui.dp(12),ui.dp(12));
+        LinearLayout card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(16),ui.dp(20),ui.dp(16),ui.dp(20));
         if(match.group.equals("F1")){
             headerTitle=ui.text(match.displayTitle(),18,ui.text,true);headerTitle.setGravity(Gravity.CENTER);headerTitle.setMaxLines(2);headerTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(headerTitle);ui.gap(card,8);
             headerState=ui.text(match.status+" · "+(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定"),12,ui.muted,false);headerState.setGravity(Gravity.CENTER);card.addView(headerState);
         }else{
             LinearLayout row=ui.row();row.setGravity(Gravity.CENTER);LinearLayout homeSide=team(match.home,match.homeLogo);row.addView(homeSide,new LinearLayout.LayoutParams(0,-2,1));
             LinearLayout center=ui.column();center.setGravity(Gravity.CENTER);
-            headerScore=ui.text(match.hasScore()?match.homeScore+"–"+match.awayScore:"VS",match.hasScore()?28:24,ui.text,true);headerScore.setGravity(Gravity.CENTER);center.addView(headerScore,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,5);
-            headerState=ui.text(match.status,12,ui.muted,true);headerState.setGravity(Gravity.CENTER);center.addView(headerState,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,4);
+            headerScore=ui.score(match.homeScore,match.awayScore,match.hasScore(),36);center.addView(headerScore,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,8);
+            headerState=ui.text(match.status,12,match.live()?ui.primary:ui.muted,true);headerState.setGravity(Gravity.CENTER);center.addView(headerState,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,6);
             headerStart=ui.text(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定",11,ui.muted,false);headerStart.setGravity(Gravity.CENTER);center.addView(headerStart,new LinearLayout.LayoutParams(-1,-2));
             row.addView(center,new LinearLayout.LayoutParams(0,-2,1.35f));
             LinearLayout awaySide=team(match.away,match.awayLogo);row.addView(awaySide,new LinearLayout.LayoutParams(0,-2,1));card.addView(row);
@@ -99,8 +100,8 @@ public final class DetailActivity extends Activity {
             if(headerTitle!=null){headerTitle.setText(match.displayTitle());headerState.setText(match.status+" · "+(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定"));}
         }else if(headerScore!=null){
             headerHome.setText(match.home);headerAway.setText(match.away);
-            boolean has=match.hasScore();headerScore.setText(has?match.homeScore+"–"+match.awayScore:"VS");headerScore.setTextSize(has?28:24);
-            headerState.setText(match.status);headerStart.setText(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定");
+            headerScore.setScore(match.homeScore,match.awayScore,match.hasScore());
+            headerState.setText(match.status);headerState.setTextColor(match.live()?ui.primary:ui.muted);headerStart.setText(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定");
         }
         updateTabs();updateStatus();
     }
@@ -123,20 +124,20 @@ public final class DetailActivity extends Activity {
         if(scroll!=null)scroll.post(()->scroll.scrollTo(0,preserve?y:0));
     }
     private String statusText(){if(detail==null)return busy?"正在读取详情…":"尚未获取详情";if(match.group.equals("LOL"))return detail.lolFetched>0?"小局 "+time(detail.lolFetched,"HH:mm:ss")+" 获取 · 赛程 "+time(match.updated,"HH:mm:ss")+" 发布":"赛程 "+time(detail.fetched,"HH:mm:ss")+" 获取 · 小局尚未提供";return (System.currentTimeMillis()-detail.fetched>120_000?"缓存 · ":"")+detail.source+" · "+time(detail.fetched,"HH:mm:ss")+" 获取";}
-    private LinearLayout team(String name,String logo){LinearLayout side=ui.column();side.setGravity(Gravity.CENTER);side.addView(Logos.view(ui,logo,name,32));ui.gap(side,6);TextView text=ui.text(name,12,ui.text,true);text.setGravity(Gravity.CENTER);text.setMaxLines(3);text.setEllipsize(android.text.TextUtils.TruncateAt.END);side.addView(text,new LinearLayout.LayoutParams(-1,-2));return side;}
+    private LinearLayout team(String name,String logo){LinearLayout side=ui.column();side.setGravity(Gravity.CENTER);side.addView(Logos.view(ui,logo,name,44));ui.gap(side,10);TextView text=ui.text(name,12,ui.text,true);text.setGravity(Gravity.CENTER);text.setMaxLines(3);text.setEllipsize(android.text.TextUtils.TruncateAt.END);side.addView(text,new LinearLayout.LayoutParams(-1,-2));return side;}
     private String lineupName(){return switch(match.group){case "足球"->"阵容";case "LOL"->"比赛";case "F1"->"车手";case "CS2"->"选手";default->"球员";};}
     private void buildTabs(){
         LinearLayout row=ui.row();boolean f1=match.group.equals("F1"),lol=match.group.equals("LOL");tabKeys=f1||lol?new String[]{"overview","lineup","stats"}:new String[]{"overview","lineup","stats","events"};tabNames=f1?new String[]{"总览","车手","成绩"}:lol?new String[]{"总览","比赛","统计"}:new String[]{"总览",lineupName(),"统计",match.group.equals("CS2")?"小局":"进程"};
         tabLabels=new TextView[tabKeys.length];tabRules=new View[tabKeys.length];
-        for(int i=0;i<tabKeys.length;i++){String key=tabKeys[i];LinearLayout item=ui.column();item.setGravity(Gravity.CENTER);ui.clickable(item,ui.bg,0);item.setFocusable(true);TextView label=ui.text(tabNames[i],14,tab.equals(key)?ui.text:ui.muted,tab.equals(key));label.setGravity(Gravity.CENTER);label.setMinHeight(ui.dp(48));item.addView(label,new LinearLayout.LayoutParams(-1,-2));View underline=new View(this);underline.setBackgroundColor(tab.equals(key)?ui.text:ui.bg);item.addView(underline,new LinearLayout.LayoutParams(ui.dp(28),ui.dp(2)));item.setOnClickListener(v->{tab=key;categoryFilter="";sortColumn="";metricsX=0;playerLimit=16;render(false);});row.addView(item,new LinearLayout.LayoutParams(0,-2,1));tabLabels[i]=label;tabRules[i]=underline;}
+        for(int i=0;i<tabKeys.length;i++){String key=tabKeys[i];LinearLayout item=ui.column();item.setGravity(Gravity.CENTER);ui.clickable(item,ui.bg,0);item.setFocusable(true);TextView label=ui.text(tabNames[i],14,tab.equals(key)?ui.primary:ui.muted,tab.equals(key));label.setGravity(Gravity.CENTER);label.setMinHeight(ui.dp(48));item.addView(label,new LinearLayout.LayoutParams(-1,-2));View underline=new View(this);underline.setBackground(ui.shape(tab.equals(key)?ui.primary:ui.bg,2));item.addView(underline,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(3)));item.setOnClickListener(v->{tab=key;categoryFilter="";sortColumn="";metricsX=0;playerLimit=16;render(false);});row.addView(item,new LinearLayout.LayoutParams(0,-2,1));tabLabels[i]=label;tabRules[i]=underline;}
         root.addView(row);updateTabs();
     }
     private void updateTabs(){
         if(tabLabels==null)return;
-        for(int i=0;i<tabLabels.length;i++){boolean on=tabKeys[i].equals(tab);tabLabels[i].setTextColor(on?ui.text:ui.muted);tabRules[i].setBackgroundColor(on?ui.text:ui.bg);tabLabels[i].setContentDescription(tabNames[i]+(on?"，已选中":""));}
+        for(int i=0;i<tabLabels.length;i++){boolean on=tabKeys[i].equals(tab);tabLabels[i].setTextColor(on?ui.primary:ui.muted);tabRules[i].setBackground(ui.shape(on?ui.primary:ui.bg,2));tabLabels[i].setSelected(on);View item=(View)tabLabels[i].getParent();item.setSelected(on);item.setContentDescription(tabNames[i]+(on?"，已选中":""));}
     }
-    private LinearLayout panel(){LinearLayout card=ui.column();card.setBackground(ui.shape(ui.surface,14));card.setPadding(ui.dp(14),ui.dp(12),ui.dp(14),ui.dp(12));return card;}
-    private void heading(String text){ui.gap(body,16);body.addView(ui.text(text,15,ui.text,true));ui.gap(body,10);}
+    private LinearLayout panel(){LinearLayout card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(16),ui.dp(14),ui.dp(16),ui.dp(14));return card;}
+    private void heading(String text){ui.gap(body,24);body.addView(ui.text(text,16,ui.text,true));ui.gap(body,12);}
     private void overview(){
         tables("overview");
         if(!detail.stats.isEmpty()){heading("数据速览");LinearLayout card=panel();teamNames(card);for(int i=0;i<Math.min(3,detail.stats.size());i++)stat(card,detail.stats.get(i));body.addView(card);ui.gap(body,10);body.addView(ui.button("全部技术统计",false,()->{tab="stats";render(false);}));}
@@ -154,7 +155,7 @@ public final class DetailActivity extends Activity {
         boolean has=tables("stats");if(!has&&detail.stats.isEmpty()){if(match.group.equals("CS2")){empty("选手数据按全场与地图分类", "在选手页比较 K/D/A、ADR、KAST 与来源 Rating。");body.addView(ui.button("查看选手数据",false,()->{tab="lineup";render(false);}));}else empty("本场统计尚未提供",missing());}
     }
     private void teamNames(LinearLayout card){LinearLayout names=ui.row();TextView home=ui.text(match.home,12,ui.text,true),away=ui.text(match.away,12,ui.text,true);away.setGravity(Gravity.END);names.addView(home,new LinearLayout.LayoutParams(0,-2,1));names.addView(away,new LinearLayout.LayoutParams(0,-2,1));card.addView(names);ui.gap(card,10);card.addView(ui.divider());}
-    private void stat(LinearLayout card,MatchDetail.Stat stat){LinearLayout row=ui.row();row.setPadding(0,ui.dp(13),0,ui.dp(9));TextView h=ui.text(stat.home(),15,ui.text,true),label=ui.text(stat.label(),12,ui.muted,false),a=ui.text(stat.away(),15,ui.text,true);label.setGravity(Gravity.CENTER);a.setGravity(Gravity.END);row.addView(h,new LinearLayout.LayoutParams(0,-2,1));row.addView(label,new LinearLayout.LayoutParams(0,-2,2));row.addView(a,new LinearLayout.LayoutParams(0,-2,1));card.addView(row);double home=numeric(stat.home()),away=numeric(stat.away());if(home>=0&&away>=0&&home+away>0){LinearLayout track=ui.row();View left=new View(this),right=new View(this);left.setBackground(ui.shape(ui.text,2));right.setBackground(ui.shape(ui.tonal,2));track.addView(left,new LinearLayout.LayoutParams(0,ui.dp(3),(float)home));track.addView(right,new LinearLayout.LayoutParams(0,ui.dp(3),(float)away));card.addView(track);}ui.gap(card,9);card.addView(ui.divider());}
+    private void stat(LinearLayout card,MatchDetail.Stat stat){LinearLayout row=ui.row();row.setPadding(0,ui.dp(13),0,ui.dp(10));TextView h=ui.text(stat.home(),16,ui.primary,true),label=ui.text(stat.label(),12,ui.muted,false),a=ui.text(stat.away(),16,ui.secondary,true);label.setGravity(Gravity.CENTER);a.setGravity(Gravity.END);row.addView(h,new LinearLayout.LayoutParams(0,-2,1));row.addView(label,new LinearLayout.LayoutParams(0,-2,2));row.addView(a,new LinearLayout.LayoutParams(0,-2,1));card.addView(row);double home=numeric(stat.home()),away=numeric(stat.away());if(home>=0&&away>=0&&home+away>0){LinearLayout track=ui.row();View left=new View(this),right=new View(this);left.setBackground(ui.shape(ui.primary,2));right.setBackground(ui.shape(ui.secondary,2));track.addView(left,new LinearLayout.LayoutParams(0,ui.dp(4),(float)home));LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,ui.dp(4),(float)away);rp.setMarginStart(ui.dp(4));track.addView(right,rp);card.addView(track);}ui.gap(card,12);card.addView(ui.divider());}
     private static double numeric(String value){try{return value.matches("[0-9]+(?:\\.[0-9]+)?%?")?Double.parseDouble(value.replace("%","")):-1;}catch(RuntimeException e){return -1;}}
     private boolean tables(String key){boolean found=false;for(MatchDetail.Table t:detail.tables)if(t.tab.equals(key)){heading(t.title);body.addView(new DetailTableView(ui).simple(t),new LinearLayout.LayoutParams(-1,-2));found=true;}return found;}
     private void roster(String key){new PlayerStatsView(ui,detail,body).show(key,new PlayerStatsView.Selection(teamFilter,categoryFilter,sortColumn,descending),selection->{if(!categoryFilter.isBlank()&&!selection.category().equals(categoryFilter))metricsX=0;if(!selection.team().equals(teamFilter)||!selection.category().equals(categoryFilter))playerLimit=16;teamFilter=selection.team();categoryFilter=selection.category();sortColumn=selection.sort();descending=selection.descending();render(false);},metricsX,value->{metricsX=value;lastScroll=SystemClock.uptimeMillis();},playerLimit,()->{playerLimit=Math.min(400,playerLimit+24);render(true);});}

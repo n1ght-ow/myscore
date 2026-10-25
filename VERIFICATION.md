@@ -1,3 +1,33 @@
+# MyScore 0.10.0 深色重设计验证
+
+日期：2026-10-25，北京时间。本节只证明当前发布包的单元测试、静态检查、构建、元信息及签名，不继承旧版的设备运行验收。
+
+## 发布包与改动
+
+- APK：`artifacts/MyScore-0.10.0.apk`，889,484 字节；SHA-256：`d959b9d03cdd96b51bc9d38c65b4c57c6bc5f755764b405a83f99160e07f02f7`。
+- 包名 `cn.myscore.app`，versionCode 13、versionName 0.10.0；minSdk 28、targetSdk 35。沿用个人 debug 签名，apksigner 验证通过；证书 SHA-256 与本地 0.9.1 包相同：`e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 深蓝黑底、冷白文字、冰蓝主操作与淡紫双方对比统一首页、详情、统计表、设置、更新页和底部弹层；新安装默认深色，保留已有外观设置和配套浅色主题。
+- 比赛卡显示数据来源与更新时间；继续使用已有回收列表、缓存与原地更新机制。所有赛事 / 球队 / 小局筛选复用共享 chip。
+- 主详情和 LOL 小局共用 `Ui.ScoreText`；按当前字体的 22sp 下限测量，完整横排放不下时改为上下比分，保留无障碍比分描述，避免静默裁切。相同比分不重复修改文本。
+- 底部弹层统一整体滚动，最大为屏高的 75%；月份日期栏调整左右留白以适配 360dp 宽度，日期格高 48dp。
+- `DESIGN.md` 与 `PRODUCT.md` 已记录新视觉语言；没有新增生产依赖。
+
+## 本版本已执行
+
+- JDK 17、Gradle 8.14、AGP 8.11.1 离线构建：`:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest` 全部通过；日志 `artifacts/build-0.10.0.log`。
+- 75 项 JUnit 测试，0 failures/errors；Android Lint 0 errors、20 warnings，未隐藏警告。
+- `aapt dump badging` 核对包名、版本及 SDK；`apksigner verify --verbose --print-certs` 验证发布包签名，并与 0.9.1 证书对比。
+- 正文、辅助文字、选中态与主按钮的关键配色组合计算对比度均高于 4.5:1；这不等同于实际小字号视觉验收。
+- 独立静态复核发现并修复窄屏比分适配缺口，后续源码复核确认修复；`git diff --check` 通过。
+
+## 未验证边界
+
+- 当前会话未加载 Mobile Dev 设备工具，**本版本没有模拟器 / 真机安装运行、截图、字体缩放、TalkBack 或交互验收**。Android 测试 APK 只完成编译，没有运行。不得将下方旧版本的 327 项检查、录屏、截图或性能数字转用于本包。
+- 320/360dp 窗口、1.3 倍系统字号、长队名、三位数比分、两行比分切换与 sheet 手势区仍需本版本设备确认。小于 336dp 窗口不能保证七列日历每格宽达到 48dp。
+- Redmi K80 Pro、HyperOS 日历 / 后台提醒、真实运营商网络、刷新率与帧率仍待真机验收。
+
+---
+
 # MyScore 0.9.1 切换赛事项目闪烁修复验证
 
 日期：2026-10-25，北京时间。发布版本为 0.9.1；README 与 GitHub Release 使用同一已验证 APK，0.9.0 或以上版本可通过应用内更新覆盖升级。

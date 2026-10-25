@@ -36,7 +36,6 @@ final class Sheet {
         Ui ui = ui(activity);
         Dialog dialog = base(activity, ui);
         LinearLayout content = content(activity, ui, dialog, title, message);
-        MaxScroll scroll = new MaxScroll(activity, maxHeight(activity));
         LinearLayout list = ui.column();
         for (int i = 0; i < items.size(); i++) {
             Item item = items.get(i);
@@ -45,11 +44,11 @@ final class Sheet {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setMinimumHeight(ui.dp(56));
             row.setPadding(ui.dp(14), ui.dp(10), ui.dp(10), ui.dp(10));
-            ui.clickable(row, on ? ui.tonal : ui.bg, 12);
+            ui.clickable(row, on ? ui.tonal : Color.TRANSPARENT, Ui.CONTROL_RADIUS);
             row.setFocusable(true);
             row.setContentDescription(item.title + (item.detail.isEmpty() ? "" : "，" + item.detail) + (on ? "，已选中" : ""));
             LinearLayout texts = ui.column();
-            texts.addView(ui.text(item.title, 15, ui.text, true));
+            texts.addView(ui.text(item.title, 15, on ? ui.primary : ui.text, true));
             if (!item.detail.isEmpty()) { ui.gap(texts, 3); texts.addView(ui.text(item.detail, 12, ui.muted, false)); }
             row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
             if (on) {
@@ -63,8 +62,7 @@ final class Sheet {
             list.addView(row);
             if (i < items.size() - 1) { View gap = new View(activity); gap.setMinimumHeight(ui.dp(2)); list.addView(gap); }
         }
-        scroll.addView(list);
-        content.addView(scroll, new LinearLayout.LayoutParams(-1, -2));
+        content.addView(list, new LinearLayout.LayoutParams(-1, -2));
         TextView cancel = ui.button("取消", false, dialog::dismiss);
         LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(-1, -2);
         cancelParams.topMargin = ui.dp(12);
@@ -76,17 +74,20 @@ final class Sheet {
         Ui ui=ui(activity);
         Dialog dialog=base(activity,ui);
         LinearLayout content=content(activity,ui,dialog,"选择日期","可查看任意一天的赛程与比分。");
+        // Keep seven 48dp date targets on compact phones without shrinking the type.
+        int side=Math.max(0,Math.min(ui.dp(24),(activity.getResources().getDisplayMetrics().widthPixels-ui.dp(336))/2));
+        content.setPadding(side,content.getPaddingTop(),side,content.getPaddingBottom());
         YearMonth[] month={YearMonth.from(selected)};
         LinearLayout nav=ui.row();
         FrameLayout prev=new FrameLayout(activity);
         prev.addView(new Ui.Icon(activity,"back",ui.primary),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
-        ui.clickable(prev,ui.tonal,24);prev.setFocusable(true);prev.setContentDescription("上一个月");
+        ui.clickable(prev,ui.tonal,Ui.CONTROL_RADIUS);prev.setFocusable(true);prev.setContentDescription("上一个月");
         nav.addView(prev,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         TextView title=ui.text("",16,ui.text,true);title.setGravity(Gravity.CENTER);
         nav.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         FrameLayout next=new FrameLayout(activity);
         next.addView(new Ui.Icon(activity,"chevron",ui.primary),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
-        ui.clickable(next,ui.tonal,24);next.setFocusable(true);next.setContentDescription("下一个月");
+        ui.clickable(next,ui.tonal,Ui.CONTROL_RADIUS);next.setFocusable(true);next.setContentDescription("下一个月");
         nav.addView(next,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         content.addView(nav);
         LinearLayout weekdays=ui.row();
@@ -106,15 +107,15 @@ final class Sheet {
                 LinearLayout line=ui.row();
                 for(int c=0;c<7;c++) {
                     int index=r*7+c;
-                    if(index<offset||index>=offset+days){line.addView(new View(activity),new LinearLayout.LayoutParams(0,ui.dp(42),1));continue;}
+                    if(index<offset||index>=offset+days){line.addView(new View(activity),new LinearLayout.LayoutParams(0,ui.dp(48),1));continue;}
                     LocalDate value=month[0].atDay(day++);
                     boolean picked=value.equals(selected),today=value.equals(Match.today(System.currentTimeMillis()));
                     TextView cell=ui.text(String.valueOf(value.getDayOfMonth()),14,picked?ui.onPrimary:today?ui.primary:ui.text,picked||today);
-                    cell.setGravity(Gravity.CENTER);cell.setMinHeight(ui.dp(42));ui.clickable(cell,picked?ui.primary:today?ui.tonal:Color.TRANSPARENT,21);
+                    cell.setGravity(Gravity.CENTER);cell.setMinHeight(ui.dp(48));ui.clickable(cell,picked?ui.primary:today?ui.tonal:Color.TRANSPARENT,Ui.CONTROL_RADIUS);cell.setSelected(picked);
                     cell.setFocusable(true);
                     cell.setContentDescription(value.getMonthValue()+"月"+value.getDayOfMonth()+"日"+(picked?"，已选中":today?"，今天":""));
                     cell.setOnClickListener(v->{dialog.dismiss();pick.onDate(value);});
-                    line.addView(cell,new LinearLayout.LayoutParams(0,ui.dp(42),1));
+                    line.addView(cell,new LinearLayout.LayoutParams(0,ui.dp(48),1));
                 }
                 grid.addView(line);
             }
@@ -143,9 +144,7 @@ final class Sheet {
     }
 
     private static Ui ui(Activity activity) {
-        String theme = activity.getSharedPreferences("settings", 0).getString("theme", "system");
-        boolean dark = "dark".equals(theme) || (!"light".equals(theme) && (activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES);
-        return new Ui(activity, dark);
+        return new Ui(activity, Ui.isDark(activity));
     }
     private static Dialog base(Activity activity, Ui ui) {
         Dialog dialog = new Dialog(activity);
@@ -156,7 +155,8 @@ final class Sheet {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.setGravity(Gravity.BOTTOM);
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setDimAmount(0.46f);
+            window.setDimAmount(0.64f);
+            window.setNavigationBarColor(ui.surface);
             window.setWindowAnimations(R.style.SheetAnimation);
         }
         return dialog;
@@ -165,10 +165,10 @@ final class Sheet {
         LinearLayout root = ui.column();
         GradientDrawable background = new GradientDrawable();
         background.setColor(ui.surface);
-        float r = ui.dp(22);
+        float r = ui.dp(Ui.SHEET_RADIUS);
         background.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
         root.setBackground(background);
-        root.setPadding(ui.dp(20), ui.dp(8), ui.dp(20), ui.dp(18));
+        root.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), ui.dp(24));
         View handle = new View(activity);
         handle.setBackground(ui.shape(ui.line, 2));
         handle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -177,7 +177,7 @@ final class Sheet {
         handleParams.topMargin = ui.dp(6);
         root.addView(handle, handleParams);
         if (title != null && !title.isEmpty()) {
-            TextView heading = ui.text(title, 20, ui.text, true);
+            TextView heading = ui.text(title, 22, ui.text, true);
             heading.setPadding(0, ui.dp(16), 0, 0);
             root.addView(heading);
         }
@@ -187,7 +187,6 @@ final class Sheet {
             body.setPadding(0, ui.dp(8), 0, ui.dp(10));
             root.addView(body);
         }
-        dialog.setContentView(root);
         return root;
     }
     private static LinearLayout actions(Activity activity, Ui ui, Dialog dialog, String primaryLabel, Action primary, String secondaryLabel) {
@@ -207,6 +206,10 @@ final class Sheet {
         return Math.max(activity.getResources().getDisplayMetrics().heightPixels - activity.getResources().getDisplayMetrics().heightPixels / 4, 1);
     }
     private static void show(Activity activity, Dialog dialog, LinearLayout content) {
+        MaxScroll scroll=new MaxScroll(activity,maxHeight(activity));
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setBackground(content.getBackground());scroll.setClipToOutline(true);content.setBackground(null);
+        scroll.addView(content);dialog.setContentView(scroll);
         try{dialog.show();}catch(RuntimeException e){android.util.Log.w("MyScore","Sheet skipped because the activity left");return;}
         Window window = dialog.getWindow();
         if (window != null) {

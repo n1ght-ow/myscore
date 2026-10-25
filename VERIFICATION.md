@@ -18,6 +18,10 @@
 - 包名 `cn.myscore.app`、versionName `1.2`、versionCode 18；`apksigner verify` 通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`，与现有 1.1 附件一致，可覆盖安装保留数据。
 - APK SHA-256 `68d949c196a399d1a53a0eab490aab09c6c1bfa3c034eab2b0a5be3c7e8b4253`。
 
+- 发布核验：功能提交 `80f95f9` 已推送 `origin/main`，`v1.2` 标签指向该提交；GitHub Release 为正式版，非 draft / prerelease，已设为 latest。APK 937,280 字节，远端资产 digest 与上述本地 SHA-256 一致；公开发布附件再次下载后哈希一致。
+- 应用内更新页在已安装 1.2 的模拟器读取正式 Release，实际显示「当前版本 1.2」「当前已是最新版本」「已发布的最新版本 1.2」。
+- 独立界面审查结论 `ship`：深浅主题的透明加号 / 勾选图标符合用户参考，无大按钮和重复说明；文档一致性检查确认未新增全局设计 token。
+
 ## 边界
 
 未连接 Redmi K80 Pro；HyperOS 真机、运营商网络、锁屏日历通知与后台调度仍待验收。字体/宽度布局检查不等同于在这些物理分辨率逐场运行 UI。Mobile Dev Android 安装、读取与截图可用，侧栏面板曾返回 macOS 平台检查错误。

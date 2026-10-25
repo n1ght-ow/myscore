@@ -52,7 +52,11 @@ public final class DomesticEsports {
     }
     public static boolean spirit(JSONObject first,JSONObject second){return first.optString("id").equals("csgo_tm_7020")||second.optString("id").equals("csgo_tm_7020");}
     public static Match fiveMatch(JSONObject match,long fetched,boolean confirmed) throws Exception {
-        JSONObject mc=obj(match,"mc_info");if(!spirit(obj(mc,"t1_info"),obj(mc,"t2_info")))throw new Exception("5EPlay 对阵与 Spirit 主队不匹配");
+        return fiveMatch(match,fetched,confirmed,true);
+    }
+    /** Team pages may open any team's match; the main CS2 list still requires Spirit. */
+    public static Match fiveMatch(JSONObject match,long fetched,boolean confirmed,boolean requireSpirit) throws Exception {
+        JSONObject mc=obj(match,"mc_info");if(requireSpirit&&!spirit(obj(mc,"t1_info"),obj(mc,"t2_info")))throw new Exception("5EPlay 对阵与 Spirit 主队不匹配");
         Match m=fiveBase(mc,obj(match,"tt_info"),fetched);JSONObject state=obj(match,confirmed?"global_state":"state");
         m.state=switch(state.optString("status")){case "0"->"scheduled";case "1"->"live";case "2"->"final";default->"unknown";};m.status=Rules.stateLabel(m.state);
         if(!m.scheduled()){m.homeScore=score(state,"t1_score");m.awayScore=score(state,"t2_score");}

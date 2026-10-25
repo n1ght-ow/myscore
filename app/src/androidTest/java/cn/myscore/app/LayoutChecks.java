@@ -25,9 +25,15 @@ final class LayoutChecks {
                 LinearLayout names=(LinearLayout)((ViewGroup)table).getChildAt(0);
                 ViewGroup metrics=(ViewGroup)((ViewGroup)((ViewGroup)table).getChildAt(2)).getChildAt(0);
                 for(int i=0;i<names.getChildCount();i++){require(names.getChildAt(i).getHeight()==metrics.getChildAt(i).getHeight(),"identity and statistics rows align");checks[0]++;}
-                ScoreAdapter adapter=new ScoreAdapter(ui,new ScoreAdapter.Host(){public void openMatch(Match m){}public void toggleSubscription(Match m){}public void retryScores(){}public void showSourceStatus(){}public boolean isSubscribed(String id){return false;}});
+                ScoreAdapter adapter=new ScoreAdapter(ui,new ScoreAdapter.Host(){public void openMatch(Match m){}public void openTeam(Match m,boolean home){}public void toggleSubscription(Match m){}public void retryScores(){}public void showSourceStatus(){}public boolean isSubscribed(String id){return false;}});
                 Match m=new Match();m.group="NBA";m.league="nba";m.home="这是非常长的球队名称 Los Angeles Basketball Association";m.away="另一支长名称球队 Minnesota Timberwolves";m.state="live";m.status="第 4 节 · 加时比赛进行中 · 来源计时 12:34";m.homeScore="123";m.awayScore="124";m.updated=System.currentTimeMillis();
                 adapter.updateRows(List.of(ScoreRow.match(m)));View row=adapter.getView(0,null,null);layout(row,ui.dp(width-32));inspect(row);checks[0]++;
+                Match teamMatch=new Match();teamMatch.group="NBA";teamMatch.league="nba";teamMatch.home="这是非常长的球队名称 Los Angeles Basketball Association";teamMatch.away="另一支长名称球队 Minnesota Timberwolves";teamMatch.homeId="13";teamMatch.awayId="9";teamMatch.state="live";teamMatch.status="第 4 节 · 12:34";teamMatch.homeScore="123";teamMatch.awayScore="124";teamMatch.updated=System.currentTimeMillis();
+                teamMatch.detail="Crypto.com Arena · 常规赛";
+                TeamScheduleAdapter teamAdapter=new TeamScheduleAdapter(ui,match->{});
+                Team home=new Team();home.league="nba";home.id="13";home.name=teamMatch.home;
+                teamAdapter.updateRows(List.of(TeamScheduleRow.match(teamMatch,home)));
+                View teamRow=teamAdapter.getView(0,null,null);layout(teamRow,ui.dp(width-32));inspect(teamRow);checks[0]++;
                 Ui.ScoreText score=ui.score("123","124",true,36);layout(score,ui.dp(100));inspect(score);checks[0]++;
             }
         });

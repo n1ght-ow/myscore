@@ -379,6 +379,11 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     }
     private void matchDetail(Match m) {startActivity(new Intent(this,DetailActivity.class).putExtra("match",m.json().toString()));}
     @Override public void openMatch(Match match) {matchDetail(match);}
+    @Override public void openTeam(Match match,boolean home) {
+        Team team=Team.of(match,home);
+        if(team==null){message("球队赛程暂不可用","来源尚未提供这支球队的标识，稍后刷新后再试。");return;}
+        startActivity(new Intent(this,TeamActivity.class).putExtra("team",team.json().toString()));
+    }
     @Override public void retryScores() {load(true);}
     @Override public void showSourceStatus() {sourceStatus();}
     @Override public boolean isSubscribed(String id) {return subscribed.contains(id);}

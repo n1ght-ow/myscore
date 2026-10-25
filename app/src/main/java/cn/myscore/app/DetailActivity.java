@@ -83,13 +83,13 @@ public final class DetailActivity extends Activity {
             headerTitle=ui.text(match.displayTitle(),18,ui.text,true);headerTitle.setGravity(Gravity.CENTER);card.addView(headerTitle);ui.gap(card,8);
             headerState=ui.text(match.status+" · "+(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定"),12,ui.muted,false);headerState.setGravity(Gravity.CENTER);card.addView(headerState);
         }else{
-            LinearLayout row=ui.row();row.setGravity(Gravity.CENTER);LinearLayout homeSide=team(match.home,match.homeLogo);row.addView(homeSide,new LinearLayout.LayoutParams(0,-2,1));
+            LinearLayout row=ui.row();row.setGravity(Gravity.CENTER);LinearLayout homeSide=team(true);row.addView(homeSide,new LinearLayout.LayoutParams(0,-2,1));
             LinearLayout center=ui.column();center.setGravity(Gravity.CENTER);
             headerScore=ui.score(match.homeScore,match.awayScore,match.hasScore(),36);center.addView(headerScore,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,8);
             headerState=ui.text(match.status,12,match.live()?ui.primary:ui.muted,true);headerState.setGravity(Gravity.CENTER);center.addView(headerState,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,6);
             headerStart=ui.text(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定",11,ui.muted,false);headerStart.setGravity(Gravity.CENTER);center.addView(headerStart,new LinearLayout.LayoutParams(-1,-2));
             row.addView(center,new LinearLayout.LayoutParams(0,-2,1.35f));
-            LinearLayout awaySide=team(match.away,match.awayLogo);row.addView(awaySide,new LinearLayout.LayoutParams(0,-2,1));card.addView(row);
+            LinearLayout awaySide=team(false);row.addView(awaySide,new LinearLayout.LayoutParams(0,-2,1));card.addView(row);
             headerHome=(TextView)homeSide.getChildAt(2);
             headerAway=(TextView)awaySide.getChildAt(2);
         }
@@ -125,7 +125,26 @@ public final class DetailActivity extends Activity {
         if(scroll!=null)scroll.post(()->scroll.scrollTo(0,preserve?y:0));
     }
     private String statusText(){if(detail==null)return busy?"正在读取详情…":"尚未获取详情";if(match.group.equals("LOL"))return detail.lolFetched>0?"小局 "+time(detail.lolFetched,"HH:mm:ss")+" 获取 · 赛程 "+time(match.updated,"HH:mm:ss")+" 发布":"赛程 "+time(detail.fetched,"HH:mm:ss")+" 获取 · 小局尚未提供";return (System.currentTimeMillis()-detail.fetched>120_000?"缓存 · ":"")+detail.source+" · "+time(detail.fetched,"HH:mm:ss")+" 获取";}
-    private LinearLayout team(String name,String logo){LinearLayout side=ui.column();side.setGravity(Gravity.CENTER);side.addView(Logos.view(ui,logo,name,44));ui.gap(side,10);TextView text=ui.text(name,12,ui.text,true);text.setGravity(Gravity.CENTER);side.addView(text,new LinearLayout.LayoutParams(-1,-2));return side;}
+    private LinearLayout team(boolean home){
+        String name=home?match.home:match.away,logo=home?match.homeLogo:match.awayLogo;
+        String id=home?match.homeId:match.awayId;
+        LinearLayout side=ui.column();side.setGravity(Gravity.CENTER);
+        FrameLayout slot=new FrameLayout(this);
+        slot.addView(Logos.view(ui,logo,name,44),new FrameLayout.LayoutParams(ui.dp(44),ui.dp(44),Gravity.CENTER));
+        ui.clickable(slot,android.graphics.Color.TRANSPARENT,28);
+        boolean available=id!=null&&!id.isBlank();
+        slot.setClickable(available);slot.setFocusable(available);
+        slot.setContentDescription(available?"查看 "+name+" 的赛程":null);
+        slot.setOnClickListener(available?v->openTeam(home):null);
+        side.addView(slot,new LinearLayout.LayoutParams(ui.dp(56),ui.dp(56)));ui.gap(side,4);
+        TextView text=ui.text(name,12,ui.text,true);text.setGravity(Gravity.CENTER);side.addView(text,new LinearLayout.LayoutParams(-1,-2));
+        return side;
+    }
+    private void openTeam(boolean home){
+        Team team=Team.of(match,home);
+        if(team==null){Sheet.message(this,"球队赛程暂不可用","来源尚未提供这支球队的完整标识。");return;}
+        startActivity(new Intent(this,TeamActivity.class).putExtra("team",team.json().toString()));
+    }
     private String lineupName(){return switch(match.group){case "足球"->"阵容";case "LOL"->"比赛";case "F1"->"车手";case "CS2"->"选手";default->"球员";};}
     private void buildTabs(){
         LinearLayout row=ui.row();boolean f1=match.group.equals("F1"),lol=match.group.equals("LOL");tabKeys=f1||lol?new String[]{"overview","lineup","stats"}:new String[]{"overview","lineup","stats","events"};tabNames=f1?new String[]{"总览","车手","成绩"}:lol?new String[]{"总览","比赛","统计"}:new String[]{"总览",lineupName(),"统计",match.group.equals("CS2")?"小局":"进程"};

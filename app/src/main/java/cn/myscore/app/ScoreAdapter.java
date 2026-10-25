@@ -18,6 +18,7 @@ import java.util.List;
 final class ScoreAdapter extends BaseAdapter {
     interface Host {
         void openMatch(Match match);
+        void openTeam(Match match,boolean home);
         void toggleSubscription(Match match);
         void retryScores();
         void showSourceStatus();
@@ -119,12 +120,25 @@ final class ScoreAdapter extends BaseAdapter {
         sub.setContentDescription(isSubscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
         sub.setOnClickListener(v->host.toggleSubscription(m));
     }
+    /** A 48dp crest target inside the card; an unknown team id leaves the tap to the card. */
+    private FrameLayout crestSlot(Logos.Crest crest) {
+        FrameLayout slot=new FrameLayout(ui.c);
+        slot.addView(crest.box,new FrameLayout.LayoutParams(ui.dp(28),ui.dp(28),Gravity.START|Gravity.CENTER_VERTICAL));
+        ui.clickable(slot,Color.TRANSPARENT,24);
+        return slot;
+    }
+    private void teamSlot(FrameLayout slot,String id,String name,boolean home,Match m) {
+        boolean available=id!=null&&!id.isBlank();
+        slot.setClickable(available);slot.setFocusable(available);
+        slot.setContentDescription(available?"查看 "+name+" 的赛程":null);
+        slot.setOnClickListener(available?v->host.openTeam(m,home):null);
+    }
 
     private final class MatchHolder {
         final LinearLayout root,card,metaRow;
         final TextView league,state,home,homeScore,away,awayScore,foot,stale;
         final Logos.Crest homeCrest,awayCrest;
-        final FrameLayout sub;
+        final FrameLayout homeSlot,awaySlot,sub;
         final Ui.Icon subIcon;
         Match match;
 
@@ -136,23 +150,25 @@ final class ScoreAdapter extends BaseAdapter {
             metaRow=ui.row();
             league=ui.text("",11,ui.muted,true);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
             state=ui.text("",11,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),ui.dp(5),ui.dp(8),ui.dp(5));LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(0,-2,1);stateParams.setMarginStart(ui.dp(8));metaRow.addView(state,stateParams);
-            card.addView(metaRow);ui.gap(card,12);
+            card.addView(metaRow);ui.gap(card,6);
 
             LinearLayout homeRow=ui.row();
-            homeCrest=Logos.crest(ui,28,false);homeRow.addView(homeCrest.box);
+            homeCrest=Logos.crest(ui,28,false);homeSlot=crestSlot(homeCrest);
+            homeRow.addView(homeSlot,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
             home=ui.text("",14,ui.text,true);
-            LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,-2,1);hp.setMarginStart(ui.dp(10));homeRow.addView(home,hp);
+            LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,-2,1);homeRow.addView(home,hp);
             homeScore=teamScore("—");
             LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.setMarginStart(ui.dp(12));homeRow.addView(homeScore,sp);
-            card.addView(homeRow);ui.gap(card,8);
+            card.addView(homeRow);ui.gap(card,0);
 
             LinearLayout awayRow=ui.row();
-            awayCrest=Logos.crest(ui,28,false);awayRow.addView(awayCrest.box);
+            awayCrest=Logos.crest(ui,28,false);awaySlot=crestSlot(awayCrest);
+            awayRow.addView(awaySlot,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
             away=ui.text("",14,ui.text,true);
-            LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-2,1);ap.setMarginStart(ui.dp(10));awayRow.addView(away,ap);
+            LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-2,1);awayRow.addView(away,ap);
             awayScore=teamScore("—");
             LinearLayout.LayoutParams asp=new LinearLayout.LayoutParams(-2,-2);asp.setMarginStart(ui.dp(12));awayRow.addView(awayScore,asp);
-            card.addView(awayRow);ui.gap(card,12);card.addView(ui.divider());ui.gap(card,4);
+            card.addView(awayRow);ui.gap(card,8);card.addView(ui.divider());ui.gap(card,4);
 
             LinearLayout footRow=ui.row();
             foot=ui.text("",11,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
@@ -182,6 +198,8 @@ final class ScoreAdapter extends BaseAdapter {
             stale.setVisibility(staleNow?View.VISIBLE:View.GONE);
             Logos.bind(homeCrest,m.homeLogo,m.home);
             Logos.bind(awayCrest,m.awayLogo,m.away);
+            teamSlot(homeSlot,m.homeId,m.home,true,m);
+            teamSlot(awaySlot,m.awayId,m.away,false,m);
             subscription(subIcon,m,sub);
         }
     }

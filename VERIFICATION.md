@@ -1,3 +1,36 @@
+# MyScore 1.1 球队赛程
+
+日期：2026-10-25，北京时间。版本 `1.1`（versionCode 17），发布标签 `v1.1`，APK 文件名 `MyScore-1.1.apk`。
+
+## 新功能
+
+- 比赛卡与详情比分条上的队标成为球队赛程入口（分别 48dp / 56dp 触摸目标）；来源缺少球队 ID 时不跳转，点击仍由比赛卡打开详情，不按队名猜测。
+- 新增 `TeamActivity`：真实队标、队名和赛事；来源 / 场次 / 获取时间；「全部 / 接下来 / 已结束」筛选；每场显示北京时间日期、开赛时间、对手、场地或赛事阶段、本队在前比分和胜 / 平 / 负。列表使用回收行，结构不变时只重绑可见卡片；有进行中比赛时前台每 30 秒更新，否则不轮询。
+- 数据来源：ESPN 球队 schedule（足球合并默认已结束结果与 `fixture=true` 剩余赛程；NBA / NFL 单次返回整季）；5EPlay `team/matches_v1`（按战队 ID，最近 30 场与接下来已发布比赛）；LOL Worlds 官网列表按战队 ID 筛选。F1 没有球队赛程入口。
+- 新增 30 分钟磁盘缓存 `teams-v1`；失败时保留上次成功赛程，并在页面显示失败原因和原获取时间。空赛程与连接失败分开；缺失比分保持未知。CS2 / LOL 不标主客场，比分按本队在前。
+- 新增 6 个生产类（`Team`、`TeamSchedule`、`TeamRepository`、`TeamActivity`、`TeamScheduleRow`、`TeamScheduleAdapter`），无新增生产依赖；`DomesticEsports.fiveMatch` 增加可关闭 Spirit 限定的重载，主列表及既有详情行为不变。
+
+## 已执行验证
+
+- `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest` 全部通过，日志 `artifacts/build-1.1.log`；106 项 JUnit（新增 13 项 `TeamScheduleTest`），0 failures / errors；Lint 0 errors、25 warnings（新增 3 条为 `TeamActivity` 的 `SetTextI18n`，与既有 `UpdateActivity` 同类）。
+- 开发机经本地代理探测真实接口：ESPN 球队 schedule 对 EPL、欧冠、Carabao Cup、FA Cup、NBA、NFL 返回本赛季赛程；5EPlay 战队赛程对 Spirit（`csgo_tm_7020`）与对手（如 `csgo_tm_4494`、`hltv_team_12394`）返回；Worlds 列表可按战队 ID 筛选。响应抽样在 `artifacts/probe-team-*.json`，不进入仓库。
+- `:app:verifyLiveSources` 九类来源全部成功：英超 5、欧冠 0、Carabao Cup 0、FA Cup 0、NBA 7、NFL 12、F1 5、CS2 Spirit 31、Worlds 90；Java 代理参数显式传入，日志 `artifacts/live-1.1.log`，报告 `artifacts/live-source-report.json`。
+- API 35 / Android 15 x86_64 模拟器（1080×2400、420dpi、1.0 字号）完整 533 项运行检查通过，启用 `network=true details=true lol=true`；日志 `artifacts/android-tests-1.1.txt`、`artifacts/android-tests-1.1-runtime.log`，无 FATAL / ANR。其中球队赛程 56 项检查覆盖真实 EPL 38 场（8 已结束 + 30 接下来）、Spirit 30 场、对手战队赛程、Worlds 筛出 10 场，包含筛选、48dp 队标触控、从赛程打开详情并返回。
+- 同一 APK 在实际 945×2100（360dp）/ 1.3 倍字号下再次通过 533 项；在实际 840×1866（320dp）/ 2 倍字号下通过 279 项基础检查（启用 `network=true`，不重复运行九类详情）；日志 `artifacts/android-tests-1.1-360dp-large.txt`、`artifacts/android-tests-1.1-320dp-2x.txt`。
+- 主列表队标点击由 `TeamChecks.crestShortcut` 实际执行：在真实比分页找到带「查看 X 的赛程」描述的可点击队标，点击后由 ActivityMonitor 确认进入 `TeamActivity`；详情页队标同样确认。测试结束后已恢复默认主题、分辨率和字号。
+- 截图：常规字号 6 张 `artifacts/review-team-1.1/`（EPL 深 / 浅、CS2、LOL、赛程打开详情、队标直达）；360dp / 1.3 字号 6 张 `artifacts/review-team-1.1-360dp-large/`；320dp / 2 倍字号 6 张 `artifacts/review-team-1.1-320dp-2x/`。首页队标布局另见 `artifacts/main-1.1-crest.png`。
+- 本地 APK：`artifacts/MyScore-1.1.apk`，1,285,980 字节；包名 `cn.myscore.app`，versionCode 17、versionName 1.1，minSdk 28 / targetSdk 35；SHA-256 `625b361cdfa45f31379bebbadb8cc1f979319be498a64ae2841d877b34d70982`；校验文件 `artifacts/SHA256SUMS-1.1.txt`。`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`，与 1.0 相同，可覆盖安装并保留数据。从模拟器拉回的 `artifacts/installed-1.1.apk` 哈希一致。
+
+## 未验证边界
+
+- 未连接 Redmi K80 Pro；HyperOS、真实移动网络、120Hz、锁屏日历通知仍待真机验收。所有来源证据来自开发机代理网络和模拟器，不代表运营商网络。
+- 球队赛程的运行检查覆盖 EPL、CS2、LOL；NBA、NFL、欧冠、Carabao Cup、FA Cup 的球队 schedule 只完成接口探测，没有逐项运行 UI；它们共用同一 ESPN 解析与页面组件。
+- 5EPlay 对短时间高频请求返回过「未匹配到归一化的team」；测试中对 CS2 请求做了两次退避重试，产品错误文案为「暂未返回该队赛程，请稍后刷新重试」，不把限流当作空赛程。
+- 从对手赛程进入 5EPlay 比赛详情时关闭了 Spirit 限定，并按比赛 id 校验身份；本版本没有新增对手详情的逐项运行检查。
+- 320dp / 2 倍字号只运行基础套件，未在该字号重复完整详情与双主题交互。
+
+---
+
 # MyScore 1.0 发布核验
 
 日期：2026-10-25，北京时间。发布标签 `v1.0`，APK 文件名 `MyScore-1.0.apk`。

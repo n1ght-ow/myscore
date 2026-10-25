@@ -65,6 +65,24 @@ final class TeamChecks {
         waitForResult(dark,30_000);
         checkText(dark,"球队赛程");
         checkText(dark,"Arsenal");
+        View subscribe=findDescriptionStart(dark.getWindow().getDecorView(),"订阅对阵");
+        check(subscribe!=null,"upcoming team fixtures expose a subscription action");
+        check(subscribe.getWidth()>=new Ui(context,true).dp(48)-1&&subscribe.getHeight()>=new Ui(context,true).dp(48)-1,"icon-only subscription retains a 48dp touch target");
+        check(find(dark.getWindow().getDecorView(),"订阅")==null,"team schedule has no visible subscribe label");
+        check(find(dark.getWindow().getDecorView(),"提前 5 分钟提醒")==null,"team schedule omits repeated reminder copy");
+        int before=new CalendarSync(context).linkedEvents();
+        test.runOnMainSync(subscribe::performClick);
+        long subscribeUntil=android.os.SystemClock.uptimeMillis()+10_000;
+        while(new CalendarSync(context).linkedEvents()==before&&android.os.SystemClock.uptimeMillis()<subscribeUntil){Thread.sleep(80);test.waitForIdleSync();}
+        check(new CalendarSync(context).linkedEvents()==before+1,"team schedule action creates a calendar subscription");
+        test.waitForIdleSync();Thread.sleep(2400);test.waitForIdleSync();
+        View cancel=findDescriptionStart(dark.getWindow().getDecorView(),"取消订阅对阵");
+        check(cancel!=null,"team schedule reflects the subscribed state");
+        capture(dark,"team-subscribed-dark");
+        test.runOnMainSync(cancel::performClick);test.waitForIdleSync();
+        test.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);test.waitForIdleSync();
+        check(new CalendarSync(context).linkedEvents()==before+1,"dismissing cancellation preserves the subscription");
+
         checkContains(dark,"ESPN · 球队赛程 · 共");
         check(findTeamCard(dark.getWindow().getDecorView())!=null,"schedule list renders source match cards");
         View finishedChip=findClickableStart(dark.getWindow().getDecorView(),"已结束");

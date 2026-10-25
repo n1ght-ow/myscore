@@ -1,3 +1,29 @@
+# MyScore 1.2 球队赛程订阅
+
+日期：2026-10-25，北京时间。版本 `1.2`（versionCode 18），发布标签 `v1.2`，附件 `MyScore-1.2.apk` 与 `SHA256SUMS-1.2.txt`。
+
+## 本次变更
+
+- 球队页默认显示「接下来」，顶部球队信息直接放在页面背景上。
+- 球队赛程卡右下角复用比分页的透明日历图标：22dp 图形、48dp 点击区域，订阅显示勾选，不加按钮底色、订阅文字或逐卡重复的提醒说明。卡底展示北京时间和来源。
+- 接入现有单场日历订阅，后台线程枚举与写入日历；首次请求日历权限，小米账户/本机优先；同一比赛记录与首页及设置共用。时间未确认、延期、已开始的比赛不提供新订阅；已订阅比赛仍可取消。
+- 沿用提前 5 分钟系统日历提醒、取消确认、失败提示和既有后台改期检查，无新增生产依赖。
+
+## 已执行验证
+
+- `testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` 通过；106 项 JUnit，0 failures / errors。
+- Android 15 / API 35 模拟器 `emulator-5554`，1080×2400：完整 553 项运行检查通过（`network=true details=true lol=true`），覆盖真实来源、LoL、各项目详情、球队赛程、实际订阅写入、勾选状态和关闭取消确认框后保留订阅。
+- 订阅操作额外断言 48dp 点击区、无可见「订阅」标签、无逐卡「提前 5 分钟提醒」说明。布局检查覆盖 320/360dp、1/1.3/2 倍字号、深浅主题及未来比赛卡。
+- 新版原生截图：`artifacts/review-team-1.2/phone-dark.png`、`phone-light.png`；深色包含勾选与加号两种状态，浅色同步检查。
+- 包名 `cn.myscore.app`、versionName `1.2`、versionCode 18；`apksigner verify` 通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`，与现有 1.1 附件一致，可覆盖安装保留数据。
+- APK SHA-256 `68d949c196a399d1a53a0eab490aab09c6c1bfa3c034eab2b0a5be3c7e8b4253`。
+
+## 边界
+
+未连接 Redmi K80 Pro；HyperOS 真机、运营商网络、锁屏日历通知与后台调度仍待验收。字体/宽度布局检查不等同于在这些物理分辨率逐场运行 UI。Mobile Dev Android 安装、读取与截图可用，侧栏面板曾返回 macOS 平台检查错误。
+
+---
+
 # MyScore 1.1 球队赛程
 
 日期：2026-10-25，北京时间。版本 `1.1`（versionCode 17），发布标签 `v1.1`，APK 文件名 `MyScore-1.1.apk`。

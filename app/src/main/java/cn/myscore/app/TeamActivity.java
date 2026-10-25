@@ -40,7 +40,11 @@ public final class TeamActivity extends Activity {
     private TextView status,error;
     private HorizontalScrollView filterScroll;
     private LinearLayout filters;
-    private String filter="all";
+    private String filter="upcoming";
+    private CalendarSync calendarSync;
+    private Match pendingSubscription;
+    private boolean calendarBusy;
+    private final ExecutorService calendarWorker=Executors.newSingleThreadExecutor();
     private Logos.Crest headerCrest;
     private String headerLogo="";
     private TeamRepository.Result result;
@@ -60,7 +64,7 @@ public final class TeamActivity extends Activity {
         }
         if(team==null||!team.usable()){finish();return;}
         if(saved!=null){pendingPosition=saved.getInt("position",-1);filter=saved.getString("filter","all");}
-        repository=new TeamRepository(this);
+        repository=new TeamRepository(this);calendarSync=new CalendarSync(this);
         getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.bg);
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(ui.bg));
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
@@ -74,9 +78,9 @@ public final class TeamActivity extends Activity {
         build();
         load(false);
     }
-    @Override public void onResume(){super.onResume();active=true;if(result==null)load(false);else if(System.currentTimeMillis()-result.fetched>5*60_000)load(false);else schedule();}
+    @Override public void onResume(){super.onResume();active=true;if(result==null)load(false);else if(System.currentTimeMillis()-result.fetched>5*60_000)load(false);else {render();schedule();}}
     @Override public void onPause(){active=false;handler.removeCallbacks(tick);super.onPause();}
-    @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdownNow();super.onDestroy();}
+    @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdownNow();calendarWorker.shutdown();super.onDestroy();}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putInt("position",list==null?pendingPosition:list.getFirstVisiblePosition());state.putString("filter",filter);}
 
@@ -89,8 +93,8 @@ public final class TeamActivity extends Activity {
         appbar.addView(iconButton("refresh","刷新球队赛程",()->load(true)));
         root.addView(appbar);
 
-        LinearLayout card=ui.row();card.setBackground(ui.panel());
-        card.setPadding(ui.dp(16),ui.dp(16),ui.dp(16),ui.dp(16));
+        LinearLayout card=ui.row();card.setBackgroundColor(ui.bg);
+        card.setPadding(ui.dp(4),ui.dp(10),ui.dp(4),ui.dp(10));
         FrameLayout crest=new FrameLayout(this);
         headerCrest=Logos.crest(ui,56,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
         crest.addView(headerCrest.box,new FrameLayout.LayoutParams(ui.dp(56),ui.dp(56),Gravity.CENTER));
@@ -99,7 +103,7 @@ public final class TeamActivity extends Activity {
         TextView name=ui.text(team.name,22,ui.text,true);name.setLetterSpacing(-0.02f);names.addView(name);
         ui.gap(names,6);
         String competition=team.league.equals("cs2")?"CS2":team.competitionName();
-        names.addView(ui.text(competition+" · 球队赛程",12,ui.muted,false));
+        names.addView(ui.text(competition+" · 北京时间",12,ui.muted,false));
         LinearLayout.LayoutParams namesParams=new LinearLayout.LayoutParams(0,-2,1);
         namesParams.setMarginStart(ui.dp(14));card.addView(names,namesParams);
         LinearLayout.LayoutParams cardParams=new LinearLayout.LayoutParams(-1,-2);
@@ -122,7 +126,12 @@ public final class TeamActivity extends Activity {
         list.setPadding(ui.dp(16),ui.dp(6),ui.dp(16),ui.dp(24));
         list.setSelector(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
         list.setCacheColorHint(android.graphics.Color.TRANSPARENT);
-        adapter=new TeamScheduleAdapter(ui,match->startActivity(new Intent(this,DetailActivity.class).putExtra("match",match.json().toString())));
+        adapter=new TeamScheduleAdapter(ui,new TeamScheduleAdapter.Host() {
+            public void openMatch(Match match){startActivity(new Intent(TeamActivity.this,DetailActivity.class).putExtra("match",match.json().toString()));}
+            public boolean isSubscribed(String id){return calendarSync.isSubscribed(id);}
+            public boolean isBusy(){return calendarBusy;}
+            public void toggleSubscription(Match match){toggleCalendar(match);}
+        });
         adapter.attach(list);list.setAdapter(adapter);
         root.addView(list,new LinearLayout.LayoutParams(-1,0,1));
     }
@@ -134,6 +143,52 @@ public final class TeamActivity extends Activity {
         button.setOnClickListener(v->click.run());
         button.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         return button;
+    }
+
+    private void toggleCalendar(Match match) {
+        if(calendarBusy)return;
+        boolean remove=calendarSync.isSubscribed(match.id);
+        if(!remove&&!(match.scheduled()&&match.timeConfirmed&&match.start>System.currentTimeMillis())) {
+            Sheet.message(this,"暂时不能订阅","这场比赛的开赛时间未确定、已开始或已结束。");return;
+        }
+        if(!CalendarSync.permitted(this)) {
+            pendingSubscription=match;
+            requestPermissions(new String[]{android.Manifest.permission.READ_CALENDAR,android.Manifest.permission.WRITE_CALENDAR},42);return;
+        }
+        if(remove)Sheet.confirm(this,"取消订阅","从手机日历中移除「"+match.displayTitle()+"」及其提醒？","取消订阅",()->writeCalendar(match,true));
+        else writeCalendar(match,false);
+    }
+    private void writeCalendar(Match match,boolean remove) {
+        if(calendarBusy)return;
+        calendarBusy=true;render();
+        calendarWorker.submit(()-> {
+            CalendarSync.Result outcome;
+            try {
+                if(remove)outcome=calendarSync.unsubscribe(match.id);
+                else {
+                    if(!calendarSync.hasCalendar(calendarSync.calendarId())) {
+                        CalendarSync.CalendarChoice best=calendarSync.bestCalendar();
+                        if(best==null)throw new IllegalStateException("请先在系统日历中启用一个本地或小米日历。");
+                        calendarSync.chooseCalendar(best.id,best.name);
+                    }
+                    outcome=calendarSync.subscribe(match,System.currentTimeMillis());
+                }
+            } catch(RuntimeException e) {outcome=new CalendarSync.Result();outcome.failed=1;outcome.error=e.getMessage()==null?"日历写入失败":e.getMessage();}
+            CalendarSync.Result completed=outcome;
+            handler.post(()-> {
+                calendarBusy=false;if(isDestroyed())return;
+                render();CalendarJob.schedule(this);
+                if(completed.failed>0)Sheet.message(this,remove?"未能取消订阅":"未能加入日历",completed.error);
+                else android.widget.Toast.makeText(this,remove?"已取消订阅":"已加入日历 · 提前 5 分钟提醒",android.widget.Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
+    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results) {
+        super.onRequestPermissionsResult(code,permissions,results);
+        if(code!=42)return;
+        Match match=pendingSubscription;pendingSubscription=null;
+        if(CalendarSync.permitted(this)){if(match!=null)toggleCalendar(match);}
+        else Sheet.message(this,"未开启日历权限","需要订阅时，请在系统应用权限中允许日历读写。");
     }
 
     private void load(boolean force) {

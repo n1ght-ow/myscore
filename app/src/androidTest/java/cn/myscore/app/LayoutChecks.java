@@ -30,10 +30,13 @@ final class LayoutChecks {
                 adapter.updateRows(List.of(ScoreRow.match(m)));View row=adapter.getView(0,null,null);layout(row,ui.dp(width-32));inspect(row);checks[0]++;
                 Match teamMatch=new Match();teamMatch.group="NBA";teamMatch.league="nba";teamMatch.home="这是非常长的球队名称 Los Angeles Basketball Association";teamMatch.away="另一支长名称球队 Minnesota Timberwolves";teamMatch.homeId="13";teamMatch.awayId="9";teamMatch.state="live";teamMatch.status="第 4 节 · 12:34";teamMatch.homeScore="123";teamMatch.awayScore="124";teamMatch.updated=System.currentTimeMillis();
                 teamMatch.detail="Crypto.com Arena · 常规赛";
-                TeamScheduleAdapter teamAdapter=new TeamScheduleAdapter(ui,match->{});
+                TeamScheduleAdapter teamAdapter=new TeamScheduleAdapter(ui,new TeamScheduleAdapter.Host(){public void openMatch(Match m){}public void toggleSubscription(Match m){}public boolean isSubscribed(String id){return false;}public boolean isBusy(){return false;}});
                 Team home=new Team();home.league="nba";home.id="13";home.name=teamMatch.home;
                 teamAdapter.updateRows(List.of(TeamScheduleRow.match(teamMatch,home)));
                 View teamRow=teamAdapter.getView(0,null,null);layout(teamRow,ui.dp(width-32));inspect(teamRow);checks[0]++;
+                teamMatch.state="scheduled";teamMatch.timeConfirmed=true;teamMatch.start=System.currentTimeMillis()+86400000L;
+                teamAdapter.updateRows(List.of(TeamScheduleRow.match(teamMatch,home)));
+                teamRow=teamAdapter.getView(0,teamRow,null);layout(teamRow,ui.dp(width-32));inspect(teamRow);checks[0]++;
                 Ui.ScoreText score=ui.score("123","124",true,36);layout(score,ui.dp(100));inspect(score);checks[0]++;
             }
         });
@@ -41,6 +44,7 @@ final class LayoutChecks {
     }
     private static void layout(View view,int width){view.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));view.layout(0,0,width,view.getMeasuredHeight());}
     private static void inspect(View view){
+        if(view.getVisibility()==View.GONE)return;
         if(view instanceof TextView){TextView text=(TextView)view;if(text.getVisibility()!=View.VISIBLE||text.getText().length()==0)return;android.text.Layout layout=text.getLayout();require(layout!=null,"text has a layout");require(layout.getHeight()<=text.getHeight()-text.getCompoundPaddingTop()-text.getCompoundPaddingBottom(),"text height fits: "+text.getText());require(layout.getLineEnd(layout.getLineCount()-1)==text.length(),"all text lines are displayed: "+text.getText());for(int i=0;i<layout.getLineCount();i++){require(layout.getEllipsisCount(i)==0,"text is not ellipsized");require(layout.getLineMax(i)<=layout.getWidth()+1,"visible text width fits: "+text.getText());}}
         if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++)inspect(group.getChildAt(i));}
     }

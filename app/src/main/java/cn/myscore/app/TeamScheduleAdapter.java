@@ -4,6 +4,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.FrameLayout;
+import android.graphics.Color;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -12,7 +14,7 @@ import java.util.List;
 
 /** Recycles schedule rows; a refresh only rewrites visible text until the section shape changes. */
 final class TeamScheduleAdapter extends BaseAdapter {
-    interface Host { void openMatch(Match match); }
+    interface Host { void openMatch(Match match); void toggleSubscription(Match match); boolean isSubscribed(String id); boolean isBusy(); }
     private final Ui ui;
     private final Host host;
     private final List<TeamScheduleRow> rows=new ArrayList<>();
@@ -86,7 +88,10 @@ final class TeamScheduleAdapter extends BaseAdapter {
 
     private final class MatchHolder {
         final LinearLayout root,card;
-        final TextView date,state,opponent,detail,score,result;
+        final TextView date,state,opponent,detail,score,result,foot;
+        final LinearLayout footer;
+        final FrameLayout action;
+        final Ui.Icon calendar;
         final Logos.Crest crest;
         TeamScheduleRow row;
 
@@ -114,12 +119,24 @@ final class TeamScheduleAdapter extends BaseAdapter {
             LinearLayout.LayoutParams numbersParams=new LinearLayout.LayoutParams(-2,-2);
             numbersParams.setMarginStart(ui.dp(10));main.addView(numbers,numbersParams);
             card.addView(main);
+            ui.gap(card,12);
+            footer=ui.column();footer.addView(ui.divider());
+            LinearLayout controls=ui.row();
+            foot=ui.text("",11,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);
+            controls.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
+            action=new FrameLayout(ui.c);
+            calendar=new Ui.Icon(ui.c,"calendar-add",ui.primary);
+            action.addView(calendar,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
+            action.setFocusable(true);ui.clickable(action,Color.TRANSPARENT,24);
+            action.setOnClickListener(v->{if(row!=null)host.toggleSubscription(row.match);});
+            LinearLayout.LayoutParams actionParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));
+            actionParams.setMarginStart(ui.dp(8));controls.addView(action,actionParams);footer.addView(controls);card.addView(footer);
             root.addView(card,new LinearLayout.LayoutParams(-1,-2));
         }
 
         void bind(TeamScheduleRow value) {
             row=value;
-            text(date,value.date+" · "+value.time);
+            text(date,value.date);
             text(state,value.state);
             state.setTextColor(value.match.live()?ui.primary:value.match.cancelled()||value.match.state.equals("delayed")?ui.error:ui.muted);
             text(opponent,value.opponent);
@@ -130,6 +147,14 @@ final class TeamScheduleAdapter extends BaseAdapter {
             } else {
                 text(score,"VS");score.setTextSize(14);score.setTextColor(ui.muted);
             }
+            boolean subscribed=host.isSubscribed(value.match.id);
+            boolean eligible=value.match.scheduled()&&value.match.timeConfirmed&&value.match.start>System.currentTimeMillis();
+            action.setVisibility(subscribed||eligible?View.VISIBLE:View.INVISIBLE);
+            action.setEnabled(!host.isBusy());action.setAlpha(host.isBusy()?0.5f:1f);
+            text(foot,value.time+" · 北京时间\n"+value.match.source);
+            calendar.set(subscribed?"calendar-check":"calendar-add",ui.primary);
+            action.setContentDescription((subscribed?"取消订阅":"订阅")+"对阵"+value.opponent+"的比赛");
+            score.setVisibility(scored?View.VISIBLE:View.GONE);
             text(result,value.result);
             result.setVisibility(value.result.isEmpty()?View.GONE:View.VISIBLE);
             result.setTextColor("胜".equals(value.result)?ui.primary:"平".equals(value.result)?ui.muted:ui.error);

@@ -50,6 +50,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private boolean pendingForce,selectionLoading;
     private long selectionVersion;
     private java.util.concurrent.Future<?> scoreRequest;
+    private java.util.concurrent.Future<?> selectionCacheRequest;
     private LocalDate loadedDay;
     private CalendarSync calendarSync;
     private final Set<String> subscribed=new HashSet<>();
@@ -95,7 +96,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     }
     @Override protected void onSaveInstanceState(Bundle b){super.onSaveInstanceState(b);b.putInt("navigation_schema",2);b.putInt("tab",tab);b.putInt("offset",dayOffset);b.putString("group",group);}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
-    @Override public void onResume(){super.onResume();active=true;if(cacheReady)load(false);if(calendarSync.hasSubscriptions()&&System.currentTimeMillis()-prefs.getLong("calendar_checked",0)>60*60_000L)syncSubscriptions(false);}
+    @Override public void onResume(){super.onResume();active=true;if(cacheReady){render(true);load(false);}if(calendarSync.hasSubscriptions()&&System.currentTimeMillis()-prefs.getLong("calendar_checked",0)>60*60_000L)syncSubscriptions(false);}
     @Override public void onPause(){active=false;handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);super.onPause();}
     @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);executor.shutdownNow();cacheWorker.shutdownNow();calendarWorker.shutdownNow();super.onDestroy();}
     private LocalDate from(){return Match.today(System.currentTimeMillis()).plusDays(dayOffset);}
@@ -134,6 +135,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         if(!force&&tab==nextTab&&group.equals(nextGroup)&&dayOffset==offset)return;
         handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);
         selectionVersion++;if(scoreRequest!=null)scoreRequest.cancel(true);busy=false;pending=false;pendingForce=false;
+        if(selectionCacheRequest!=null){selectionCacheRequest.cancel(true);selectionCacheRequest=null;}
         boolean inPlace=nextTab==0&&tab==0&&scoreList!=null;
         tab=nextTab;group=nextGroup;dayOffset=offset;headerOffset=0;lastScoreScroll=0;
         if(tab==1){selectionLoading=false;render(false);return;}
@@ -153,8 +155,10 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         if(inPlace)updateScoreRows();
         if(scoreList!=null){scoreList.setSelection(0);lastScoreScroll=0;}
         final boolean keepLocal=local!=null;
-        cacheWorker.submit(()-> {
+        selectionCacheRequest=cacheWorker.submit(()-> {
+            if(Thread.currentThread().isInterrupted())return;
             Repository.Snapshot cached=repository.cached(day,day,selectedGroup);
+            if(Thread.currentThread().isInterrupted())return;
             handler.post(()-> {
                 if(isDestroyed()||!tag.equals(queryTag()))return;
                 selectionLoading=false;
@@ -190,7 +194,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private void render(boolean preserve) {
         if(isFinishing()||isDestroyed())return;
         if(preserve&&tab==0&&scoreList!=null) {
-            if(SystemClock.uptimeMillis()-lastScoreScroll<250){handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,250);return;}
+            if(scoreList.isInteracting()||SystemClock.uptimeMillis()-lastScoreScroll<250){handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,250);return;}
             updateScoreRows();return;
         }
         if(preserve&&tab==1&&body!=null) {
@@ -291,7 +295,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
             key.append('|').append(m.id).append(',').append(m.league).append(',').append(m.group).append(',')
                 .append(m.home).append(',').append(m.away).append(',').append(m.homeScore).append(',').append(m.awayScore).append(',')
                 .append(m.state).append(',').append(m.status).append(',').append(m.start).append(',').append(m.timeConfirmed).append(',')
-                .append(m.title).append(',').append(m.homeLogo).append(',').append(m.awayLogo).append(',')
+                .append(m.title).append(',').append(m.homeId).append(',').append(m.awayId).append(',').append(m.homeLogo).append(',').append(m.awayLogo).append(',')
                 .append(subscribed.contains(m.id)).append(',').append(m.live()&&now-m.updated>120_000).append(',').append(m.source).append(',').append(m.updated/60_000);
             for(String result:m.results)key.append(',').append(result);
         }

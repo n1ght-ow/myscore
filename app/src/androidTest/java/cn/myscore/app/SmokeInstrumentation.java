@@ -45,6 +45,7 @@ public final class SmokeInstrumentation extends Instrumentation {
             click("设置");check(findText(activity.getWindow().getDecorView(),"单场订阅")!=null,"settings navigation");
             click("比赛");click("CS2");click("LOL");click("全部");
             check(findText(activity.getWindow().getDecorView(),"MyScore")!=null,"sport filters stay interactive during network loads");
+            checks+=StabilityChecks.run(this,activity);
             calendarChecks();
             checks+=UiChecks.run(this,activity);
             checks+=LayoutChecks.run(this,context);

@@ -116,7 +116,7 @@ final class ScoreAdapter extends BaseAdapter {
         boolean isSubscribed=host.isSubscribed(m.id);
         boolean canSubscribe=m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis();
         icon.set(isSubscribed?"calendar-check":"calendar-add",isSubscribed?ui.primary:ui.muted);
-        ui.clickable(sub,Color.TRANSPARENT,Ui.CONTROL_RADIUS);sub.setSelected(isSubscribed);sub.setAlpha(isSubscribed||canSubscribe?1f:0.45f);
+        sub.setSelected(isSubscribed);sub.setAlpha(isSubscribed||canSubscribe?1f:0.45f);
         sub.setContentDescription(isSubscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
         sub.setOnClickListener(v->host.toggleSubscription(m));
     }

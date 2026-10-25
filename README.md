@@ -2,15 +2,19 @@
 
 一个面向 Redmi K80 Pro 的原生 Android 比分与赛程应用。中文界面，北京时间，无广告，无登录，不依赖 Google 服务，不使用厂商推送 SDK。
 
-## 2.0 全新界面
+## 2.1 流畅性与稳定性
+
+列表会等手指松开、惯性滚动结束后再更新，减少操作过程中重排；快速切换赛事或日期时取消旧缓存读取，优先处理当前选择。队标在同一个视图中合并未完成的加载回调，比分快照更新时复用点击背景。返回前台立即呈现已有结果；球队页会记住加载期间点击的刷新请求，完成后补一次刷新。
+
+[下载 MyScore 2.1 APK](https://github.com/n1ght-ow/myscore/releases/download/v2.1/MyScore-2.1.apk) · [发布说明与校验文件](https://github.com/n1ght-ow/myscore/releases/tag/v2.1)
+
+### 2.0 界面设计
 
 **黑白赛程册**：重新设计顶栏、赛事切换、底部导航、比分卡、比赛详情、球队赛程、设置、更新和底部弹层。纯黑 / 纸白两套主题，随包 Inter 字体、统一线框图标与冷绿色状态；紧凑顶栏和文字下划线筛选让比赛回到视觉中心。详情比分牌随正文滚动，长队名和大字号完整换行，不以裁剪或省略处理。
 
-[下载 MyScore 2.0 APK](https://github.com/n1ght-ow/myscore/releases/download/v2.0/MyScore-2.0.apk) · [发布说明与校验文件](https://github.com/n1ght-ow/myscore/releases/tag/v2.0)
-
 ## 安装与使用
 
-1. 已安装 0.6.0 或以上版本，可在「设置 → 检查更新」下载 2.0；也可手动覆盖安装 `artifacts/MyScore-2.0.apk`。0.x 更新器无法识别两段版本号时，请手动覆盖安装。包名与签名保持一致，保留设置、缓存与日历关联。
+1. 已安装 0.6.0 或以上版本，可在「设置 → 检查更新」下载 2.1；也可手动覆盖安装 `artifacts/MyScore-2.1.apk`。0.x 更新器无法识别两段版本号时，请手动覆盖安装。包名与签名保持一致，保留设置、缓存与日历关联。
 2. 「比赛」页切换足球、NBA、NFL、F1、CS2 或 LOL。点日期打开月份日历，或用左右箭头前后一天。
 3. 点比赛打开完整详情；点队标进入该队赛程，可筛选全部、接下来与已结束。
 4. 在比赛卡右下角点日历加号订阅单场，提前 5 分钟提醒。首次授权后优先写入小米账户日历，没有则本机日历。勾选表示已订阅，再点可确认取消。
@@ -104,7 +108,7 @@ HLTV / SofaScore / BO3.gg 在未配置代理的开发环境请求中出现过 40
 .\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-APK 输出在 `app/build/outputs/apk/debug/app-debug.apk`。1.2 的验证结果：106 项 JUnit、Lint、构建通过；1080×2400 模拟器完整 553 项运行检查通过，含球队页订阅和图标状态；布局检查覆盖 320/360dp、1/1.3/2 倍字号与双主题。本地 APK 与 SHA-256 见 `artifacts/MyScore-1.2.apk`、`artifacts/SHA256SUMS-1.2.txt`。可显式运行实时接口检查：
+APK 输出在 `app/build/outputs/apk/debug/app-debug.apk`。2.1 的验证结果：106 项 JUnit、Lint、构建通过；1080×2400 模拟器完整 570 项运行检查通过，含新增的 15 项图片请求、缓存任务和手势回归，覆盖真实来源、详情、球队页与日历流程。本地 APK 与 SHA-256 见 `artifacts/MyScore-2.1.apk`、`artifacts/SHA256SUMS-2.1.txt`。可显式运行实时接口检查：
 
 ```powershell
 .\gradlew.bat :app:verifyLiveSources

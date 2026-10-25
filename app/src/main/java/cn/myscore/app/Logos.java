@@ -41,6 +41,7 @@ final class Logos {
         final int targetPx;
         final boolean artwork;
         final int foreground;
+        private String pendingKey;
         private Crest(FrameLayout box,ImageView image,TextView initials,int targetPx,boolean artwork,int foreground){this.box=box;this.image=image;this.initials=initials;this.targetPx=targetPx;this.artwork=artwork;this.foreground=foreground;}
     }
 
@@ -56,7 +57,9 @@ final class Logos {
         ImageView image=new ImageView(ui.c);
         image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         box.addView(image,new FrameLayout.LayoutParams(-1,-1));
-        return new Crest(box,image,fallback,targetPixels(ui,size),artwork,ui.text);
+        Crest crest=new Crest(box,image,fallback,targetPixels(ui,size),artwork,ui.text);
+        // Factory callers keep only the box; keep its request state alive with the view tree.
+        box.setTag(crest);return crest;
     }
 
     static FrameLayout view(Ui ui,String url,String name,int size) {
@@ -69,12 +72,15 @@ final class Logos {
     static void bind(Crest crest,String url,String name) {
         if(crest==null)return;
         ImageView image=crest.image;TextView fallback=crest.initials;
-        fallback.setText(initials(name));
+        String label=initials(name);if(!label.contentEquals(fallback.getText()))fallback.setText(label);
         if(!allowed(url)) {
+            crest.pendingKey=null;
             image.setImageDrawable(null);image.setTag(null);fallback.setVisibility(android.view.View.VISIBLE);return;
         }
         String key=key(url,crest);
         if(url.equals(image.getTag())&&image.getDrawable()!=null){fallback.setVisibility(android.view.View.GONE);return;}
+        if(key.equals(crest.pendingKey))return;
+        crest.pendingKey=null;
         image.setImageDrawable(null);image.setTag(url);
         Bitmap memory=MEMORY.get(key);
         if(memory!=null){image.setImageBitmap(memory);fallback.setVisibility(android.view.View.GONE);return;}
@@ -82,6 +88,7 @@ final class Logos {
         long now=System.currentTimeMillis();
         Long failed=FAILED.get(url);
         if(failed!=null&&now-failed<30_000)return;
+        crest.pendingKey=key;
         Context app=image.getContext().getApplicationContext();
         CompletableFuture<Bitmap> future=new CompletableFuture<>(),existing=IN_FLIGHT.putIfAbsent(key,future);
         if(existing!=null)future=existing;
@@ -104,13 +111,12 @@ final class Logos {
                 } finally {IN_FLIGHT.remove(key,request);}
             });
         }
-        java.lang.ref.WeakReference<ImageView> target=new java.lang.ref.WeakReference<>(image);
-        java.lang.ref.WeakReference<TextView> placeholder=new java.lang.ref.WeakReference<>(fallback);
-        future.thenAccept(bitmap->MAIN.post(()-> {
-            ImageView view=target.get();TextView text=placeholder.get();
-            if(view==null||!url.equals(view.getTag()))return;
-            view.setImageBitmap(bitmap);
-            if(text!=null)text.setVisibility(android.view.View.GONE);
+        java.lang.ref.WeakReference<Crest> target=new java.lang.ref.WeakReference<>(crest);
+        future.whenComplete((bitmap,failure)->MAIN.post(()-> {
+            Crest slot=target.get();
+            if(slot==null||!key.equals(slot.pendingKey)||!url.equals(slot.image.getTag()))return;
+            slot.pendingKey=null;
+            if(failure==null){slot.image.setImageBitmap(bitmap);slot.initials.setVisibility(android.view.View.GONE);}
         }));
     }
 

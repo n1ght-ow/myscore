@@ -12,7 +12,6 @@ import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.TextView;
 import org.json.JSONObject;
 import java.time.Instant;
@@ -35,7 +34,7 @@ public final class TeamActivity extends Activity {
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private LinearLayout root;
-    private ListView list;
+    private ScoreList list;
     private TeamScheduleAdapter adapter;
     private TextView status,error;
     private HorizontalScrollView filterScroll;
@@ -49,6 +48,8 @@ public final class TeamActivity extends Activity {
     private String headerLogo="";
     private TeamRepository.Result result;
     private boolean busy,active;
+    private boolean pendingForce;
+    private final Runnable renderSoon=()->{if(active&&!isDestroyed())render();};
     private int pendingPosition=-1;
     private final Runnable tick=()->load(true);
 
@@ -78,8 +79,8 @@ public final class TeamActivity extends Activity {
         build();
         load(false);
     }
-    @Override public void onResume(){super.onResume();active=true;if(result==null)load(false);else if(System.currentTimeMillis()-result.fetched>5*60_000)load(false);else {render();schedule();}}
-    @Override public void onPause(){active=false;handler.removeCallbacks(tick);super.onPause();}
+    @Override public void onResume(){super.onResume();active=true;if(repository==null||isFinishing())return;render();if(result==null||pendingForce||System.currentTimeMillis()-result.fetched>5*60_000)load(false);else schedule();}
+    @Override public void onPause(){active=false;handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);super.onPause();}
     @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdownNow();calendarWorker.shutdown();super.onDestroy();}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putInt("position",list==null?pendingPosition:list.getFirstVisiblePosition());state.putString("filter",filter);}
@@ -121,7 +122,7 @@ public final class TeamActivity extends Activity {
         root.addView(filterScroll,new LinearLayout.LayoutParams(-1,-2));
 
         root.addView(ui.divider());
-        list=new ListView(this);
+        list=new ScoreList(this);
         list.setDivider(null);list.setDividerHeight(0);list.setClipToPadding(false);list.setVerticalScrollBarEnabled(false);
         list.setPadding(ui.dp(16),ui.dp(6),ui.dp(16),ui.dp(24));
         list.setSelector(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
@@ -192,21 +193,23 @@ public final class TeamActivity extends Activity {
     }
 
     private void load(boolean force) {
-        if(!active)return;
-        if(busy){if(force&&result!=null&&result.matches.stream().anyMatch(Match::live))handler.postDelayed(tick,30_000);return;}
+        if(!active||isFinishing()||isDestroyed())return;
+        if(busy){pendingForce|=force;return;}
         handler.removeCallbacks(tick);
-        if(force)Logos.retryFailures();
-        busy=true;updateStatus();
+        boolean forced=force||pendingForce;pendingForce=false;
+        if(forced)Logos.retryFailures();
+        busy=true;render();
         Team requested=team;boolean readCache=result==null;
         worker.submit(()-> {
             if(readCache) {
                 TeamRepository.Result cached=repository.cached(requested);
                 if(cached.fetched>0)handler.post(()->{if(isDestroyed())return;result=cached;render();});
             }
-            TeamRepository.Result next=repository.fetch(requested,force);
+            TeamRepository.Result next=repository.fetch(requested,forced);
             handler.post(()-> {
                 if(isDestroyed())return;
-                busy=false;result=next;render();schedule();
+                busy=false;result=next;
+                if(active){render();if(pendingForce)load(false);else schedule();}
             });
         });
     }
@@ -219,7 +222,9 @@ public final class TeamActivity extends Activity {
     }
 
     private void render() {
-        if(isFinishing()||isDestroyed())return;
+        if(!active||isFinishing()||isDestroyed())return;
+        if(list!=null&&list.isInteracting()){handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,200);return;}
+        handler.removeCallbacks(renderSoon);
         if(headerLogo.isBlank()&&result!=null) {
             for(Match m:result.matches) {
                 String logo=team.id.equals(m.homeId)?m.homeLogo:team.id.equals(m.awayId)?m.awayLogo:"";

@@ -1,3 +1,31 @@
+# MyScore 2.1 流畅性与稳定性
+
+日期：2026-10-25，北京时间。versionName `2.1`，versionCode `20`，标签 `v2.1`。
+
+## 本次变更
+
+- 首页与球队页记录按住、拖动和惯性滚动状态，自动更新延后到手势结束；暂停球队页时移除延后的渲染任务，返回时显示最新已有结果。
+- 快速切换赛事或日期会取消旧缓存 Future，已排队的过时任务不再执行读取；请求完成仍校验当前选择，避免旧结果覆盖新页面。
+- 同一队标视图只挂接一个未完成请求的回调；复用已经显示的图片和比分卡点击背景，缩写不变时不重复写入文字。图片失败释放绑定状态供重试，回收视图拒绝旧请求回写。
+- 球队加载期间的手动刷新合并为一次待处理请求；页面恢复时优先显示已有数据。比分列表的变更指纹包含来源球队 ID，队名与图片不变而 ID 补齐时也能更新赛程入口。
+- 保留 2.0 界面与既有签名，没有新增生产依赖。
+
+## 已执行验证
+
+- `testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest --offline --console=plain` 通过：106 项 JUnit，0 failures / errors；Lint 0 errors / 25 warnings。日志 `artifacts/build-2.1.log`。
+- 最终 APK 在 Android 15 / API 35 模拟器 `emulator-5554`（1080×2400 / 420dpi）通过 **570 项 Android 运行检查**，启用 `network=true details=true lol=true`。覆盖九类真实数据源、详情、双主题、LoL 小局、球队赛程、队标入口、订阅及个人日历事件保护。日志 `artifacts/android-tests-2.1-final.txt`、`artifacts/android-runtime-2.1.log`。
+- 新增 `StabilityChecks` 的 15 项回归：100 次连续绑定只挂接 1 个图片回调；图片成功、失败重试及回收后迟到结果；比分卡保留 RippleDrawable 且点击使用最新比赛；快速选择取消旧缓存任务；静止按住、取消手势、恢复刷新及惯性滚动状态。测试图片、比赛和阻塞任务仅用于内存中的独立测试，不写入应用数据源或持久缓存。
+- 同一次模拟器检查的离屏视图微基准：1000 次比分卡复用绑定共 324ms。这只记录绑定路径耗时，没有 v2.0 同条件对照，也不代表屏幕 FPS 或真实手机性能提升百分比。
+- 最终包通过 Mobile Dev 覆盖安装，包管理器确认 `versionName=2.1 / versionCode=20`。额外实际滑动确认列表推进、顶部收起和导航保持可用；球队截图保存于 `artifacts/review-2.1/`。
+
+## 交付包与边界
+
+- `artifacts/MyScore-2.1.apk`：1,784,810 字节，包名 `cn.myscore.app`，minSdk 28 / targetSdk 35。
+- SHA-256：`c807ecfddb0ba2e508d0ce4ac915122888441c1d50981bb2e06e0fff7751f4ad`；校验文件 `artifacts/SHA256SUMS-2.1.txt`。
+- `apksigner verify` 通过；证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`，已与 v2.0 APK 实际对照，包名一致、versionCode 递增，可覆盖安装保留设置、缓存及日历关联。
+- 发布入口：[v2.1](https://github.com/n1ght-ow/myscore/releases/tag/v2.1)。APK、日志与生成截图保留在被忽略的 `artifacts/`，不加入 Git。
+- Redmi K80 Pro / HyperOS、国内运营商网络、锁屏提醒及高刷新率真机表现尚未验收；本轮没有重新执行 2.0 的全部屏幕尺寸截图矩阵。
+
 # MyScore 2.0 全界面重新设计
 
 日期：2026-10-25，北京时间。versionName `2.0`，versionCode `19`，标签 `v2.0`。

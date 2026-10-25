@@ -37,7 +37,7 @@ public final class UpdateActivity extends Activity {
     @Override public void onCreate(Bundle saved){
         String theme=getSharedPreferences("settings",0).getString("theme","system");boolean dark=theme.equals("dark")||theme.equals("system")&&(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
         setTheme(dark?R.style.AppThemeDark:R.style.AppTheme);super.onCreate(saved);ui=new Ui(this,dark);repository=new UpdateRepository(this);
-        getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.bg);if(android.os.Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
+        getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.bg);getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(ui.bg));if(android.os.Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         build();check(true);
     }
     @Override public void onResume(){super.onResume();active=true;if(state==State.DOWNLOADING)poll();}
@@ -45,7 +45,7 @@ public final class UpdateActivity extends Activity {
     @Override public void onDestroy(){operation++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();super.onDestroy();}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     private void build(){
-        LinearLayout root=ui.column();root.setBackgroundColor(ui.bg);setContentView(root);
+        LinearLayout root=ui.column();setContentView(root);
         root.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets b=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(b.left,b.top,b.right,b.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});root.requestApplyInsets();
         LinearLayout header=ui.row();header.setPadding(ui.dp(4),ui.dp(4),ui.dp(20),ui.dp(4));FrameLayout back=new FrameLayout(this);back.addView(new Ui.Icon(this,"back",ui.primary),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));ui.clickable(back,ui.bg,24);back.setContentDescription("返回设置");back.setFocusable(true);back.setOnClickListener(v->finish());header.addView(back,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));header.addView(ui.text("软件更新",18,ui.text,true));root.addView(header);root.addView(ui.divider());
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);LinearLayout body=ui.column();body.setPadding(ui.dp(24),ui.dp(32),ui.dp(24),ui.dp(28));scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));

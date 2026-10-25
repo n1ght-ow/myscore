@@ -15,6 +15,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 final class Ui {
+    // Creating a Typeface for every TextView is measurable on long lists; these are process-wide.
+    private static final Typeface REGULAR=Typeface.create("sans-serif",Typeface.NORMAL);
+    private static final Typeface MEDIUM=Typeface.create("sans-serif-medium",Typeface.NORMAL);
     /** A window hint only: Android still owns power, thermal and user refresh policy. */
     static void highRefresh(android.view.Window window) {
         if(window==null)return;
@@ -47,7 +50,7 @@ final class Ui {
     TextView text(String s,int sp,int color,boolean bold) {
         TextView v=new TextView(c);v.setText(s);v.setTextSize(sp);v.setTextColor(color);
         v.setFontFeatureSettings("tnum");v.setIncludeFontPadding(false);
-        v.setTypeface(Typeface.create("sans-serif"+(bold?"-medium":""),Typeface.NORMAL));
+        v.setTypeface(bold?MEDIUM:REGULAR);
         return v;
     }
     GradientDrawable shape(int color,int radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));return g;}
@@ -60,8 +63,9 @@ final class Ui {
     View divider(){View d=new View(c);d.setBackgroundColor(line);d.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(1)));return d;}
     void gap(LinearLayout into,int h){View space=new View(c);into.addView(space,new LinearLayout.LayoutParams(1,dp(h)));}
     static final class Icon extends View {
-        private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);private final String kind;private final int color;private final Path refreshArrow=new Path();
+        private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);private String kind;private int color;private final Path refreshArrow=new Path();
         Icon(Context c,String kind,int color){super(c);this.kind=kind;this.color=color;refreshArrow.moveTo(19,3);refreshArrow.lineTo(19,9);refreshArrow.lineTo(13,9);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        void set(String kind,int color){if(kind.equals(this.kind)&&color==this.color)return;this.kind=kind;this.color=color;invalidate();}
         @Override protected void onDraw(Canvas canvas){
             super.onDraw(canvas);canvas.save();float scale=Math.min(getWidth(),getHeight())/24f;
             canvas.translate((getWidth()-24*scale)/2,(getHeight()-24*scale)/2);canvas.scale(scale,scale);

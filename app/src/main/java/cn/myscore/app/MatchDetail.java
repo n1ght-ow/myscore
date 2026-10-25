@@ -9,6 +9,8 @@ public final class MatchDetail {
     public long fetched;
     long lolFetched;
     public String source="",warning="";
+    private long bodyHash;
+    private boolean bodyHashReady;
     public final List<Fact> facts=new ArrayList<>();
     public final List<Stat> stats=new ArrayList<>();
     public final List<Table> tables=new ArrayList<>();
@@ -33,6 +35,31 @@ public final class MatchDetail {
     }
     public void fact(String label,String value){if(value!=null&&!value.isBlank())facts.add(new Fact(label,value));}
     public void table(Table t){if(!t.rows.isEmpty())tables.add(t);}
+    /**
+     * Fingerprint of everything the detail body renders. Scores and fetch times are intentionally
+     * excluded so a live clock tick can update the header without rebuilding a large table.
+     * Computed off the main thread by {@link DetailRepository}.
+     */
+    synchronized long bodySignature(){
+        if(bodyHashReady)return bodyHash;
+        long hash=1469598103934665603L;
+        hash=mix(hash,source);hash=mix(hash,warning);
+        hash=mix(hash,match.group);hash=mix(hash,match.state);hash=mix(hash,match.home);hash=mix(hash,match.away);
+        hash=mix(hash,match.homeId);hash=mix(hash,match.awayId);hash=mix(hash,match.detail);
+        for(Fact f:facts){hash=mix(hash,f.label());hash=mix(hash,f.value());}
+        for(Stat s:stats){hash=mix(hash,s.label());hash=mix(hash,s.home());hash=mix(hash,s.away());}
+        for(Table t:tables){
+            hash=mix(hash,t.tab);hash=mix(hash,t.title);hash=mix(hash,t.teamId);hash=mix(hash,t.category);
+            for(String column:t.columns)hash=mix(hash,column);
+            for(List<String> row:t.rows)for(String value:row)hash=mix(hash,value);
+            for(Person person:t.people){hash=mix(hash,person.id());hash=mix(hash,person.name());hash=mix(hash,person.shortName());hash=mix(hash,person.photo());hash=mix(hash,person.jersey());hash=mix(hash,person.position());hash=mix(hash,person.teamId());hash=mix(hash,person.team());hash=mix(hash,person.teamLogo());hash=mix(hash,person.starter()?1:0);hash=mix(hash,person.absent()?1:0);}
+        }
+        for(Event e:events){hash=mix(hash,e.time());hash=mix(hash,e.title());hash=mix(hash,e.text());}
+        for(LolGame game:lolGames){hash=mix(hash,game.number);hash=mix(hash,game.data==null?"":game.data.toString());}
+        bodyHash=hash;bodyHashReady=true;return hash;
+    }
+    private static long mix(long hash,String value){return (hash^(value==null?0:value.hashCode()))*1099511628211L;}
+    private static long mix(long hash,long value){return (hash^value)*1099511628211L;}
     public JSONObject json()throws JSONException {
         JSONObject root=new JSONObject().put("match",match.json()).put("fetched",fetched).put("source",source).put("warning",warning);
         JSONArray f=new JSONArray(),s=new JSONArray(),ts=new JSONArray(),ev=new JSONArray();

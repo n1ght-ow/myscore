@@ -207,7 +207,7 @@ final class Sheet {
         return Math.max(activity.getResources().getDisplayMetrics().heightPixels - activity.getResources().getDisplayMetrics().heightPixels / 4, 1);
     }
     private static void show(Activity activity, Dialog dialog, LinearLayout content) {
-        dialog.show();
+        try{dialog.show();}catch(RuntimeException e){android.util.Log.w("MyScore","Sheet skipped because the activity left");return;}
         Window window = dialog.getWindow();
         if (window != null) {
             window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT);

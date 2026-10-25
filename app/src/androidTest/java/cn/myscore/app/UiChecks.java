@@ -25,14 +25,17 @@ final class UiChecks {
             require(original.getWindow().getAttributes().preferredDisplayModeId==0,"refresh hint does not force a resolution mode");
         });checks+=2;
         Method render=MainActivity.class.getDeclaredMethod("render",boolean.class);render.setAccessible(true);
-        Field scroll=field("scroll"),body=field("body"),lastScroll=field("lastScroll");
+        Field scoreList=field("scoreList"),scoreAdapter=field("scoreAdapter"),headerView=field("headerView");
         test.runOnMainSync(()->{try{
-            lastScroll.setLong(original,0);render.invoke(original,true);
-            Object previousScroll=scroll.get(original);ViewGroup content=(ViewGroup)body.get(original);View first=content.getChildAt(0);
             render.invoke(original,true);
-            require(scroll.get(original)==previousScroll,"automatic update retains scroll container");
-            require(content.getChildAt(0)==first,"unchanged data retains existing rows");
-        }catch(ReflectiveOperationException e){throw new AssertionError(e);}});checks+=2;
+            Object previousList=scoreList.get(original),previousAdapter=scoreAdapter.get(original),previousHeader=headerView.get(original);
+            View first=((ViewGroup)previousList).getChildAt(0);
+            render.invoke(original,true);
+            require(scoreList.get(original)==previousList,"automatic update retains the recycled scrolling list");
+            require(scoreAdapter.get(original)==previousAdapter,"automatic update retains its adapter");
+            require(headerView.get(original)==previousHeader,"automatic update retains the collapsing header");
+            require(((ViewGroup)previousList).getChildAt(0)==first,"unchanged data retains visible rows");
+        }catch(ReflectiveOperationException e){throw new AssertionError(e);}});checks+=4;
         test.runOnMainSync(()->click(original.getWindow().getDecorView(),"设置"));test.waitForIdleSync();
         Bundle saved=new Bundle();test.runOnMainSync(()->test.callActivityOnSaveInstanceState(original,saved));
         require(saved.getInt("tab")==1&&saved.getInt("navigation_schema")==2,"settings state uses the two-tab schema");checks++;

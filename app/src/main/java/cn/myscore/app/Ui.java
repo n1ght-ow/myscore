@@ -31,32 +31,43 @@ final class Ui {
         params.preferredDisplayModeId=0;params.preferredRefreshRate=best;window.setAttributes(params);
     }
     final Context c;
-    static final int CARD_RADIUS=16,CONTROL_RADIUS=12,SHEET_RADIUS=28;
-    final int bg,surface,text,muted,primary,onPrimary,tonal,line,error,secondary;
+    static final int CARD_RADIUS=20,CONTROL_RADIUS=24,SHEET_RADIUS=28;
+    final int bg,surface,text,muted,primary,onPrimary,tonal,line,error,secondary,action,onAction;
+    private static Typeface interRegular,interMedium;
+    private final Typeface regular,medium;
     static boolean isDark(Context context) {
         String theme=context.getSharedPreferences("settings",0).getString("theme","dark");
         return "dark".equals(theme)||("system".equals(theme)&&(context.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES);
     }
     Ui(Context c,boolean dark) {
         this.c=c;
-        bg=Color.parseColor(dark?"#0C1017":"#F3F6FB");
-        surface=Color.parseColor(dark?"#151C27":"#FFFFFF");
-        text=Color.parseColor(dark?"#F2F5FA":"#182437");
-        muted=Color.parseColor(dark?"#9BAAC0":"#52627A");
-        primary=Color.parseColor(dark?"#8BC8FF":"#235E99");
-        onPrimary=Color.parseColor(dark?"#10243A":"#FFFFFF");
-        tonal=Color.parseColor(dark?"#202E40":"#DFEAF7");
-        line=Color.parseColor(dark?"#2A3547":"#D6DFEB");
-        error=Color.parseColor(dark?"#FFB4A9":"#A6342C");
-        secondary=Color.parseColor(dark?"#B5ACEF":"#65548E");
+        if(interRegular==null){
+            interRegular=new Typeface.Builder(c.getAssets(),"fonts/Inter.ttf").setWeight(400).build();
+            interMedium=new Typeface.Builder(c.getAssets(),"fonts/Inter.ttf").setWeight(600).build();
+        }
+        regular=interRegular==null?REGULAR:interRegular;medium=interMedium==null?MEDIUM:interMedium;
+        bg=Color.parseColor(dark?"#000000":"#F5F5F3");
+        surface=Color.parseColor(dark?"#141414":"#FFFFFF");
+        text=Color.parseColor(dark?"#F5F5F3":"#191B1A");
+        muted=Color.parseColor(dark?"#A3A5A3":"#616660");
+        primary=Color.parseColor(dark?"#76DDB0":"#176B49");
+        onPrimary=Color.parseColor(dark?"#092C1D":"#FFFFFF");
+        tonal=Color.parseColor(dark?"#252525":"#E9EBE7");
+        line=Color.parseColor(dark?"#2A2A2A":"#E4E6E1");
+        error=Color.parseColor(dark?"#FFAAA5":"#AD322B");
+        secondary=Color.parseColor(dark?"#B5B8B5":"#5E655E");
+        action=text;onAction=bg;
     }
     int dp(float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
+    int contentWidthDp(){return Math.min(640,c.getResources().getConfiguration().screenWidthDp);}
+    int pageInset(){return Math.max(0,(c.getResources().getDisplayMetrics().widthPixels-dp(640))/2);}
     LinearLayout column(){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.VERTICAL);return v;}
     LinearLayout row(){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.HORIZONTAL);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
     TextView text(String s,int sp,int color,boolean bold) {
         TextView v=new TextView(c);v.setText(s);v.setTextSize(sp);v.setTextColor(color);
         v.setFontFeatureSettings("tnum");v.setIncludeFontPadding(true);v.setFallbackLineSpacing(true);
-        v.setTypeface(bold?MEDIUM:REGULAR);
+        v.setTypeface(bold?medium:regular);
+        v.setLineSpacing(dp(2),1f);
         return v;
     }
     ScoreText score(String home,String away,boolean available,int maxSp){return new ScoreText(home,away,available,maxSp);}
@@ -68,7 +79,7 @@ final class Ui {
         private boolean available;
         private int ceiling;
         ScoreText(String home,String away,boolean available,int maxSp){
-            super(Ui.this.c);this.maxSp=maxSp;setTypeface(MEDIUM);setFontFeatureSettings("tnum");setIncludeFontPadding(true);setFallbackLineSpacing(true);
+            super(Ui.this.c);this.maxSp=maxSp;setTypeface(medium);setFontFeatureSettings("tnum");setIncludeFontPadding(true);setFallbackLineSpacing(true);
             setTextColor(text);setGravity(Gravity.CENTER);setScore(home,away,available);
         }
         void setScore(String home,String away,boolean available){
@@ -98,21 +109,34 @@ final class Ui {
         }
     }
     GradientDrawable shape(int color,int radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));return g;}
-    GradientDrawable panel(){GradientDrawable g=shape(surface,CARD_RADIUS);g.setStroke(dp(1),line);return g;}
+    GradientDrawable panel(){return shape(surface,CARD_RADIUS);}
     void clickable(View v,int fill,int radius){
         GradientDrawable background=shape(fill,radius);
-        if(fill==surface&&radius>=CARD_RADIUS)background.setStroke(dp(1),line);
-        v.setBackground(new RippleDrawable(ColorStateList.valueOf(primary&0x00ffffff|0x25000000),background,shape(Color.WHITE,radius)));
+        v.setBackground(new RippleDrawable(ColorStateList.valueOf(text&0x00ffffff|0x18000000),background,shape(Color.WHITE,radius)));
     }
     TextView chip(String label,boolean selected,Runnable action) {
-        TextView chip=text(label,13,selected?onPrimary:muted,selected);chip.setGravity(Gravity.CENTER);
+        TextView chip=text(label,13,selected?onAction:muted,selected);chip.setGravity(Gravity.CENTER);
         chip.setMinHeight(dp(48));chip.setPadding(dp(16),dp(10),dp(16),dp(10));
-        clickable(chip,selected?primary:surface,CONTROL_RADIUS);chip.setSelected(selected);chip.setFocusable(true);
+        clickable(chip,selected?this.action:tonal,CONTROL_RADIUS);chip.setSelected(selected);chip.setFocusable(true);
         chip.setOnClickListener(v->action.run());return chip;
     }
+    /** Text tabs share one underline and grow vertically with system font size. */
+    TextView tab(String label,boolean selected,Runnable action) {
+        TextView tab=new TextView(c){
+            final Paint ink=new Paint(Paint.ANTI_ALIAS_FLAG);
+            @Override protected void onDraw(Canvas canvas){
+                super.onDraw(canvas);
+                if(isSelected()){ink.setColor(text);float inset=dp(14);canvas.drawRoundRect(inset,getHeight()-dp(2),getWidth()-inset,getHeight(),dp(1),dp(1),ink);}
+            }
+        };
+        tab.setText(label);tab.setTextSize(14);tab.setTextColor(selected?text:muted);tab.setTypeface(selected?medium:regular);
+        tab.setIncludeFontPadding(true);tab.setFallbackLineSpacing(true);tab.setGravity(Gravity.CENTER);
+        tab.setMinHeight(dp(48));tab.setPadding(dp(14),dp(10),dp(14),dp(12));
+        clickable(tab,Color.TRANSPARENT,0);tab.setSelected(selected);tab.setFocusable(true);tab.setOnClickListener(v->action.run());return tab;
+    }
     TextView button(String label,boolean filled,Runnable action) {
-        TextView b=text(label,14,filled?onPrimary:primary,true);b.setGravity(Gravity.CENTER);
-        b.setMinHeight(dp(48));b.setPadding(dp(16),dp(14),dp(16),dp(14));clickable(b,filled?primary:tonal,CONTROL_RADIUS);
+        TextView b=text(label,14,filled?onAction:text,true);b.setGravity(Gravity.CENTER);
+        b.setMinHeight(dp(48));b.setPadding(dp(20),dp(12),dp(20),dp(12));clickable(b,filled?this.action:tonal,CONTROL_RADIUS);
         b.setFocusable(true);b.setOnClickListener(v->action.run());return b;
     }
     View divider(){View d=new View(c);d.setBackgroundColor(line);d.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(1)));return d;}
@@ -125,7 +149,8 @@ final class Ui {
             super.onDraw(canvas);canvas.save();float scale=Math.min(getWidth(),getHeight())/24f;
             canvas.translate((getWidth()-24*scale)/2,(getHeight()-24*scale)/2);canvas.scale(scale,scale);
             p.setColor(color);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.8f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
-            if(kind.equals("back")){canvas.drawLine(20,12,4,12,p);canvas.drawLine(4,12,11,5,p);canvas.drawLine(4,12,11,19,p);}
+            if(kind.equals("mark")){p.setStrokeWidth(2.4f);canvas.drawLine(17,4,8,4,p);canvas.drawLine(8,4,4,11,p);canvas.drawLine(4,11,18,11,p);canvas.drawLine(18,11,14,20,p);canvas.drawLine(14,20,5,20,p);}
+            else if(kind.equals("back")){canvas.drawLine(20,12,4,12,p);canvas.drawLine(4,12,11,5,p);canvas.drawLine(4,12,11,19,p);}
             else if(kind.equals("check")){canvas.drawLine(5,12,10,17,p);canvas.drawLine(10,17,19,7,p);}
             else if(kind.equals("chevron")){canvas.drawLine(9,6,15,12,p);canvas.drawLine(15,12,9,18,p);}
             else if(kind.equals("refresh")) {canvas.drawArc(4,4,20,20,35,285,false,p);canvas.drawPath(refreshArrow,p);}

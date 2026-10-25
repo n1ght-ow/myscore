@@ -97,13 +97,13 @@ final class TeamScheduleAdapter extends BaseAdapter {
 
         MatchHolder() {
             root=ui.column();root.setPadding(0,0,0,ui.dp(8));
-            card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(16),ui.dp(12),ui.dp(16),ui.dp(12));
+            card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(18),ui.dp(14),ui.dp(18),ui.dp(10));
             ui.clickable(card,ui.surface,Ui.CARD_RADIUS);card.setFocusable(true);
             card.setOnClickListener(v->{if(row!=null&&row.match!=null)host.openMatch(row.match);});
             card.setMinimumHeight(ui.dp(72));
             LinearLayout top=ui.row();
-            date=ui.text("",11,ui.muted,false);top.addView(date,new LinearLayout.LayoutParams(0,-2,1));
-            state=ui.text("",11,ui.muted,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),0,0,0);
+            date=ui.text("",12,ui.muted,false);top.addView(date,new LinearLayout.LayoutParams(0,-2,1));
+            state=ui.text("",12,ui.muted,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),0,0,0);
             top.addView(state,new LinearLayout.LayoutParams(-2,-2));
             card.addView(top);ui.gap(card,10);
             LinearLayout main=ui.row();
@@ -122,7 +122,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
             ui.gap(card,12);
             footer=ui.column();footer.addView(ui.divider());
             LinearLayout controls=ui.row();
-            foot=ui.text("",11,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);
+            foot=ui.text("",12,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);
             controls.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             action=new FrameLayout(ui.c);
             calendar=new Ui.Icon(ui.c,"calendar-add",ui.primary);

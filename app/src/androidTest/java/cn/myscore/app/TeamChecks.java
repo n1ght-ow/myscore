@@ -87,12 +87,16 @@ final class TeamChecks {
         check(findTeamCard(dark.getWindow().getDecorView())!=null,"schedule list renders source match cards");
         View finishedChip=findClickableStart(dark.getWindow().getDecorView(),"已结束");
         check(finishedChip!=null,"results filter is available when both fixtures and results exist");
-        test.runOnMainSync(finishedChip::performClick);test.waitForIdleSync();Thread.sleep(350);test.waitForIdleSync();
+        test.runOnMainSync(finishedChip::performClick);test.waitForIdleSync();
+        java.lang.reflect.Field selectedFilter=TeamActivity.class.getDeclaredField("filter");selectedFilter.setAccessible(true);
+        check("finished".equals(selectedFilter.get(dark)),"results control selects the completed schedule filter");
+        waitForSections(dark,"已结束 ·","接下来 ·");
+        capture(dark,"team-results-filter-dark");
         check(findSection(dark.getWindow().getDecorView(),"接下来 ·")==null,"results filter hides the upcoming section");
         check(findSection(dark.getWindow().getDecorView(),"已结束 ·")!=null,"results filter keeps completed matches");
         View allChip=findClickableStart(dark.getWindow().getDecorView(),"全部");
         check(allChip!=null,"mixed schedule filter is available");
-        test.runOnMainSync(allChip::performClick);test.waitForIdleSync();Thread.sleep(350);test.waitForIdleSync();
+        test.runOnMainSync(allChip::performClick);test.waitForIdleSync();waitForSections(dark,"接下来 ·",null);
         check(findSection(dark.getWindow().getDecorView(),"接下来 ·")!=null,"mixed schedule restores upcoming fixtures");
         capture(dark,"team-epl-dark");
         openFirstMatch(dark);
@@ -223,6 +227,15 @@ final class TeamChecks {
     private static View findDescriptionStart(View root,String text){if(root==null)return null;CharSequence d=root.getContentDescription();if(d!=null&&d.toString().startsWith(text)&&root.isClickable())return root;if(root instanceof ViewGroup){ViewGroup group=(ViewGroup)root;for(int i=0;i<group.getChildCount();i++){View found=findDescriptionStart(group.getChildAt(i),text);if(found!=null)return found;}}return null;}
     private static View findClickableStart(View root,String text){if(root instanceof TextView&&((TextView)root).getText().toString().startsWith(text)&&root.isClickable())return root;if(root instanceof ViewGroup){ViewGroup group=(ViewGroup)root;for(int i=0;i<group.getChildCount();i++){View found=findClickableStart(group.getChildAt(i),text);if(found!=null)return found;}}return null;}
     private static View findSection(View root,String text){if(root instanceof TextView&&!root.isClickable()&&((TextView)root).getText().toString().startsWith(text))return root;if(root instanceof ViewGroup){ViewGroup group=(ViewGroup)root;for(int i=0;i<group.getChildCount();i++){View found=findSection(group.getChildAt(i),text);if(found!=null)return found;}}return null;}
+    /** Adapter notifications apply on the next layout; inspect the view tree on its owning thread. */
+    private static void waitForSections(Activity activity,String present,String absent)throws Exception{
+        long until=android.os.SystemClock.uptimeMillis()+5000;
+        do{
+            boolean[] ready={false};test.runOnMainSync(()->{View root=activity.getWindow().getDecorView();ready[0]=findSection(root,present)!=null&&(absent==null||findSection(root,absent)==null);});
+            if(ready[0])return;Thread.sleep(40);test.waitForIdleSync();
+        }while(android.os.SystemClock.uptimeMillis()<until);
+        throw new AssertionError("schedule layout did not settle for "+present);
+    }
     private static void capture(Activity activity,String name)throws Exception {
         test.waitForIdleSync();Thread.sleep(500);
         Bitmap bitmap=test.getUiAutomation().takeScreenshot();check(bitmap!=null,"native team capture "+name);

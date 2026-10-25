@@ -110,13 +110,13 @@ final class ScoreAdapter extends BaseAdapter {
     private void state(TextView label,Match m){
         label.setVisibility(View.VISIBLE);text(label,m.live()&&!m.status.isBlank()?m.status:stateText(m));
         label.setTextColor(m.live()?ui.primary:m.cancelled()?ui.error:ui.muted);
-        if(label.getBackground()==null||label.isActivated()!=m.live()){label.setActivated(m.live());label.setBackground(ui.shape(m.live()?ui.tonal:Color.TRANSPARENT,6));}
+        if(label.getBackground()==null||label.isActivated()!=m.live()){label.setActivated(m.live());label.setBackgroundColor(Color.TRANSPARENT);}
     }
     private void subscription(Ui.Icon icon,Match m,FrameLayout sub) {
         boolean isSubscribed=host.isSubscribed(m.id);
         boolean canSubscribe=m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis();
-        icon.set(isSubscribed?"calendar-check":"calendar-add",isSubscribed||canSubscribe?ui.primary:ui.muted);
-        ui.clickable(sub,isSubscribed?ui.tonal:Color.TRANSPARENT,Ui.CONTROL_RADIUS);sub.setSelected(isSubscribed);sub.setAlpha(isSubscribed||canSubscribe?1f:0.45f);
+        icon.set(isSubscribed?"calendar-check":"calendar-add",isSubscribed?ui.primary:ui.muted);
+        ui.clickable(sub,Color.TRANSPARENT,Ui.CONTROL_RADIUS);sub.setSelected(isSubscribed);sub.setAlpha(isSubscribed||canSubscribe?1f:0.45f);
         sub.setContentDescription(isSubscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
         sub.setOnClickListener(v->host.toggleSubscription(m));
     }
@@ -143,19 +143,19 @@ final class ScoreAdapter extends BaseAdapter {
         Match match;
 
         MatchHolder() {
-            root=ui.column();root.setPadding(0,0,0,ui.dp(10));
-            card=ui.column();card.setPadding(ui.dp(16),ui.dp(14),ui.dp(16),ui.dp(10));
+            root=ui.column();root.setPadding(0,0,0,ui.dp(12));
+            card=ui.column();card.setPadding(ui.dp(18),ui.dp(14),ui.dp(18),ui.dp(8));
             ui.clickable(card,ui.surface,Ui.CARD_RADIUS);card.setFocusable(true);
             card.setOnClickListener(v->{if(match!=null)host.openMatch(match);});
             metaRow=ui.row();
-            league=ui.text("",11,ui.muted,true);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
-            state=ui.text("",11,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),ui.dp(5),ui.dp(8),ui.dp(5));LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(0,-2,1);stateParams.setMarginStart(ui.dp(8));metaRow.addView(state,stateParams);
+            league=ui.text("",12,ui.muted,true);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
+            state=ui.text("",12,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(4),0,0,0);LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(0,-2,1);stateParams.setMarginStart(ui.dp(8));metaRow.addView(state,stateParams);
             card.addView(metaRow);ui.gap(card,6);
 
             LinearLayout homeRow=ui.row();
             homeCrest=Logos.crest(ui,28,false);homeSlot=crestSlot(homeCrest);
             homeRow.addView(homeSlot,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
-            home=ui.text("",14,ui.text,true);
+            home=ui.text("",15,ui.text,true);
             LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,-2,1);homeRow.addView(home,hp);
             homeScore=teamScore("—");
             LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.setMarginStart(ui.dp(12));homeRow.addView(homeScore,sp);
@@ -164,14 +164,14 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout awayRow=ui.row();
             awayCrest=Logos.crest(ui,28,false);awaySlot=crestSlot(awayCrest);
             awayRow.addView(awaySlot,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
-            away=ui.text("",14,ui.text,true);
+            away=ui.text("",15,ui.text,true);
             LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-2,1);awayRow.addView(away,ap);
             awayScore=teamScore("—");
             LinearLayout.LayoutParams asp=new LinearLayout.LayoutParams(-2,-2);asp.setMarginStart(ui.dp(12));awayRow.addView(awayScore,asp);
             card.addView(awayRow);ui.gap(card,8);card.addView(ui.divider());ui.gap(card,4);
 
             LinearLayout footRow=ui.row();
-            foot=ui.text("",11,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
+            foot=ui.text("",12,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             sub=new FrameLayout(ui.c);
             subIcon=new Ui.Icon(ui.c,"calendar-add",ui.primary);
             sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
@@ -212,20 +212,20 @@ final class ScoreAdapter extends BaseAdapter {
         Match match;
 
         F1Holder() {
-            root=ui.column();root.setPadding(0,0,0,ui.dp(10));
-            card=ui.column();card.setPadding(ui.dp(16),ui.dp(14),ui.dp(16),ui.dp(10));
+            root=ui.column();root.setPadding(0,0,0,ui.dp(12));
+            card=ui.column();card.setPadding(ui.dp(18),ui.dp(14),ui.dp(18),ui.dp(8));
             ui.clickable(card,ui.surface,Ui.CARD_RADIUS);card.setFocusable(true);
             card.setOnClickListener(v->{if(match!=null)host.openMatch(match);});
             LinearLayout metaRow=ui.row();
-            league=ui.text("",11,ui.muted,true);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
-            state=ui.text("",11,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),ui.dp(5),ui.dp(8),ui.dp(5));metaRow.addView(state,new LinearLayout.LayoutParams(0,-2,1));
+            league=ui.text("",12,ui.muted,true);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
+            state=ui.text("",12,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(4),0,0,0);metaRow.addView(state,new LinearLayout.LayoutParams(0,-2,1));
             card.addView(metaRow);ui.gap(card,12);
             title=ui.text("",17,ui.text,true);card.addView(title);
             first=ui.text("",12,ui.muted,false);first.setPadding(0,ui.dp(5),0,0);card.addView(first);
             second=ui.text("",12,ui.muted,false);second.setPadding(0,ui.dp(5),0,0);card.addView(second);
             ui.gap(card,12);card.addView(ui.divider());ui.gap(card,4);
             LinearLayout footRow=ui.row();
-            foot=ui.text("",11,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
+            foot=ui.text("",12,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             sub=new FrameLayout(ui.c);
             subIcon=new Ui.Icon(ui.c,"calendar-add",ui.primary);
             sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));

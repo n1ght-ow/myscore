@@ -17,8 +17,8 @@ import java.util.concurrent.*;
 /** Full-screen, source-backed match centre. System Back returns to the score list. */
 public final class DetailActivity extends Activity {
     private Ui ui;private Match match;private MatchDetail detail;private DetailRepository repository;
-    private LinearLayout root,body;private ScrollView scroll;private TextView status;
-    private TextView headerTitle,headerState,headerStart,headerHome,headerAway;
+    private LinearLayout root,body,content;private ScrollView scroll;private TextView status;
+    private TextView headerTitle,headerState,headerStart,headerHome,headerAway,headerHomeScore,headerAwayScore;
     private Ui.ScoreText headerScore;
     private TextView[] tabLabels;private View[] tabRules;private String[] tabKeys,tabNames;
     private String tab="overview",error="";private boolean busy,active,chromeBuilt,fingerDown;private int selectedGame=-1,failures;
@@ -35,7 +35,7 @@ public final class DetailActivity extends Activity {
         try{match=Match.fromJson(new JSONObject(getIntent().getStringExtra("match")));if(match.id.isBlank())throw new IllegalArgumentException();}catch(Exception e){finish();return;}
         if(saved!=null){tab=saved.getString("tab","overview");selectedGame=saved.getInt("game",-1);teamFilter=saved.getString("team","all");categoryFilter=saved.getString("category","");sortColumn=saved.getString("sort","");descending=saved.getBoolean("descending",true);metricsX=saved.getInt("metricsX");eventsLimit=saved.getInt("eventsLimit",50);playerLimit=saved.getInt("playerLimit",16);}if((match.group.equals("F1")||match.group.equals("LOL"))&&tab.equals("events"))tab="overview";repository=new DetailRepository(this);
         getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.bg);getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(ui.bg));if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
-        root=ui.column();setContentView(root);root.setOnApplyWindowInsetsListener((v,insets)->{if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left,i.top,i.right,i.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});root.requestApplyInsets();render(false);
+        root=ui.column();setContentView(root);root.setOnApplyWindowInsetsListener((v,insets)->{if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left+ui.pageInset(),i.top,i.right+ui.pageInset(),i.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft()+ui.pageInset(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight()+ui.pageInset(),insets.getSystemWindowInsetBottom());return insets;});root.requestApplyInsets();render(false);
     }
     @Override public void onResume(){super.onResume();active=true;if(match!=null)load(false);}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
@@ -49,7 +49,7 @@ public final class DetailActivity extends Activity {
             if(needsCache){MatchDetail cached=repository.cached(requested);if(cached!=null)handler.post(()->{if(isDestroyed())return;detail=cached;if(cached.match.updated>=match.updated)match=cached.match;if(active)render(true);});}
             MatchDetail next=null;String problem="";try{next=repository.fetch(requested,forced);}catch(Exception e){problem=e.getMessage()==null?"网络连接失败":e.getMessage();}MatchDetail result=next;String failure=problem;handler.post(()->{busy=false;if(isDestroyed())return;error=failure;failures=failure.isEmpty()?0:failures+1;if(result!=null){detail=result;match=result.match;}if(active){render(true);if(pendingForce){load(true);return;}if(!match.finalised()&&!match.cancelled()||!failure.isEmpty()){long interval=RefreshPolicy.detail(match);long elapsed=result==null?0:Math.max(0,System.currentTimeMillis()-result.fetched);handler.postDelayed(tick,RefreshPolicy.remaining(RefreshPolicy.retry(interval,failures),elapsed));}}});});
     }
-    private FrameLayout iconButton(String kind,String description,Runnable click){FrameLayout b=new FrameLayout(this);b.addView(new Ui.Icon(this,kind,ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));ui.clickable(b,ui.tonal,Ui.CONTROL_RADIUS);b.setContentDescription(description);b.setFocusable(true);b.setOnClickListener(v->click.run());b.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));return b;}
+    private FrameLayout iconButton(String kind,String description,Runnable click){FrameLayout b=new FrameLayout(this);b.addView(new Ui.Icon(this,kind,ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));ui.clickable(b,android.graphics.Color.TRANSPARENT,Ui.CONTROL_RADIUS);b.setContentDescription(description);b.setFocusable(true);b.setOnClickListener(v->click.run());b.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));return b;}
     private void render(boolean preserve){
         if(isFinishing()||isDestroyed())return;
         if(preserve&&(fingerDown||SystemClock.uptimeMillis()-lastScroll<200)){handler.removeCallbacks(update);handler.postDelayed(update,200);return;}
@@ -65,7 +65,7 @@ public final class DetailActivity extends Activity {
     private void buildChrome(){
         root.removeAllViews();
         LinearLayout appbar=ui.row();appbar.setPadding(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(2));appbar.addView(iconButton("back","返回比赛列表",this::finish));Competition competition=Competition.find(match.league);TextView title=ui.text(competition==null?match.group:competition.name,16,ui.text,true);title.setGravity(Gravity.CENTER);appbar.addView(title,new LinearLayout.LayoutParams(0,-2,1));appbar.addView(iconButton("refresh","刷新比赛详情",()->load(true)));root.addView(appbar);
-        buildScoreHeader();buildTabs();root.addView(ui.divider());
+        buildTabs();root.addView(ui.divider());
         scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.setOnScrollChangeListener((v,x,sy,ox,oy)->lastScroll=SystemClock.uptimeMillis());
         scroll.setOnTouchListener((v,event)-> {
             int action=event.getActionMasked();
@@ -73,19 +73,25 @@ public final class DetailActivity extends Activity {
             else if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){fingerDown=false;lastScroll=SystemClock.uptimeMillis();}
             return false;
         });
-        body=ui.column();body.setPadding(ui.dp(16),ui.dp(12),ui.dp(16),ui.dp(24));scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        content=ui.column();scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        buildScoreHeader();
+        body=ui.column();body.setPadding(ui.dp(16),ui.dp(12),ui.dp(16),ui.dp(24));content.addView(body);
         status=null;
         chromeBuilt=true;
     }
     private void buildScoreHeader(){
-        LinearLayout card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(16),ui.dp(20),ui.dp(16),ui.dp(20));
+        LinearLayout card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(16),ui.dp(16),ui.dp(16),ui.dp(16));
         if(match.group.equals("F1")){
             headerTitle=ui.text(match.displayTitle(),18,ui.text,true);headerTitle.setGravity(Gravity.CENTER);card.addView(headerTitle);ui.gap(card,8);
             headerState=ui.text(match.status+" · "+(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定"),12,ui.muted,false);headerState.setGravity(Gravity.CENTER);card.addView(headerState);
+        }else if(getResources().getConfiguration().fontScale>=1.5f||(getResources().getConfiguration().fontScale>=1.25f&&ui.contentWidthDp()<400)){
+            headerHomeScore=stackedTeam(card,true);ui.gap(card,12);card.addView(ui.divider());ui.gap(card,12);headerAwayScore=stackedTeam(card,false);
+            ui.gap(card,16);headerState=ui.text(match.status,12,match.live()?ui.primary:ui.muted,true);card.addView(headerState);
+            headerStart=ui.text(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定",12,ui.muted,false);card.addView(headerStart);
         }else{
             LinearLayout row=ui.row();row.setGravity(Gravity.CENTER);LinearLayout homeSide=team(true);row.addView(homeSide,new LinearLayout.LayoutParams(0,-2,1));
             LinearLayout center=ui.column();center.setGravity(Gravity.CENTER);
-            headerScore=ui.score(match.homeScore,match.awayScore,match.hasScore(),36);center.addView(headerScore,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,8);
+            headerScore=ui.score(match.homeScore,match.awayScore,match.hasScore(),34);center.addView(headerScore,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,8);
             headerState=ui.text(match.status,12,match.live()?ui.primary:ui.muted,true);headerState.setGravity(Gravity.CENTER);center.addView(headerState,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,6);
             headerStart=ui.text(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定",11,ui.muted,false);headerStart.setGravity(Gravity.CENTER);center.addView(headerStart,new LinearLayout.LayoutParams(-1,-2));
             row.addView(center,new LinearLayout.LayoutParams(0,-2,1.35f));
@@ -93,15 +99,22 @@ public final class DetailActivity extends Activity {
             headerHome=(TextView)homeSide.getChildAt(2);
             headerAway=(TextView)awaySide.getChildAt(2);
         }
-        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(ui.dp(16),ui.dp(2),ui.dp(16),ui.dp(8));root.addView(card,cp);
+        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(ui.dp(16),ui.dp(16),ui.dp(16),ui.dp(4));content.addView(card,cp);
+    }
+    private TextView stackedTeam(LinearLayout card,boolean home){
+        LinearLayout side=team(home);TextView name=(TextView)side.getChildAt(2);if(home)headerHome=name;else headerAway=name;
+        View crest=side.getChildAt(0);side.removeView(crest);LinearLayout line=ui.row();line.addView(crest,new LinearLayout.LayoutParams(ui.dp(56),ui.dp(56)));
+        TextView score=ui.text(match.hasScore()?(home?match.homeScore:match.awayScore):"—",26,match.live()?ui.primary:ui.text,true);score.setGravity(Gravity.END);line.addView(score,new LinearLayout.LayoutParams(0,-2,1));card.addView(line);
+        name.setGravity(Gravity.START);side.setGravity(Gravity.START);card.addView(side,new LinearLayout.LayoutParams(-1,-2));return score;
     }
     /** Header text stays live without replacing the body or the scroll container. */
     private void updateChrome(){
         if(match.group.equals("F1")){
             if(headerTitle!=null){headerTitle.setText(match.displayTitle());headerState.setText(match.status+" · "+(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定"));}
-        }else if(headerScore!=null){
+        }else if(headerHome!=null){
             headerHome.setText(match.home);headerAway.setText(match.away);
-            headerScore.setScore(match.homeScore,match.awayScore,match.hasScore());
+            if(headerScore!=null)headerScore.setScore(match.homeScore,match.awayScore,match.hasScore());
+            else {headerHomeScore.setText(match.hasScore()?match.homeScore:"—");headerAwayScore.setText(match.hasScore()?match.awayScore:"—");headerHomeScore.setTextColor(match.live()?ui.primary:ui.text);headerAwayScore.setTextColor(match.live()?ui.primary:ui.text);}
             headerState.setText(match.status);headerState.setTextColor(match.live()?ui.primary:ui.muted);headerStart.setText(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定");
         }
         updateTabs();updateStatus();
@@ -115,8 +128,8 @@ public final class DetailActivity extends Activity {
     private void rebuildBody(boolean preserve){
         int y=preserve&&scroll!=null?scroll.getScrollY():0;
         body=ui.column();body.setPadding(ui.dp(16),ui.dp(12),ui.dp(16),ui.dp(24));
-        if(scroll!=null){scroll.removeAllViews();scroll.addView(body);}
-        status=ui.text(statusText(),11,ui.muted,false);
+        if(content!=null){if(content.getChildCount()>1)content.removeViewAt(1);content.addView(body);}
+        status=ui.text(statusText(),12,ui.muted,false);
         body.addView(status);ui.gap(body,12);
         if(!error.isEmpty()){LinearLayout warning=panel();warning.addView(ui.text("暂未更新 · "+error+(detail==null?"":"\n显示上次获取的数据"),13,ui.error,false));ui.gap(warning,12);warning.addView(ui.button("重新加载",false,()->load(true)));body.addView(warning);ui.gap(body,14);}
         if(detail!=null&&!detail.warning.isBlank()){body.addView(ui.text(detail.warning,12,ui.muted,false));ui.gap(body,12);}
@@ -137,7 +150,7 @@ public final class DetailActivity extends Activity {
         slot.setContentDescription(available?"查看 "+name+" 的赛程":null);
         slot.setOnClickListener(available?v->openTeam(home):null);
         side.addView(slot,new LinearLayout.LayoutParams(ui.dp(56),ui.dp(56)));ui.gap(side,4);
-        TextView text=ui.text(name,12,ui.text,true);text.setGravity(Gravity.CENTER);side.addView(text,new LinearLayout.LayoutParams(-1,-2));
+        TextView text=ui.text(name,14,ui.text,true);text.setGravity(Gravity.CENTER);side.addView(text,new LinearLayout.LayoutParams(-1,-2));
         return side;
     }
     private void openTeam(boolean home){
@@ -149,12 +162,12 @@ public final class DetailActivity extends Activity {
     private void buildTabs(){
         LinearLayout row=ui.row();boolean f1=match.group.equals("F1"),lol=match.group.equals("LOL");tabKeys=f1||lol?new String[]{"overview","lineup","stats"}:new String[]{"overview","lineup","stats","events"};tabNames=f1?new String[]{"总览","车手","成绩"}:lol?new String[]{"总览","比赛","统计"}:new String[]{"总览",lineupName(),"统计",match.group.equals("CS2")?"小局":"进程"};
         tabLabels=new TextView[tabKeys.length];tabRules=new View[tabKeys.length];
-        for(int i=0;i<tabKeys.length;i++){String key=tabKeys[i];LinearLayout item=ui.column();item.setGravity(Gravity.CENTER);ui.clickable(item,ui.bg,0);item.setFocusable(true);TextView label=ui.text(tabNames[i],14,tab.equals(key)?ui.primary:ui.muted,tab.equals(key));label.setGravity(Gravity.CENTER);label.setMinHeight(ui.dp(48));item.addView(label,new LinearLayout.LayoutParams(-1,-2));View underline=new View(this);underline.setBackground(ui.shape(tab.equals(key)?ui.primary:ui.bg,2));item.addView(underline,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(3)));item.setOnClickListener(v->{tab=key;categoryFilter="";sortColumn="";metricsX=0;playerLimit=16;render(false);});row.addView(item,new LinearLayout.LayoutParams(0,-2,1));tabLabels[i]=label;tabRules[i]=underline;}
+        for(int i=0;i<tabKeys.length;i++){String key=tabKeys[i];LinearLayout item=ui.column();item.setGravity(Gravity.CENTER);ui.clickable(item,ui.bg,0);item.setFocusable(true);TextView label=ui.text(tabNames[i],14,tab.equals(key)?ui.text:ui.muted,tab.equals(key));label.setGravity(Gravity.CENTER);label.setMinHeight(ui.dp(48));item.addView(label,new LinearLayout.LayoutParams(-1,-2));View underline=new View(this);underline.setBackground(ui.shape(tab.equals(key)?ui.text:ui.bg,2));item.addView(underline,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(2)));item.setOnClickListener(v->{tab=key;categoryFilter="";sortColumn="";metricsX=0;playerLimit=16;render(false);});row.addView(item,new LinearLayout.LayoutParams(0,-2,1));tabLabels[i]=label;tabRules[i]=underline;}
         root.addView(row);updateTabs();
     }
     private void updateTabs(){
         if(tabLabels==null)return;
-        for(int i=0;i<tabLabels.length;i++){boolean on=tabKeys[i].equals(tab);tabLabels[i].setTextColor(on?ui.primary:ui.muted);tabRules[i].setBackground(ui.shape(on?ui.primary:ui.bg,2));tabLabels[i].setSelected(on);View item=(View)tabLabels[i].getParent();item.setSelected(on);item.setContentDescription(tabNames[i]+(on?"，已选中":""));}
+        for(int i=0;i<tabLabels.length;i++){boolean on=tabKeys[i].equals(tab);tabLabels[i].setTextColor(on?ui.text:ui.muted);tabRules[i].setBackground(ui.shape(on?ui.text:ui.bg,2));tabLabels[i].setSelected(on);View item=(View)tabLabels[i].getParent();item.setSelected(on);item.setContentDescription(tabNames[i]+(on?"，已选中":""));}
     }
     private LinearLayout panel(){LinearLayout card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(16),ui.dp(14),ui.dp(16),ui.dp(14));return card;}
     private void heading(String text){ui.gap(body,24);body.addView(ui.text(text,16,ui.text,true));ui.gap(body,12);}

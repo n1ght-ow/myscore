@@ -72,8 +72,8 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         root=ui.column();setContentView(root);
         root.setOnApplyWindowInsetsListener((v,insets)-> {
-            if(Build.VERSION.SDK_INT>=30){android.graphics.Insets b=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(b.left,b.top,b.right,b.bottom);}
-            else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
+            if(Build.VERSION.SDK_INT>=30){android.graphics.Insets b=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(b.left+ui.pageInset(),b.top,b.right+ui.pageInset(),b.bottom);}
+            else v.setPadding(insets.getSystemWindowInsetLeft()+ui.pageInset(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight()+ui.pageInset(),insets.getSystemWindowInsetBottom());
             return insets;
         });
         root.requestApplyInsets();loadedDay=Match.today(System.currentTimeMillis());
@@ -331,46 +331,40 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     }
 
     private void header(LinearLayout parent) {
-        LinearLayout header=ui.row();header.setPadding(ui.dp(20),ui.dp(18),ui.dp(20),ui.dp(18));
-        LinearLayout titles=ui.column();
-        String title=tab==0?"MyScore":"设置";
-        TextView heading=ui.text(title,28,ui.text,true);heading.setLetterSpacing(-0.025f);titles.addView(heading);
-        ui.gap(titles,7);titles.addView(ui.text(tab==0?"赛程、比分与每一个关键时刻":"让关注与提醒，按你的节奏",12,ui.muted,false));
-        header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
-        if(tab==0){FrameLayout refresh=new FrameLayout(this);Ui.Icon icon=new Ui.Icon(this,"refresh",ui.primary);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER);refresh.addView(icon,ip);ui.clickable(refresh,ui.tonal,Ui.CONTROL_RADIUS);refresh.setContentDescription("刷新比赛");refresh.setFocusable(true);refresh.setOnClickListener(v->load(true));LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));rp.setMarginStart(ui.dp(12));header.addView(refresh,rp);}
+        LinearLayout header=ui.row();header.setMinimumHeight(ui.dp(56));header.setPadding(ui.dp(20),ui.dp(4),ui.dp(12),ui.dp(4));
+        if(tab==0){Ui.Icon mark=new Ui.Icon(this,"mark",ui.text);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24));mp.setMarginEnd(ui.dp(10));header.addView(mark,mp);}
+        TextView heading=ui.text(tab==0?"MyScore":"设置",24,ui.text,true);heading.setLetterSpacing(-0.025f);
+        header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        if(tab==0)header.addView(headerAction("refresh","刷新比赛",()->load(true)));
+        else {TextView version=ui.text(BuildConfig.VERSION_NAME,12,ui.muted,false);version.setPadding(ui.dp(8),0,ui.dp(8),0);header.addView(version);}
         parent.addView(header);
     }
+    private FrameLayout headerAction(String kind,String description,Runnable click){
+        FrameLayout button=new FrameLayout(this);button.addView(new Ui.Icon(this,kind,ui.text),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
+        ui.clickable(button,Color.TRANSPARENT,Ui.CONTROL_RADIUS);button.setContentDescription(description);button.setFocusable(true);button.setOnClickListener(v->click.run());
+        button.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));return button;
+    }
     private void filters(LinearLayout parent) {
-        LinearLayout holder=ui.row();
-        HorizontalScrollView horizontal=new HorizontalScrollView(this);horizontal.setHorizontalScrollBarEnabled(false);
-        LinearLayout chips=ui.row();chips.setPadding(ui.dp(20),0,ui.dp(12),0);
-        for(String g:GROUPS){TextView chip=ui.chip(g,g.equals(group),()->select(tab,g,dayOffset));chip.setMinWidth(ui.dp(56));chip.setContentDescription(g+(g.equals(group)?"，已选中":"，筛选赛事"));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,-2);cp.setMarginEnd(ui.dp(8));chips.addView(chip,cp);}
-        horizontal.addView(chips);LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,-2,1);hp.setMarginEnd(ui.dp(8));holder.addView(horizontal,hp);
-        FrameLayout more=new FrameLayout(this);more.addView(new Ui.Icon(this,"chevron",ui.muted),new FrameLayout.LayoutParams(ui.dp(18),ui.dp(18),Gravity.CENTER));
-        ui.clickable(more,ui.bg,Ui.CONTROL_RADIUS);more.setContentDescription("更多赛事筛选");more.setFocusable(true);more.setOnClickListener(v->horizontal.smoothScrollBy(ui.dp(180),0));
-        holder.addView(more,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
+        HorizontalScrollView horizontal=new HorizontalScrollView(this);horizontal.setHorizontalScrollBarEnabled(false);horizontal.setClipToPadding(false);
+        LinearLayout tabs=ui.row();tabs.setPadding(ui.dp(6),0,ui.dp(6),0);
+        for(String g:GROUPS){TextView item=ui.tab(g,g.equals(group),()->select(tab,g,dayOffset));item.setContentDescription(g+(g.equals(group)?"，已选中":"，筛选赛事"));tabs.addView(item,new LinearLayout.LayoutParams(-2,-2));}
+        horizontal.addView(tabs);parent.addView(horizontal,new LinearLayout.LayoutParams(-1,-2));
         int selectedIndex=0;for(int i=0;i<GROUPS.length;i++)if(GROUPS[i].equals(group))selectedIndex=i;
-        final int current=selectedIndex;horizontal.post(()->{View selected=chips.getChildAt(current);if(selected!=null&&selected.getRight()>horizontal.getWidth())horizontal.scrollTo(selected.getRight()-horizontal.getWidth()+ui.dp(8),0);});
-        final boolean[] overflow={false};Runnable refresh=()->{View child=horizontal.getChildAt(0);int max=child==null?0:Math.max(0,child.getWidth()-horizontal.getWidth());overflow[0]=max>0;more.setVisibility(overflow[0]&&horizontal.getScrollX()<max-1?View.VISIBLE:View.INVISIBLE);};
-        horizontal.getViewTreeObserver().addOnGlobalLayoutListener(refresh::run);horizontal.setOnScrollChangeListener((v,x,y,ox,oy)->refresh.run());
-        parent.addView(holder);
+        final int current=selectedIndex;horizontal.post(()->{View selected=tabs.getChildAt(current);if(selected!=null)horizontal.scrollTo(Math.max(0,selected.getLeft()-ui.dp(20)),0);});
+        parent.addView(ui.divider());
     }
     private void dateSelector(LinearLayout parent) {
         LocalDate today=Match.today(System.currentTimeMillis()),selected=from();
-        LinearLayout bar=ui.row();bar.setPadding(ui.dp(20),ui.dp(12),ui.dp(20),ui.dp(12));
-        FrameLayout prev=new FrameLayout(this);prev.addView(new Ui.Icon(this,"back",ui.primary),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
-        ui.clickable(prev,ui.surface,Ui.CONTROL_RADIUS);prev.setFocusable(true);prev.setContentDescription("前一天");prev.setOnClickListener(v->selectDay(selected.minusDays(1)));
-        bar.addView(prev,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
-        TextView label=ui.text((selected.equals(today)?"今天 · ":"")+(selected.getYear()==today.getYear()?DateTimeFormatter.ofPattern("M月d日 EEE",Locale.CHINA).format(selected):DateTimeFormatter.ofPattern("yyyy年M月d日",Locale.CHINA).format(selected)),14,ui.text,true);
-        label.setGravity(Gravity.CENTER);label.setMinHeight(ui.dp(48));
-        ui.clickable(label,ui.surface,Ui.CONTROL_RADIUS);label.setFocusable(true);label.setContentDescription("选择日期，当前"+DateTimeFormatter.ofPattern("M月d日 EEEE",Locale.CHINA).format(selected));
-        label.setOnClickListener(v->Sheet.date(this,from(),this::selectDay));
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMarginStart(ui.dp(8));lp.setMarginEnd(ui.dp(8));bar.addView(label,lp);
-        FrameLayout next=new FrameLayout(this);next.addView(new Ui.Icon(this,"chevron",ui.primary),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
-        ui.clickable(next,ui.surface,Ui.CONTROL_RADIUS);next.setFocusable(true);next.setContentDescription("后一天");next.setOnClickListener(v->selectDay(selected.plusDays(1)));
-        bar.addView(next,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
-        if(!selected.equals(today)){TextView reset=ui.text("今天",12,ui.primary,true);reset.setGravity(Gravity.CENTER);reset.setMinHeight(ui.dp(48));reset.setPadding(ui.dp(8),0,ui.dp(4),0);reset.setFocusable(true);reset.setContentDescription("回到今天");reset.setOnClickListener(v->selectDay(today));bar.addView(reset,new LinearLayout.LayoutParams(-2,ui.dp(48)));}
-        parent.addView(bar);
+        LinearLayout bar=ui.row();bar.setPadding(ui.dp(20),ui.dp(4),ui.dp(12),ui.dp(4));
+        boolean large=getResources().getConfiguration().fontScale>=1.5f;
+        String date=DateTimeFormatter.ofPattern(selected.getYear()==today.getYear()?"M月d日":"yyyy/M/d",Locale.CHINA).format(selected);
+        String caption=large?date+"\n"+(selected.equals(today)?"今天 · ":"")+DateTimeFormatter.ofPattern("EEE",Locale.CHINA).format(selected):(selected.equals(today)?"今天  ·  ":"")+date+" "+DateTimeFormatter.ofPattern("EEE",Locale.CHINA).format(selected);
+        TextView label=ui.text(caption+"  ▾",13,ui.text,true);
+        label.setGravity(Gravity.CENTER_VERTICAL);label.setMinHeight(ui.dp(48));label.setPadding(0,ui.dp(8),ui.dp(8),ui.dp(8));
+        ui.clickable(label,Color.TRANSPARENT,0);label.setFocusable(true);label.setContentDescription("选择日期，当前"+DateTimeFormatter.ofPattern("M月d日 EEEE",Locale.CHINA).format(selected));label.setOnClickListener(v->Sheet.date(this,from(),this::selectDay));bar.addView(label,new LinearLayout.LayoutParams(0,-2,1));
+        if(!selected.equals(today)){TextView reset=ui.text("今天",12,ui.text,true);reset.setGravity(Gravity.CENTER);reset.setMinHeight(ui.dp(48));reset.setPadding(ui.dp(8),0,ui.dp(8),0);ui.clickable(reset,Color.TRANSPARENT,0);reset.setFocusable(true);reset.setContentDescription("回到今天");reset.setOnClickListener(v->selectDay(today));bar.addView(reset,new LinearLayout.LayoutParams(-2,-2));}
+        FrameLayout prev=headerAction("chevron","前一天",()->selectDay(selected.minusDays(1)));prev.getChildAt(0).setRotation(180);bar.addView(prev);
+        bar.addView(headerAction("chevron","后一天",()->selectDay(selected.plusDays(1))));parent.addView(bar);
     }
     private void selectDay(LocalDate day) {
         LocalDate today=Match.today(System.currentTimeMillis());
@@ -404,12 +398,12 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         settingRow(options,"使用帮助","日历提醒与数据说明",this::help);body.addView(options);
         ui.gap(body,24);TextView hint=ui.text("MyScore · "+BuildConfig.VERSION_NAME+"\n在比赛卡上点日历图标，订阅单场比赛。",12,ui.muted,false);hint.setLineSpacing(ui.dp(6),1);hint.setGravity(Gravity.CENTER);hint.setPadding(ui.dp(4),0,ui.dp(4),0);body.addView(hint);
     }
-    private void section(String title){ui.gap(body,24);TextView h=ui.text(title,14,ui.muted,true);h.setPadding(ui.dp(4),0,0,ui.dp(12));body.addView(h);}
+    private void section(String title){ui.gap(body,24);TextView h=ui.text(title,13,ui.muted,true);h.setPadding(ui.dp(4),0,0,ui.dp(12));body.addView(h);}
     private void settingRow(LinearLayout into,String title,String detail,Runnable action){
         if(into.getChildCount()>0){View line=ui.divider();LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,ui.dp(1));lp.setMarginStart(ui.dp(16));lp.setMarginEnd(ui.dp(16));into.addView(line,lp);}
-        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(76));row.setPadding(ui.dp(16),ui.dp(16),ui.dp(14),ui.dp(16));ui.clickable(row,Color.TRANSPARENT,Ui.CARD_RADIUS);row.setFocusable(true);
+        LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(72));row.setPadding(ui.dp(16),ui.dp(16),ui.dp(14),ui.dp(16));ui.clickable(row,Color.TRANSPARENT,Ui.CARD_RADIUS);row.setFocusable(true);
         String kind=title.equals("外观")?"theme":title.equals("检查更新")?"download":title.contains("来源")||title.contains("帮助")?"info":title.contains("检查")||title.contains("正在")?"refresh":"calendar";
-        FrameLayout symbol=new FrameLayout(this);symbol.setBackground(ui.shape(ui.tonal,Ui.CONTROL_RADIUS));symbol.addView(new Ui.Icon(this,kind,ui.primary),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));LinearLayout.LayoutParams symbolParams=new LinearLayout.LayoutParams(ui.dp(40),ui.dp(40));symbolParams.setMarginEnd(ui.dp(14));row.addView(symbol,symbolParams);
+        FrameLayout symbol=new FrameLayout(this);symbol.addView(new Ui.Icon(this,kind,ui.muted),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));LinearLayout.LayoutParams symbolParams=new LinearLayout.LayoutParams(ui.dp(24),ui.dp(40));symbolParams.setMarginEnd(ui.dp(14));row.addView(symbol,symbolParams);
         LinearLayout text=ui.column();text.addView(ui.text(title,15,ui.text,true));if(!detail.isBlank()){ui.gap(text,5);text.addView(ui.text(detail,12,ui.muted,false));}row.addView(text,new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(ui.dp(18),ui.dp(18));ip.setMarginStart(ui.dp(12));row.addView(new Ui.Icon(this,"chevron",ui.muted),ip);row.setOnClickListener(v->action.run());into.addView(row);
     }
@@ -538,8 +532,15 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         Sheet.message(this,"数据来源与连接",content.toString());
     }
     private void navigation() {
-        nav=ui.row();nav.setBackgroundColor(ui.bg);nav.setPadding(ui.dp(20),ui.dp(8),ui.dp(20),ui.dp(8));String[] labels={"比赛","设置"},icons={"scores","settings"};
-        for(int i=0;i<2;i++){int index=i;boolean selected=tab==i;LinearLayout item=ui.row();item.setGravity(Gravity.CENTER);item.setMinimumHeight(ui.dp(52));ui.clickable(item,selected?ui.tonal:ui.bg,Ui.CARD_RADIUS);item.setFocusable(true);item.setSelected(selected);item.setContentDescription(labels[i]+(selected?"，已选中":""));item.addView(new Ui.Icon(this,icons[i],selected?ui.primary:ui.muted),new LinearLayout.LayoutParams(ui.dp(22),ui.dp(22)));TextView label=ui.text(labels[i],13,selected?ui.primary:ui.muted,selected);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2);lp.setMarginStart(ui.dp(10));item.addView(label,lp);item.setOnClickListener(v->select(index,group,dayOffset));LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(0,-2,1);if(i>0)np.setMarginStart(ui.dp(12));nav.addView(item,np);}root.addView(nav);
+        nav=ui.row();nav.setBackgroundColor(ui.bg);nav.setPadding(ui.dp(20),ui.dp(4),ui.dp(20),ui.dp(4));String[] labels={"比赛","设置"},icons={"scores","settings"};
+        for(int i=0;i<2;i++){
+            int index=i;boolean selected=tab==i;LinearLayout item=ui.row();item.setGravity(Gravity.CENTER);item.setMinimumHeight(ui.dp(56));
+            ui.clickable(item,Color.TRANSPARENT,Ui.CONTROL_RADIUS);item.setFocusable(true);item.setSelected(selected);item.setContentDescription(labels[i]+(selected?"，已选中":""));
+            item.addView(new Ui.Icon(this,icons[i],selected?ui.text:ui.muted),new LinearLayout.LayoutParams(ui.dp(22),ui.dp(22)));
+            TextView label=ui.text(labels[i],14,selected?ui.text:ui.muted,selected);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2);lp.setMarginStart(ui.dp(10));item.addView(label,lp);
+            item.setOnClickListener(v->select(index,group,dayOffset));nav.addView(item,new LinearLayout.LayoutParams(0,-2,1));
+        }
+        root.addView(nav);
     }
     private void message(String title,String text){if(!isFinishing()&&!isDestroyed())Sheet.message(this,title,text);}
     private static String formatInstant(long millis,String pattern){return millis>0?DateTimeFormatter.ofPattern(pattern,Locale.CHINA).withZone(Match.ZONE).format(Instant.ofEpochMilli(millis)):"未获取";}

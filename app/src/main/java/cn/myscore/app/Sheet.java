@@ -48,13 +48,13 @@ final class Sheet {
             row.setFocusable(true);
             row.setContentDescription(item.title + (item.detail.isEmpty() ? "" : "，" + item.detail) + (on ? "，已选中" : ""));
             LinearLayout texts = ui.column();
-            texts.addView(ui.text(item.title, 15, on ? ui.primary : ui.text, true));
+            texts.addView(ui.text(item.title, 15, ui.text, true));
             if (!item.detail.isEmpty()) { ui.gap(texts, 3); texts.addView(ui.text(item.detail, 12, ui.muted, false)); }
             row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
             if (on) {
                 FrameLayout tick = new FrameLayout(activity);
                 tick.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                tick.addView(new Ui.Icon(activity, "check", ui.primary), new FrameLayout.LayoutParams(ui.dp(20), ui.dp(20), Gravity.CENTER));
+                tick.addView(new Ui.Icon(activity, "check", ui.text), new FrameLayout.LayoutParams(ui.dp(20), ui.dp(20), Gravity.CENTER));
                 row.addView(tick, new LinearLayout.LayoutParams(ui.dp(28), ui.dp(28)));
             }
             final int index = i;
@@ -80,13 +80,13 @@ final class Sheet {
         YearMonth[] month={YearMonth.from(selected)};
         LinearLayout nav=ui.row();
         FrameLayout prev=new FrameLayout(activity);
-        prev.addView(new Ui.Icon(activity,"back",ui.primary),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
+        prev.addView(new Ui.Icon(activity,"back",ui.text),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
         ui.clickable(prev,ui.tonal,Ui.CONTROL_RADIUS);prev.setFocusable(true);prev.setContentDescription("上一个月");
         nav.addView(prev,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         TextView title=ui.text("",16,ui.text,true);title.setGravity(Gravity.CENTER);
         nav.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         FrameLayout next=new FrameLayout(activity);
-        next.addView(new Ui.Icon(activity,"chevron",ui.primary),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
+        next.addView(new Ui.Icon(activity,"chevron",ui.text),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
         ui.clickable(next,ui.tonal,Ui.CONTROL_RADIUS);next.setFocusable(true);next.setContentDescription("下一个月");
         nav.addView(next,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         content.addView(nav);
@@ -110,8 +110,8 @@ final class Sheet {
                     if(index<offset||index>=offset+days){line.addView(new View(activity),new LinearLayout.LayoutParams(0,-2,1));continue;}
                     LocalDate value=month[0].atDay(day++);
                     boolean picked=value.equals(selected),today=value.equals(Match.today(System.currentTimeMillis()));
-                    TextView cell=ui.text(String.valueOf(value.getDayOfMonth()),14,picked?ui.onPrimary:today?ui.primary:ui.text,picked||today);
-                    cell.setGravity(Gravity.CENTER);cell.setMinHeight(ui.dp(48));ui.clickable(cell,picked?ui.primary:today?ui.tonal:Color.TRANSPARENT,Ui.CONTROL_RADIUS);cell.setSelected(picked);
+                    TextView cell=ui.text(String.valueOf(value.getDayOfMonth()),14,picked?ui.onAction:ui.text,picked||today);
+                    cell.setGravity(Gravity.CENTER);cell.setMinHeight(ui.dp(48));ui.clickable(cell,picked?ui.action:today?ui.tonal:Color.TRANSPARENT,Ui.CONTROL_RADIUS);cell.setSelected(picked);
                     cell.setFocusable(true);
                     cell.setContentDescription(value.getMonthValue()+"月"+value.getDayOfMonth()+"日"+(picked?"，已选中":today?"，今天":""));
                     cell.setOnClickListener(v->{dialog.dismiss();pick.onDate(value);});
@@ -213,7 +213,7 @@ final class Sheet {
         try{dialog.show();}catch(RuntimeException e){android.util.Log.w("MyScore","Sheet skipped because the activity left");return;}
         Window window = dialog.getWindow();
         if (window != null) {
-            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT);
+            window.setLayout(Math.min(activity.getResources().getDisplayMetrics().widthPixels, ui(activity).dp(640)), WindowManager.LayoutParams.WRAP_CONTENT);
             window.getDecorView().setPadding(0, 0, 0, 0);
             Ui.highRefresh(window);
         }

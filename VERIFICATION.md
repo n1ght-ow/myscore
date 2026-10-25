@@ -1,3 +1,41 @@
+# MyScore 2.0 全界面重新设计
+
+日期：2026-10-25，北京时间。versionName `2.0`，versionCode `19`，标签 `v2.0`。
+
+## 本次变更
+
+- 使用 UI UX Pro Max 的原生交互 / 字体缩放指导，以及 Taste Skill 的 True-black flat 方向（seed 778335413）。建立统一的黑白表面、Inter 字体、线框图标、冷绿色状态、20dp 卡片和黑白反相操作。
+- 移除首页大标题副文案、赛事大色块和底部选中色块，改为紧凑品牌行、文字下划线赛事切换和单行日期操作。
+- 比分卡、球队赛程、设置、更新、统计表及所有底部弹层共用同一个设计系统。详情比分牌随正文滚动；大字号 / 窄屏用纵向对阵，避免长英文队名被三列挤碎；横屏 / 大屏正文及弹层最大 640dp 居中。
+- 保留缓存、真实来源、队标入口、单场日历订阅和覆盖更新，没有新增生产依赖。字体作为离线资产随包，许可证与来源记录位于 `app/src/main/assets/fonts/`。
+
+## 已执行验证
+
+- `testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` 通过；106 项 JUnit，0 failures / errors；Lint 0 errors / 25 warnings。构建日志 `artifacts/build-2.0.log`。
+- 最终 APK 在 Android 15 / API 35 模拟器 `emulator-5554` 通过 **555 项运行检查**，启用 `network=true details=true lol=true`。覆盖九类真实来源、各项目详情与统计、LoL、球队赛程、筛选、队标跳转及实际日历订阅 / 取消确认；日志 `artifacts/android-tests-2.0-final.txt`。
+- 球队筛选回归改为在主线程等待列表分组完成重排后断言，并校验筛选值；避免跨线程读取尚在变化的 View 树。隔离复测 301 项及上述最终完整回归均通过。
+- 常规手机 411dp / 1.0 倍字号：14051 项原生布局断言通过，深浅主题均覆盖。
+- 360dp / 1.3 倍字号：9909 项原生布局断言通过，深浅主题均覆盖。
+- 320dp / 2 倍字号：10155 项原生布局断言通过，深浅主题均覆盖。
+- 914×411dp 横屏：9421 项原生布局断言通过，深浅主题均覆盖。
+- 1066×1706dp 平板：10011 项原生布局断言通过，深浅主题均覆盖。
+- 专用 `RedesignInstrumentation` 检查文字自然高度、完整行、无省略、可见行宽与详情滚动区域；保存 **182 张原生截图** 于 `artifacts/review-2.0/`。窗口实测：1080×2400 / 420dpi、945×2100 / 420dpi、840×1866 / 420dpi、2400×1080 / 420dpi、1600×2560 / 240dpi。关闭系统动画完成小屏、平板与末轮手机检查；最后恢复窗口大小、420dpi、1.0 字号和动画。
+- 截图迭代修正了大头部、窄屏英文队名碎行、日期断行和浅色次级文字对比度。最后的窄屏字号分支另行复测；截图索引和拼图在同目录。原生界面没有 WebView，使用 Android 布局检查替代网页 DOM inspector。
+- `artifacts/ui-contrast-2.0.json`：30 组正文颜色 / 表面组合均不低于 4.5:1，最低 **4.89:1**；主操作及状态文字同时检查。无新页面入场动画。
+
+## 交付包
+
+- `artifacts/MyScore-2.0.apk`：1,777,946 字节，包名 `cn.myscore.app`，最低 Android 9 / targetSdk 35。
+- SHA-256：`fe51b554380a03b413f8c48330f3f394472d81c9c37c0ad532b13dcd8a12de83`；校验文件 `artifacts/SHA256SUMS-2.0.txt`。
+- `apksigner verify` 通过。证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`，已与实际下载的 v1.2 发布 APK 对照；包名相同、versionCode 递增，可覆盖安装保留数据。继续使用既有个人版 debug 签名。
+- 发布入口：[v2.0](https://github.com/n1ght-ow/myscore/releases/tag/v2.0)。发布资产与远端哈希在发布后另存 `artifacts/release-verification-2.0.json`，不把 APK 和生成截图加入 Git。
+
+## 验证边界
+
+未连接 Redmi K80 Pro；HyperOS 真机、运营商网络、实际刷新率、锁屏日历通知及后台调度仍需真机验收。上述检查覆盖指定窗口与真实缓存样本，不代表穷尽所有来源文字和设备组合。来源测试来自模拟器的现有网络，未对数据逻辑作更改。
+
+---
+
 # MyScore 1.2 球队赛程订阅
 
 日期：2026-10-25，北京时间。版本 `1.2`（versionCode 18），发布标签 `v1.2`，附件 `MyScore-1.2.apk` 与 `SHA256SUMS-1.2.txt`。

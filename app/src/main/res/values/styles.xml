@@ -2,11 +2,11 @@
 <resources>
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#235E99</item>
+        <item name="android:colorAccent">#176B49</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">#F3F6FB</item>
+        <item name="android:windowBackground">#F5F5F3</item>
     </style>
     <style name="SheetAnimation">
         <item name="android:windowEnterAnimation">@anim/sheet_in</item>
@@ -14,9 +14,9 @@
     </style>
     <style name="AppThemeDark" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#8BC8FF</item>
+        <item name="android:colorAccent">#76DDB0</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:windowBackground">#0C1017</item>
+        <item name="android:windowBackground">#000000</item>
     </style>
 </resources>

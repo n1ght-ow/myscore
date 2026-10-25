@@ -70,8 +70,8 @@ public final class TeamActivity extends Activity {
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         root=ui.column();setContentView(root);
         root.setOnApplyWindowInsetsListener((v,insets)-> {
-            if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left,i.top,i.right,i.bottom);}
-            else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
+            if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left+ui.pageInset(),i.top,i.right+ui.pageInset(),i.bottom);}
+            else v.setPadding(insets.getSystemWindowInsetLeft()+ui.pageInset(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight()+ui.pageInset(),insets.getSystemWindowInsetBottom());
             return insets;
         });
         root.requestApplyInsets();
@@ -109,14 +109,14 @@ public final class TeamActivity extends Activity {
         LinearLayout.LayoutParams cardParams=new LinearLayout.LayoutParams(-1,-2);
         cardParams.setMargins(ui.dp(16),ui.dp(2),ui.dp(16),ui.dp(6));root.addView(card,cardParams);
 
-        status=ui.text("正在读取球队赛程…",11,ui.muted,false);status.setPadding(ui.dp(20),ui.dp(2),ui.dp(20),ui.dp(10));root.addView(status);
+        status=ui.text("正在读取球队赛程…",12,ui.muted,false);status.setPadding(ui.dp(20),ui.dp(2),ui.dp(20),ui.dp(10));root.addView(status);
         error=ui.text("",13,ui.error,false);error.setLineSpacing(ui.dp(4),1);
         error.setBackground(ui.shape(ui.tonal,Ui.CONTROL_RADIUS));error.setPadding(ui.dp(14),ui.dp(12),ui.dp(14),ui.dp(12));
         LinearLayout.LayoutParams errorParams=new LinearLayout.LayoutParams(-1,-2);errorParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(10));
         error.setVisibility(View.GONE);root.addView(error,errorParams);
 
         filterScroll=new HorizontalScrollView(this);filterScroll.setHorizontalScrollBarEnabled(false);
-        filters=ui.row();filters.setPadding(ui.dp(16),0,ui.dp(16),ui.dp(8));
+        filters=ui.row();filters.setPadding(ui.dp(6),0,ui.dp(6),0);
         filterScroll.addView(filters);filterScroll.setVisibility(View.GONE);
         root.addView(filterScroll,new LinearLayout.LayoutParams(-1,-2));
 
@@ -139,7 +139,7 @@ public final class TeamActivity extends Activity {
     private FrameLayout iconButton(String kind,String description,Runnable click) {
         FrameLayout button=new FrameLayout(this);
         button.addView(new Ui.Icon(this,kind,ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
-        ui.clickable(button,ui.tonal,Ui.CONTROL_RADIUS);button.setContentDescription(description);button.setFocusable(true);
+        ui.clickable(button,android.graphics.Color.TRANSPARENT,Ui.CONTROL_RADIUS);button.setContentDescription(description);button.setFocusable(true);
         button.setOnClickListener(v->click.run());
         button.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         return button;
@@ -305,7 +305,7 @@ public final class TeamActivity extends Activity {
     }
     private void option(String label,String value,int count) {
         boolean selected=filter.equals(value);
-        TextView chip=ui.chip(label+" "+count,selected,()->{filter=value;list.setSelection(0);render();});
+        TextView chip=ui.tab(label+" "+count,selected,()->{filter=value;list.setSelection(0);render();});
         chip.setContentDescription(label+count+"场"+(selected?"，已选中":"，筛选球队赛程"));
         LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);
         params.setMarginEnd(ui.dp(8));filters.addView(chip,params);

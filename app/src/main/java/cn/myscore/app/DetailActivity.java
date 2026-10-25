@@ -17,7 +17,7 @@ import java.util.concurrent.*;
 public final class DetailActivity extends Activity {
     private Ui ui;private Match match;private MatchDetail detail;private DetailRepository repository;
     private LinearLayout root,body;private ScrollView scroll;private TextView status;
-    private String tab="overview",error="";private boolean busy,active;
+    private String tab="overview",error="";private boolean busy,active;private int selectedGame=-1,failures;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final Runnable tick=()->load(false);
@@ -28,7 +28,7 @@ public final class DetailActivity extends Activity {
         String theme=getSharedPreferences("settings",0).getString("theme","system");boolean dark=theme.equals("dark")||theme.equals("system")&&(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
         setTheme(dark?R.style.AppThemeDark:R.style.AppTheme);super.onCreate(saved);ui=new Ui(this,dark);
         try{match=Match.fromJson(new JSONObject(getIntent().getStringExtra("match")));if(match.id.isBlank())throw new IllegalArgumentException();}catch(Exception e){finish();return;}
-        if(saved!=null)tab=saved.getString("tab","overview");if(match.group.equals("F1")&&tab.equals("events"))tab="overview";repository=new DetailRepository(this);
+        if(saved!=null){tab=saved.getString("tab","overview");selectedGame=saved.getInt("game",-1);}if((match.group.equals("F1")||match.group.equals("LOL"))&&tab.equals("events"))tab="overview";repository=new DetailRepository(this);
         getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.bg);if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         root=ui.column();root.setBackgroundColor(ui.bg);setContentView(root);root.setOnApplyWindowInsetsListener((v,insets)->{if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left,i.top,i.right,i.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});root.requestApplyInsets();render(false);
     }
@@ -36,13 +36,13 @@ public final class DetailActivity extends Activity {
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     @Override public void onPause(){active=false;handler.removeCallbacks(tick);handler.removeCallbacks(update);super.onPause();}
     @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdownNow();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("tab",tab);}
+    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("tab",tab);state.putInt("game",selectedGame);}
     private void load(boolean force){
         if(force){Logos.retryFailures();rendered="";}
         handler.removeCallbacks(tick);if(busy||!active)return;busy=true;if(status!=null)status.setText("正在更新详情…");
-        Match requested=match;boolean needsCache=detail==null;worker.submit(()->{
+        Match requested=match;boolean needsCache=detail==null;long started=SystemClock.elapsedRealtime();worker.submit(()->{
             if(needsCache){MatchDetail cached=repository.cached(requested);if(cached!=null)handler.post(()->{if(isDestroyed())return;detail=cached;match=cached.match;if(active)render(true);});}
-            MatchDetail next=null;String problem="";try{next=repository.fetch(requested,force);}catch(Exception e){problem=e.getMessage()==null?"网络连接失败":e.getMessage();}MatchDetail result=next;String failure=problem;handler.post(()->{busy=false;if(isDestroyed())return;error=failure;if(result!=null){detail=result;match=result.match;}if(active){render(true);if(!match.finalised()&&!match.cancelled())handler.postDelayed(tick,match.group.equals("足球")||match.group.equals("NBA")||match.group.equals("NFL")?30_000:60_000);}});});
+            MatchDetail next=null;String problem="";try{next=repository.fetch(requested,force);}catch(Exception e){problem=e.getMessage()==null?"网络连接失败":e.getMessage();}MatchDetail result=next;String failure=problem;handler.post(()->{busy=false;if(isDestroyed())return;error=failure;failures=failure.isEmpty()?0:failures+1;if(result!=null){detail=result;match=result.match;}if(active){render(true);if(!match.finalised()&&!match.cancelled()||!failure.isEmpty()){long interval=RefreshPolicy.detail(match);long elapsed=result==null?SystemClock.elapsedRealtime()-started:Math.max(0,System.currentTimeMillis()-result.fetched);handler.postDelayed(tick,RefreshPolicy.remaining(RefreshPolicy.retry(interval,failures),elapsed));}}});});
     }
     private FrameLayout iconButton(String kind,String description,Runnable click){FrameLayout b=new FrameLayout(this);b.addView(new Ui.Icon(this,kind,ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));ui.clickable(b,ui.bg,24);b.setContentDescription(description);b.setFocusable(true);b.setOnClickListener(v->click.run());b.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));return b;}
     private void render(boolean preserve){
@@ -59,21 +59,32 @@ public final class DetailActivity extends Activity {
         status=ui.text(statusText(),11,ui.muted,false);body.addView(status);
         if(detail!=null&&!detail.warning.isBlank()){ui.gap(body,8);body.addView(ui.text(detail.warning,12,ui.muted,false));}
         if(detail==null){empty(busy?"正在读取比赛数据":"比赛详情暂不可用",busy?"将显示来源提供的真实阵容、统计和比赛进程。":"请检查网络并重新加载。比分列表仍保留最近的来源记录。");}
-        else if(tab.equals("overview"))overview();else if(tab.equals("stats"))statistics();else if(tab.equals("events"))events();else tables("lineup");
+        else if(match.group.equals("LOL"))lol();else if(tab.equals("overview"))overview();else if(tab.equals("stats"))statistics();else if(tab.equals("events"))events();else tables("lineup");
         if(preserve)scroll.post(()->scroll.scrollTo(0,y));
     }
-    private String statusText(){return detail==null?(busy?"正在读取详情…":"尚未获取详情"):(System.currentTimeMillis()-detail.fetched>120_000?"缓存 · ":"")+detail.source+" · "+time(detail.fetched,"M月d日 HH:mm:ss")+" 更新";}
-    private String detailKey(){try{org.json.JSONObject value=detail.json();value.remove("fetched");org.json.JSONObject score=value.optJSONObject("match");if(score!=null)score.remove("updated");return tab+":"+error+":"+value;}catch(org.json.JSONException e){return tab+":"+error+":"+detail.fetched;}}
+    private String statusText(){if(detail==null)return busy?"正在读取详情…":"尚未获取详情";if(match.group.equals("LOL"))return detail.lolFetched>0?"小局 "+time(detail.lolFetched,"HH:mm:ss")+" 获取 · 赛程 "+time(match.updated,"HH:mm:ss")+" 发布":"赛程 "+time(detail.fetched,"HH:mm:ss")+" 获取 · 小局尚未提供";return (System.currentTimeMillis()-detail.fetched>120_000?"缓存 · ":"")+detail.source+" · "+time(detail.fetched,"M月d日 HH:mm:ss")+" 获取";}
+    private String detailKey(){try{org.json.JSONObject value=detail.json();value.remove("fetched");value.remove("lolFetched");org.json.JSONObject score=value.optJSONObject("match");if(score!=null)score.remove("updated");return tab+":"+selectedGame+":"+error+":"+value;}catch(org.json.JSONException e){return tab+":"+error+":"+detail.fetched;}}
     private void scoreHeader(){
+        if(match.group.equals("LOL")){lolScoreHeader();return;}
         LinearLayout hero=ui.column();hero.setPadding(ui.dp(20),ui.dp(10),ui.dp(20),ui.dp(14));
         TextView state=ui.text(match.status+(match.timeConfirmed?" · "+time(match.start,"M月d日 HH:mm"):" · 时间待定"),12,ui.muted,true);state.setGravity(Gravity.CENTER);hero.addView(state);ui.gap(hero,14);
         if(match.group.equals("F1")){TextView title=ui.text(match.displayTitle(),22,ui.text,true);title.setGravity(Gravity.CENTER);hero.addView(title);}
         else {LinearLayout sides=ui.row();sides.setGravity(Gravity.CENTER);sides.addView(team(match.home,match.homeLogo),new LinearLayout.LayoutParams(0,-2,1));TextView score=ui.text(match.hasScore()?match.homeScore+" : "+match.awayScore:"VS",match.hasScore()?36:25,ui.text,true);score.setGravity(Gravity.CENTER);score.setPadding(ui.dp(12),0,ui.dp(12),0);sides.addView(score,new LinearLayout.LayoutParams(-2,-2));sides.addView(team(match.away,match.awayLogo),new LinearLayout.LayoutParams(0,-2,1));hero.addView(sides);}
         root.addView(hero);
     }
+    private void lolScoreHeader(){
+        LinearLayout hero=ui.row();hero.setGravity(Gravity.CENTER);hero.setPadding(ui.dp(20),ui.dp(8),ui.dp(20),ui.dp(12));
+        for(boolean home:new boolean[]{true,false}){if(!home){LinearLayout score=ui.column();score.setGravity(Gravity.CENTER);score.addView(ui.text(match.hasScore()?match.homeScore+" : "+match.awayScore:"VS",28,ui.text,true));ui.gap(score,4);score.addView(ui.text(match.status,11,ui.muted,false));hero.addView(score,new LinearLayout.LayoutParams(0,-2,1));}LinearLayout team=ui.column();team.setGravity(Gravity.CENTER);team.addView(Logos.view(ui,home?match.homeLogo:match.awayLogo,home?match.home:match.away,30));ui.gap(team,5);TextView name=ui.text(home?match.home:match.away,13,ui.text,true);name.setGravity(Gravity.CENTER);team.addView(name,new LinearLayout.LayoutParams(-1,-2));hero.addView(team,new LinearLayout.LayoutParams(0,-2,1));}root.addView(hero);
+    }
     private LinearLayout team(String name,String logo){LinearLayout side=ui.column();side.setGravity(Gravity.CENTER);side.addView(Logos.view(ui,logo,name,44));ui.gap(side,8);TextView t=ui.text(name,13,ui.text,true);t.setGravity(Gravity.CENTER);side.addView(t,new LinearLayout.LayoutParams(-1,-2));return side;}
-    private String lineupName(){return switch(match.group){case "足球","LOL"->"阵容";case "F1"->"车手";case "CS2"->"选手";default->"球员";};}
-    private void tabs(){LinearLayout row=ui.row();boolean f1=match.group.equals("F1");String[] keys=f1?new String[]{"overview","lineup","stats"}:new String[]{"overview","lineup","stats","events"};String[] names=f1?new String[]{"总览",lineupName(),"成绩"}:new String[]{"总览",lineupName(),"统计",match.group.equals("CS2")||match.group.equals("LOL")?"小局":"进程"};for(int i=0;i<keys.length;i++){String key=keys[i];LinearLayout item=ui.column();item.setGravity(Gravity.CENTER);ui.clickable(item,ui.bg,0);item.setFocusable(true);item.setSelected(tab.equals(key));item.setContentDescription(names[i]+(tab.equals(key)?"，已选中":""));TextView text=ui.text(names[i],14,tab.equals(key)?ui.text:ui.muted,tab.equals(key));text.setGravity(Gravity.CENTER);text.setMinHeight(ui.dp(48));item.addView(text,new LinearLayout.LayoutParams(-1,-2));View line=new View(this);line.setBackgroundColor(tab.equals(key)?ui.text:ui.bg);item.addView(line,new LinearLayout.LayoutParams(ui.dp(28),ui.dp(2)));item.setOnClickListener(v->{tab=key;render(false);});row.addView(item,new LinearLayout.LayoutParams(0,-2,1));}root.addView(row);}
+    private String lineupName(){return switch(match.group){case "足球"->"阵容";case "LOL"->"比赛";case "F1"->"车手";case "CS2"->"选手";default->"球员";};}
+    private void tabs(){LinearLayout row=ui.row();boolean f1=match.group.equals("F1"),lol=match.group.equals("LOL");String[] keys=f1||lol?new String[]{"overview","lineup","stats"}:new String[]{"overview","lineup","stats","events"};String[] names=f1?new String[]{"总览",lineupName(),"成绩"}:lol?new String[]{"总览","比赛","统计"}:new String[]{"总览",lineupName(),"统计",match.group.equals("CS2")?"小局":"进程"};for(int i=0;i<keys.length;i++){String key=keys[i];LinearLayout item=ui.column();item.setGravity(Gravity.CENTER);ui.clickable(item,ui.bg,0);item.setFocusable(true);item.setSelected(tab.equals(key));item.setContentDescription(names[i]+(tab.equals(key)?"，已选中":""));TextView text=ui.text(names[i],14,tab.equals(key)?ui.text:ui.muted,tab.equals(key));text.setGravity(Gravity.CENTER);text.setMinHeight(ui.dp(48));item.addView(text,new LinearLayout.LayoutParams(-1,-2));View line=new View(this);line.setBackgroundColor(tab.equals(key)?ui.text:ui.bg);item.addView(line,new LinearLayout.LayoutParams(ui.dp(28),ui.dp(2)));item.setOnClickListener(v->{tab=key;render(false);});row.addView(item,new LinearLayout.LayoutParams(0,-2,1));}root.addView(row);}
+    private void lol(){
+        LolMatchView view=new LolMatchView(ui,detail,body,number->{selectedGame=number;if(tab.equals("overview"))tab="lineup";render(false);});
+        if(tab.equals("overview")){view.overview();heading("比赛信息");for(MatchDetail.Fact fact:detail.facts)fact(fact.label(),fact.value());fact("开赛时间",time(match.start,"M月d日 HH:mm"));fact("数据来源",detail.source);fact("获取时间",time(detail.fetched,"M月d日 HH:mm:ss"));fact("赛程发布",time(match.updated,"M月d日 HH:mm:ss"));if(detail.lolFetched>0)fact("小局获取",time(detail.lolFetched,"M月d日 HH:mm:ss"));}
+        else view.games(selectedGame,tab.equals("stats"));
+        ui.gap(body,18);body.addView(ui.text("计时与数据按来源返回值更新，未提供的项目显示 —。",12,ui.muted,false));
+    }
     private void heading(String s){ui.gap(body,22);TextView title=ui.text(s,16,ui.text,true);body.addView(title);ui.gap(body,12);}
     private void overview(){
         tables("overview");heading("比赛信息");for(MatchDetail.Fact fact:detail.facts)fact(fact.label(),fact.value());

@@ -68,7 +68,14 @@ public final class DetailParsers {
         m.url="https://lpl.qq.com/es/stats.shtml?bmid="+base.optString("bMatchId");m.detail=tournament+" · "+base.optString("GameModeName")+" · "+base.optString("GameTypeName");MatchDetail d=new MatchDetail(m);d.fetched=now;d.fact("赛事",tournament);d.fact("赛制",base.optString("GameModeName"));d.fact("阶段",base.optString("GameTypeName"));d.fact("轮次",base.optString("GameProcName"));
         JSONObject data=obj(rich,"data");if(rich.optBoolean("success")){
             if(!data.optString("matchId").equals(base.optString("bMatchId"))||!data.optString("teamAId").equals(m.homeId)||!data.optString("teamBId").equals(m.awayId))throw new Exception("LOL 小局身份或战队方向不匹配");
+            if(data.optString("matchStatus").equals("1")||data.optString("matchStatus").equals("2")){
+                m.state=data.optString("matchStatus").equals("1")?"live":"final";m.status=Rules.stateLabel(m.state);
+                m.homeScore=val(data,"teamAScore");m.awayScore=val(data,"teamBScore");
+            }
             d.source="英雄联盟赛事官网 · 腾竞数据";JSONArray games=arr(data,"matchInfos");MatchDetail.Table summary=new MatchDetail.Table("overview","已结束小局","局次","胜方","时长");
+            Set<Integer> gameNumbers=new HashSet<>();for(int i=0;i<games.length();i++){LolGame game=LolGame.parse(objAt(games,i),m);if(game!=null){if(!gameNumbers.add(game.number))throw new Exception("小局编号重复");d.lolGames.add(game);}}
+            d.lolGames.sort(Comparator.comparingInt(game->game.number));
+            if(!d.lolGames.isEmpty())d.lolFetched=now;
             for(int i=0;i<games.length();i++){JSONObject game=objAt(games,i);if(!game.optString("matchStatus").equals("2"))continue;String win=game.optString("matchWin");if(!win.equals(m.homeId)&&!win.equals(m.awayId))continue;String gameName="第 "+game.optString("bo",String.valueOf(i+1))+" 局";long start=Match.parseTime(game.optString("matchStartTime")),end=Match.parseTime(game.optString("matchEndTime"));String duration=end>start&&start>0?((end-start)/60000)+":"+String.format(Locale.ROOT,"%02d",(end-start)/1000%60):"—";summary.row(gameName,win.equals(m.homeId)?m.home:m.away,duration);d.events.add(new MatchDetail.Event(gameName,win.equals(m.homeId)?m.home+" 获胜":m.away+" 获胜","用时 "+duration));
                 MatchDetail.Table totals=new MatchDetail.Table("stats",gameName+" · 团队数据","球队","击杀","经济","推塔","小龙","大龙","巢虫");JSONArray teams=arr(game,"teamInfos");
                 for(int j=0;j<teams.length();j++){JSONObject team=objAt(teams,j);String tid=team.optString("teamId");if(!tid.equals(m.homeId)&&!tid.equals(m.awayId))continue;String name=tid.equals(m.homeId)?m.home:m.away;totals.row(name,show(val(team,"kills")),show(val(team,"golds")),show(val(team,"turretAmount")),show(val(team,"dragonAmount")),show(val(team,"baronAmount")),show(val(team,"voidGrubAmount")));

@@ -46,6 +46,8 @@ public final class Repository {
     private static final ExecutorService DATES=Executors.newFixedThreadPool(8);
     private final Context context;
     private static final Object CACHE_LOCK=new Object();
+    private record Failure(int count,long until,String message){}
+    private final Map<String,Failure> failures=new ConcurrentHashMap<>();
     public Repository(Context c) {context=c.getApplicationContext();}
 
     public Snapshot cached(LocalDate from, LocalDate to, String group) {
@@ -75,7 +77,9 @@ public final class Repository {
     }
     private Batch fetchOne(Competition c,LocalDate from,LocalDate to,boolean force) {
         Batch b=load(c,from,to);long now=System.currentTimeMillis();
-        long ttl=to.isAfter(from)?300_000:c.esports()?60_000:15_000;
+        long ttl=to.isAfter(from)?300_000:RefreshPolicy.SCORE_CACHE;
+        String key=c.id+":"+from+":"+to;Failure previous=failures.get(key);
+        if(!force&&previous!=null&&previous.until>now){b.error=previous.message;return b;}
         if(!force && b.fetched>0 && now-b.fetched>=0 && now-b.fetched<ttl) return b;
         try {
             List<Match> matches;
@@ -86,9 +90,10 @@ public final class Repository {
             }
             b.matches.clear();
             for(Match m:matches) if(m.day()==null || (!m.day().isBefore(from) && !m.day().isAfter(to))) b.matches.add(m);
-            b.fetched=now;b.error="";save(b,from,to);
+            b.fetched=now;b.error="";failures.remove(key);save(b,from,to);
         } catch(Exception e) {
             b.error=e instanceof java.net.SocketTimeoutException?"连接超时":e.getMessage()==null?"连接失败":e.getMessage();
+            int count=previous==null?1:previous.count+1;if(failures.size()>100)failures.clear();failures.put(key,new Failure(count,now+RefreshPolicy.retry(RefreshPolicy.SCORES,count),b.error));
         }
         return b;
     }
@@ -105,7 +110,7 @@ public final class Repository {
             days.add(DATES.submit(()-> {
                 Batch cached=load(c,day,day,"day_");
                 LocalDate utc=InstantNow.utcDay(now);
-                long ttl=day.isAfter(utc)?30*60_000L:day.isBefore(utc.minusDays(1))?6*60*60_000L:15_000L;
+                long ttl=cached.matches.stream().anyMatch(Match::live)?RefreshPolicy.SCORE_CACHE:day.isAfter(utc)?30*60_000L:day.isBefore(utc.minusDays(1))?6*60*60_000L:RefreshPolicy.SCORE_CACHE;
                 if(!force && cached.fetched>0 && now-cached.fetched>=0 && now-cached.fetched<ttl)return cached.matches;
                 String url="https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/scoreboard?dates="+day.format(DateTimeFormatter.BASIC_ISO_DATE)+"&limit=1000";
                 List<Match> parsed=Parsers.espn(new JSONObject(get(url)),c,now);

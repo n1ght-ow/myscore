@@ -24,8 +24,8 @@ public final class SmokeInstrumentation extends Instrumentation {
     private Context context;
     private long calendar=-1;
     private java.util.Map<String,?> originalSettings,originalLinks;
-    private boolean network,details;
-    @Override public void onCreate(Bundle arguments){super.onCreate(arguments);network=arguments!=null&&"true".equals(arguments.getString("network"));details=arguments!=null&&"true".equals(arguments.getString("details"));start();}
+    private boolean network,details,lol;
+    @Override public void onCreate(Bundle arguments){super.onCreate(arguments);network=arguments!=null&&"true".equals(arguments.getString("network"));details=arguments!=null&&"true".equals(arguments.getString("details"));lol=arguments!=null&&"true".equals(arguments.getString("lol"));start();}
     private void check(boolean condition,String description){if(!condition)throw new AssertionError(description);checks++;android.util.Log.i("MyScoreTests","PASS "+description);}
     @Override public void onStart() {
         Bundle report=new Bundle();int outcome=Activity.RESULT_OK;
@@ -42,6 +42,7 @@ public final class SmokeInstrumentation extends Instrumentation {
             calendarChecks();
             checks+=UiChecks.run(this,activity);
             checks+=UpdateChecks.run(this,context);
+            if(lol)checks+=LolChecks.run(this,context);
             if(details){DetailChecks.run(this,context);checks+=DetailChecks.checks;}
             if(network){LocalDate day=Match.today(System.currentTimeMillis());Repository.Snapshot snapshot=new Repository(context).fetch(day,day,"全部",true);StringBuilder sources=new StringBuilder();for(Repository.Batch batch:snapshot.batches){sources.append(batch.competition.id).append(": ").append(batch.error.isEmpty()?"OK "+batch.matches.size():batch.error).append('\n');check(batch.error.isEmpty(),"device source: "+batch.competition.id+" "+batch.error);}report.putString("sources",sources.toString());}
             report.putInt("checks",checks);report.putString("stream","\nPASS: "+checks+" Android runtime checks.\n");

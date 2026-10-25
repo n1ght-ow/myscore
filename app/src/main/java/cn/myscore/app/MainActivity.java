@@ -96,21 +96,21 @@ public final class MainActivity extends Activity {
         if(tab==1 || !active)return;
         if(!loadedDay.equals(Match.today(System.currentTimeMillis()))){loadedDay=Match.today(System.currentTimeMillis());select(tab,group,dayOffset,true);return;}
         if(busy){pending=true;return;}
-        busy=true;pending=false;String tag=queryTag();LocalDate f=from(),t=to();String g=group;long started=System.currentTimeMillis();final boolean[] first={true};final boolean stable=!snapshot.matches().isEmpty();
+        busy=true;pending=false;String tag=queryTag();LocalDate f=from(),t=to();String g=group;long started=System.currentTimeMillis();final boolean[] first={true};
         if(loadingText!=null)loadingText.setText("正在更新比赛…");
         executor.submit(()-> {
             Repository.Snapshot next=repository.fetch(f,t,g,force,batch -> handler.post(()-> {
                 if(first[0]){first[0]=false;android.util.Log.i("MyScorePerf","first source "+batch.competition.id+" in "+(System.currentTimeMillis()-started)+"ms");}
                 if(isDestroyed()||!active||!tag.equals(queryTag()))return;
                 snapshot.merge(batch);
-                if(!stable){handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,150);}
+                handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,150);
             }));
             handler.post(()-> {
                 busy=false;if(isDestroyed())return;
                 android.util.Log.i("MyScorePerf","all sources in "+(System.currentTimeMillis()-started)+"ms");
                 handler.removeCallbacks(renderSoon);
                 if(tag.equals(queryTag())){snapshot=next;if(active)render(true);}
-                if(active){if(pending || !tag.equals(queryTag()))load(false);else handler.postDelayed(tick,next.failed()?60_000:15_000);}
+                if(active){if(pending || !tag.equals(queryTag()))load(false);else handler.postDelayed(tick,RefreshPolicy.remaining(RefreshPolicy.SCORES,System.currentTimeMillis()-started));}
             });
         });
     }
@@ -312,7 +312,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(ui.dp(18),ui.dp(18));ip.setMarginStart(ui.dp(12));row.addView(new Ui.Icon(this,"chevron",ui.muted),ip);row.setOnClickListener(v->action.run());into.addView(row);
     }
     private void openCalendar(){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("content://com.android.calendar/time/"+System.currentTimeMillis())));}catch(android.content.ActivityNotFoundException e){message("没有找到日历应用","请先安装或启用系统日历。");}}
-    private void help(){message("使用帮助","在比赛卡上点日历加号订阅，点勾选可取消。提醒由系统日历发送；小米 / 澎湃 OS 需要允许日历通知与后台运行。\n\n更换接收日历只影响新订阅，已有事件保留在原日历。\n\n体育由 ESPN 提供；CS2 仅 Spirit 主队，来自 5EPlay；LOL 仅 Worlds，来自英雄联盟赛事官网。体育约 15 秒刷新，电竞至少间隔 60 秒；连接失败时保留真实缓存，缺失数据不补零。");}
+    private void help(){message("使用帮助","在比赛卡上点日历加号订阅，点勾选可取消。提醒由系统日历发送；小米 / 澎湃 OS 需要允许日历通知与后台运行。\n\n更换接收日历只影响新订阅，已有事件保留在原日历。\n\n体育由 ESPN 提供；CS2 仅 Spirit 主队，来自 5EPlay；LOL 仅 Worlds，来自英雄联盟赛事官网。前台列表约 10 秒检查，进行中详情约 10 秒（F1 约 15 秒）；失败时延长重试间隔。来源本身可能延迟；连接失败保留真实缓存，缺失数据不补零。");}
     private String calendarName(){String name=calendarSync.calendarName();return name==null||name.isBlank()?"选择手机日历":name;}
     private void calendarChoice(){chooseCalendar(null);}
     private void chooseCalendar(Runnable after) {

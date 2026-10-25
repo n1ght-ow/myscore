@@ -23,12 +23,16 @@ final class Logos {
     private static final ConcurrentHashMap<String,CompletableFuture<Bitmap>> IN_FLIGHT=new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String,Long> FAILED=new ConcurrentHashMap<>();
     static FrameLayout view(Ui ui,String url,String name,int size) {
+        return view(ui,url,name,size,false);
+    }
+    static FrameLayout artwork(Ui ui,String url,String name,int size){return view(ui,url,name,size,true);}
+    private static FrameLayout view(Ui ui,String url,String name,int size,boolean artwork) {
         FrameLayout box=new FrameLayout(ui.c);box.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         box.setLayoutParams(new android.widget.LinearLayout.LayoutParams(ui.dp(size),ui.dp(size)));
         // White backing keeps original dark crests readable in both themes.
-        box.setBackground(ui.shape(0xffFFFFFF,8));
-        TextView fallback=ui.text(initials(name),size>40?16:11,0xff656870,true);fallback.setGravity(Gravity.CENTER);box.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
-        ImageView image=new ImageView(ui.c);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setPadding(ui.dp(3),ui.dp(3),ui.dp(3),ui.dp(3));box.addView(image,new FrameLayout.LayoutParams(-1,-1));
+        box.setBackground(ui.shape(artwork?ui.tonal:0xffFFFFFF,8));box.setClipToOutline(artwork);
+        TextView fallback=ui.text(initials(name),size>40?16:11,artwork?ui.muted:0xff656870,true);fallback.setGravity(Gravity.CENTER);box.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
+        ImageView image=new ImageView(ui.c);image.setScaleType(ImageView.ScaleType.FIT_CENTER);int padding=artwork?0:ui.dp(3);image.setPadding(padding,padding,padding,padding);box.addView(image,new FrameLayout.LayoutParams(-1,-1));
         if(!allowed(url))return box;
         Bitmap memory=MEMORY.get(url);
         if(memory!=null){image.setImageBitmap(memory);fallback.setVisibility(android.view.View.GONE);return box;}

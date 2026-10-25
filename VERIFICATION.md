@@ -1,3 +1,35 @@
+# MyScore 0.9.1 切换赛事项目闪烁修复验证
+
+日期：2026-10-25，北京时间。发布版本为 0.9.1；README 与 GitHub Release 使用同一已验证 APK，0.9.0 或以上版本可通过应用内更新覆盖升级。
+
+## 问题与修复
+
+- 录屏逐帧复现：在「全部 → NFL → NBA」切换时，顶部 chip 已经改变，但列表仍短暂保留旧项目内容，随后出现一帧「这个日期没有已确认的比赛」，最后才显示目标项目；整页 root、列表和导航同时重建。
+- 根因是 `select()` 在读取目标项目缓存之前先执行 `snapshot = new Snapshot()`，再 `render(false)` 重建整页：空 snapshot 被当成「没有比赛」渲染，缓存回调到达后又重建一次。
+- 现在切换项目/日期走 `inPlace` 路径：只重建顶部标题、筛选和日期层，保留 `ScoreList`、`ScoreAdapter` 和底部导航；列表回到顶部后等待数据。
+- 已加载的全量 `allSnapshot` 用于本地即时筛选目标项目；缓存返回时直接原地换行。缓存为空时保留本地结果，不先清空。
+- 缓存读取后才调用 `load()`；无数据且请求进行中时只显示 11sp「正在读取赛程…」，不再显示「这个日期没有已确认的比赛」。请求全部失败后才显示空状态和失败横幅。
+- 缓存/选中数据直接调用 `updateScoreRows()`，不经过滚动延后路径；列表实例、adapter 和滚动容器保持同一对象。
+
+## 构建与测试
+
+- APK：`artifacts/MyScore-0.9.1.apk`，883,452 字节；SHA-256：`6581270411CE802FA136EF950DB801F876D2E47356E270DA3EA703CEBA4F0A2F`。
+- 包名 `cn.myscore.app`，versionCode 12、versionName 0.9.1；minSdk 28、targetSdk 35。无新增依赖；沿用 debug 签名，证书 SHA-256 与 0.9.0 相同：`e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 75 项单元测试通过；`:app:lintDebug` 0 errors、20 warnings；构建日志 `artifacts/build-0.9.1.log`。
+- 最终 APK 通过 327 项 Android 运行检查（0.9.0 的 323 项 + 4 项切换项目检查），日志 `artifacts/android-tests-091.txt`。
+- 同一 APK 在 1.3 倍系统字号下同样通过 327 项检查；日志 `artifacts/android-tests-091-large-full.txt`。
+- 新增检查断言切换 NFL 后 `ScoreList` 和 `ScoreAdapter` 为同一实例、空状态文本未出现、NFL chip 处于 selected；再切回「全部」继续设置页和重建测试。
+- 600 次随机 monkey 事件无崩溃/ANR；日志 `artifacts/monkey-091.txt`。
+- 0.9.1 录屏：`artifacts/switch-091.mp4`，6 秒/177 帧；`artifacts/switch-091-transition.png` 覆盖全部→NFL→NBA→全部，逐帧未见「这个日期没有已确认的比赛」空状态，列表只在目标数据到达时换成对应项目。
+- APK 已用 apksigner 校验，证书与 0.9.0 一致。
+
+## 边界
+
+- 录屏和运行检查在 API 35 / Android 15 x86_64 模拟器上完成，不是 K80 Pro；真机 120 Hz 手感、触控和移动网络仍未验收。
+- 本地即时筛选依赖启动后加载过的「全部」快照；若没有全量快照，切换依靠目标项目缓存，读取期间保留当前列表或显示「正在读取赛程…」，不会先显示空状态。
+- 本次只修复切换项目的闪烁和错误空状态，不改变 0.9.0 的取数、日历和详情刷新策略。
+
+---
 # MyScore 0.9.0 流畅性与稳定性验证
 
 日期：2026-10-25，北京时间。发布版本为 0.9.0；README 与 GitHub Release 使用同一已验证 APK，0.6.0 或以上版本可通过应用内更新覆盖升级。本记录只证明该 APK 在模拟器上的行为，不冒充真机结果。

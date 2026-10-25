@@ -33,6 +33,8 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private SharedPreferences prefs;
     private Repository repository;
     private Repository.Snapshot snapshot=new Repository.Snapshot();
+    private Repository.Snapshot allSnapshot;
+    private LocalDate allSnapshotDay;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService executor=Executors.newSingleThreadExecutor();
     private final ExecutorService cacheWorker=Executors.newSingleThreadExecutor();
@@ -79,7 +81,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
             handler.post(()-> {
                 if(isDestroyed())return;
                 cacheReady=true;busy=false;
-                if(initialTag.equals(queryTag())){snapshot=cached;render(true);}load(false);
+                if(initialTag.equals(queryTag())){snapshot=cached;rememberAll(initialGroup,initialDay,cached);render(true);}load(false);
             });
             if(CalendarSync.permitted(this)) {
                 ensureCalendar(false);
@@ -115,7 +117,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
                 busy=false;if(isDestroyed())return;
                 android.util.Log.i("MyScorePerf","all sources in "+(System.currentTimeMillis()-started)+"ms");
                 handler.removeCallbacks(renderSoon);
-                if(tag.equals(queryTag())){snapshot=next;if(active)render(true);}
+                if(tag.equals(queryTag())){snapshot=next;rememberAll(g,f,next);if(active)render(true);}
                 if(active){if(pending || !tag.equals(queryTag()))load(false);else handler.postDelayed(tick,RefreshPolicy.remaining(RefreshPolicy.SCORES,System.currentTimeMillis()-started));}
             });
         });
@@ -125,11 +127,55 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     }
     private void select(int nextTab,String nextGroup,int offset,boolean force) {
         if(!force&&tab==nextTab&&group.equals(nextGroup)&&dayOffset==offset)return;
-        boolean sameQuery=group.equals(nextGroup)&&dayOffset==offset;
-        handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);tab=nextTab;group=nextGroup;dayOffset=offset;headerOffset=0;
-        if(tab==1||sameQuery&&!force){render(false);load(false);return;}
-        snapshot=new Repository.Snapshot();renderedScores="";renderedSettings="";render(false);String tag=queryTag();LocalDate day=from();String selectedGroup=group;
-        cacheWorker.submit(()->{Repository.Snapshot cached=repository.cached(day,day,selectedGroup);handler.post(()->{if(isDestroyed()||!tag.equals(queryTag()))return;snapshot=cached;render(true);load(false);});});
+        handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);
+        boolean inPlace=nextTab==0&&tab==0&&scoreList!=null;
+        tab=nextTab;group=nextGroup;dayOffset=offset;headerOffset=0;lastScoreScroll=0;
+        if(tab==1){render(false);load(false);return;}
+        LocalDate day=from();String selectedGroup=group;String tag=queryTag();
+        if(allSnapshotDay!=null&&!allSnapshotDay.equals(day)){allSnapshot=null;allSnapshotDay=null;}
+        Repository.Snapshot local=null;
+        if(allSnapshot!=null&&day.equals(allSnapshotDay)) {
+            if("全部".equals(selectedGroup))local=allSnapshot;
+            else {
+                Repository.Snapshot subset=subset(allSnapshot,selectedGroup);
+                if(!subset.matches().isEmpty())local=subset;
+            }
+        }
+        if(local!=null)snapshot=local;
+        renderedScores="";
+        if(inPlace)rebuildHeader();else render(false);
+        if(local!=null&&inPlace)updateScoreRows();
+        if(scoreList!=null){scoreList.setSelection(0);lastScoreScroll=0;}
+        final boolean keepLocal=local!=null;
+        cacheWorker.submit(()-> {
+            Repository.Snapshot cached=repository.cached(day,day,selectedGroup);
+            handler.post(()-> {
+                if(isDestroyed()||!tag.equals(queryTag()))return;
+                if(cached.matches().isEmpty()&&keepLocal){load(false);return;}
+                snapshot=cached;rememberAll(selectedGroup,day,cached);
+                load(false);
+                if(!tag.equals(queryTag()))return;
+                renderedScores="";updateScoreRows();
+                if(BuildConfig.DEBUG)android.util.Log.i("MyScorePerf","selection cache group="+selectedGroup+" items="+cached.matches().size());
+            });
+        });
+    }
+    private static Repository.Snapshot subset(Repository.Snapshot source,String group){
+        Repository.Snapshot result=new Repository.Snapshot();
+        for(Repository.Batch batch:source.batches)if("全部".equals(group)||batch.competition.group.equals(group))result.batches.add(batch);
+        return result;
+    }
+    private void rememberAll(String selectedGroup,LocalDate day,Repository.Snapshot value){
+        if("全部".equals(selectedGroup)&&!value.matches().isEmpty()){allSnapshot=value;allSnapshotDay=day;}
+    }
+    /** Rebuilds only the app bar layer; the score list keeps its instance, adapter and rows. */
+    private void rebuildHeader() {
+        if(headerView==null||isFinishing()||isDestroyed())return;
+        headerView.removeAllViews();
+        header(headerView);filters(headerView);dateSelector(headerView);headerView.addView(ui.divider());
+        headerHeight=measureHeader();
+        if(scoreList!=null)scoreList.setPadding(ui.dp(16),headerHeight,ui.dp(16),ui.dp(24));
+        headerView.setTranslationY(0);headerView.post(this::syncHeaderHeight);
     }
 
     /** Preserved updates only touch the data layer; the header, list and scroll offset stay put. */
@@ -231,7 +277,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private String scoreSignature(List<Match> all) {
         long now=System.currentTimeMillis();
         StringBuilder key=new StringBuilder(256);
-        key.append(tab).append('|').append(busy&&all.isEmpty()).append('|').append(snapshot.failed());
+        key.append(group).append('|').append(tab).append('|').append(busy&&all.isEmpty()).append('|').append(snapshot.failed());
         for(Repository.Batch batch:snapshot.batches)key.append('|').append(batch.competition.id).append(':').append(batch.error);
         for(Match m:all) {
             key.append('|').append(m.id).append(',').append(m.league).append(',').append(m.group).append(',')
@@ -245,14 +291,19 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     }
     private List<ScoreRow> buildScoreRows(List<Match> all) {
         List<ScoreRow> rows=new ArrayList<>();
-        if(busy&&all.isEmpty())rows.add(ScoreRow.loading("正在更新比赛…"));
+        if(all.isEmpty()) {
+            // Never show "no matches" while a selection/source request is still running.
+            if(busy){rows.add(ScoreRow.loading("正在读取赛程…"));return rows;}
+            if(snapshot.failed()) {
+                int failures=0;for(Repository.Batch batch:snapshot.batches)if(!batch.error.isEmpty())failures++;
+                rows.add(ScoreRow.failure(failures+" 个赛事来源未更新 · 查看连接状态"));
+            }
+            rows.add(ScoreRow.empty("这个日期没有已确认的比赛","可以切换日期或赛事。连接失败的来源不代表没有比赛。"));
+            return rows;
+        }
         if(snapshot.failed()) {
             int failures=0;for(Repository.Batch batch:snapshot.batches)if(!batch.error.isEmpty())failures++;
             rows.add(ScoreRow.failure(failures+" 个赛事来源未更新 · 查看连接状态"));
-        }
-        if(all.isEmpty()) {
-            rows.add(ScoreRow.empty(busy?"正在读取赛程":"这个日期没有已确认的比赛",busy?"首次加载需要连接赛事来源。":"可以切换日期或赛事。连接失败的来源不代表没有比赛。"));
-            return rows;
         }
         String[] stages={"live","scheduled","delayed","unknown","final","cancelled"};
         for(String stage:stages) {

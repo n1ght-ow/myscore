@@ -39,7 +39,9 @@ final class ScoreAdapter extends BaseAdapter {
         boolean same=next.size()==rows.size();
         if(same)for(int i=0;i<next.size();i++)if(!next.get(i).key().equals(rows.get(i).key())){same=false;break;}
         rows=next;
-        if(!same){notifyDataSetChanged();return true;}
+        // After a structural update, attached children still belong to the previous rows
+        // until ListView lays out. Let it recycle by view type instead of rebinding them.
+        if(!same||(list!=null&&list.isLayoutRequested())){notifyDataSetChanged();return true;}
         if(list==null)return false;
         int first=list.getFirstVisiblePosition();
         for(int i=0;i<list.getChildCount();i++){int position=first+i;if(position>=0&&position<rows.size())getView(position,list.getChildAt(i),list);}
@@ -103,10 +105,11 @@ final class ScoreAdapter extends BaseAdapter {
         return (m.timeConfirmed?m.time()+" · 北京时间":"时间待定")+"\n"+(m.source.isBlank()?"":m.source+" · ")+updated;
     }
     private String stateText(Match m){return Rules.stateLabel(m.state);}
+    private void text(TextView view,String value){if(!value.contentEquals(view.getText()))view.setText(value);}
     private void state(TextView label,Match m){
-        label.setVisibility(View.VISIBLE);label.setText(m.live()&&!m.status.isBlank()?m.status:stateText(m));
+        label.setVisibility(View.VISIBLE);text(label,m.live()&&!m.status.isBlank()?m.status:stateText(m));
         label.setTextColor(m.live()?ui.primary:m.cancelled()?ui.error:ui.muted);
-        label.setBackground(ui.shape(m.live()?ui.tonal:Color.TRANSPARENT,6));
+        if(label.getBackground()==null||label.isActivated()!=m.live()){label.setActivated(m.live());label.setBackground(ui.shape(m.live()?ui.tonal:Color.TRANSPARENT,6));}
     }
     private void subscription(Ui.Icon icon,Match m,FrameLayout sub) {
         boolean isSubscribed=host.isSubscribed(m.id);
@@ -131,13 +134,13 @@ final class ScoreAdapter extends BaseAdapter {
             ui.clickable(card,ui.surface,Ui.CARD_RADIUS);card.setFocusable(true);
             card.setOnClickListener(v->{if(match!=null)host.openMatch(match);});
             metaRow=ui.row();
-            league=ui.text("",11,ui.muted,true);league.setMaxLines(2);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
-            state=ui.text("",11,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),ui.dp(5),ui.dp(8),ui.dp(5));LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(-2,-2);stateParams.setMarginStart(ui.dp(8));metaRow.addView(state,stateParams);
+            league=ui.text("",11,ui.muted,true);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
+            state=ui.text("",11,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),ui.dp(5),ui.dp(8),ui.dp(5));LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(0,-2,1);stateParams.setMarginStart(ui.dp(8));metaRow.addView(state,stateParams);
             card.addView(metaRow);ui.gap(card,12);
 
             LinearLayout homeRow=ui.row();
             homeCrest=Logos.crest(ui,28,false);homeRow.addView(homeCrest.box);
-            home=ui.text("",14,ui.text,true);home.setMaxLines(2);home.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            home=ui.text("",14,ui.text,true);
             LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,-2,1);hp.setMarginStart(ui.dp(10));homeRow.addView(home,hp);
             homeScore=teamScore("—");
             LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.setMarginStart(ui.dp(12));homeRow.addView(homeScore,sp);
@@ -145,7 +148,7 @@ final class ScoreAdapter extends BaseAdapter {
 
             LinearLayout awayRow=ui.row();
             awayCrest=Logos.crest(ui,28,false);awayRow.addView(awayCrest.box);
-            away=ui.text("",14,ui.text,true);away.setMaxLines(2);away.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            away=ui.text("",14,ui.text,true);
             LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-2,1);ap.setMarginStart(ui.dp(10));awayRow.addView(away,ap);
             awayScore=teamScore("—");
             LinearLayout.LayoutParams asp=new LinearLayout.LayoutParams(-2,-2);asp.setMarginStart(ui.dp(12));awayRow.addView(awayScore,asp);
@@ -167,14 +170,14 @@ final class ScoreAdapter extends BaseAdapter {
         void bind(Match m) {
             match=m;
             Competition comp=Competition.find(m.league);
-            league.setText(comp==null?m.group:comp.name);
+            text(league,comp==null?m.group:comp.name);
             state(state,m);
-            home.setText(m.home);
-            away.setText(m.away);
-            homeScore.setText(m.hasScore()?m.homeScore:"—");
-            awayScore.setText(m.hasScore()?m.awayScore:"—");
+            text(home,m.home);
+            text(away,m.away);
+            text(homeScore,m.hasScore()?m.homeScore:"—");
+            text(awayScore,m.hasScore()?m.awayScore:"—");
             homeScore.setTextColor(m.live()?ui.primary:ui.text);awayScore.setTextColor(m.live()?ui.primary:ui.text);
-            foot.setText(footnote(m));
+            text(foot,footnote(m));
             boolean staleNow=m.live()&&System.currentTimeMillis()-m.updated>120_000;
             stale.setVisibility(staleNow?View.VISIBLE:View.GONE);
             Logos.bind(homeCrest,m.homeLogo,m.home);
@@ -197,7 +200,7 @@ final class ScoreAdapter extends BaseAdapter {
             card.setOnClickListener(v->{if(match!=null)host.openMatch(match);});
             LinearLayout metaRow=ui.row();
             league=ui.text("",11,ui.muted,true);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
-            state=ui.text("",11,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),ui.dp(5),ui.dp(8),ui.dp(5));metaRow.addView(state,new LinearLayout.LayoutParams(-2,-2));
+            state=ui.text("",11,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),ui.dp(5),ui.dp(8),ui.dp(5));metaRow.addView(state,new LinearLayout.LayoutParams(0,-2,1));
             card.addView(metaRow);ui.gap(card,12);
             title=ui.text("",17,ui.text,true);card.addView(title);
             first=ui.text("",12,ui.muted,false);first.setPadding(0,ui.dp(5),0,0);card.addView(first);
@@ -219,12 +222,12 @@ final class ScoreAdapter extends BaseAdapter {
         void bind(Match m) {
             match=m;
             Competition comp=Competition.find(m.league);
-            league.setText(comp==null?m.group:comp.name);
+            text(league,comp==null?m.group:comp.name);
             state(state,m);
-            title.setText(m.displayTitle());
-            first.setText(m.results.size()>0?m.results.get(0):"");first.setVisibility(m.results.size()>0?View.VISIBLE:View.GONE);
-            second.setText(m.results.size()>1?m.results.get(1):"");second.setVisibility(m.results.size()>1?View.VISIBLE:View.GONE);
-            foot.setText(footnote(m));
+            text(title,m.displayTitle());
+            text(first,m.results.size()>0?m.results.get(0):"");first.setVisibility(m.results.size()>0?View.VISIBLE:View.GONE);
+            text(second,m.results.size()>1?m.results.get(1):"");second.setVisibility(m.results.size()>1?View.VISIBLE:View.GONE);
+            text(foot,footnote(m));
             boolean staleNow=m.live()&&System.currentTimeMillis()-m.updated>120_000;
             stale.setVisibility(staleNow?View.VISIBLE:View.GONE);
             subscription(subIcon,m,sub);

@@ -1,3 +1,94 @@
+# MyScore 1.0 发布核验
+
+日期：2026-10-25，北京时间。发布标签 `v1.0`，APK 文件名 `MyScore-1.0.apk`。
+
+## 发布范围
+
+- 汇总尚未发布的 0.10.1 稳定性 / 文字显示修复与 0.10.2 透明队标修复；下方保留这些本地版本的独立历史记录。
+- 应用 versionName 为用户指定的 `1.0`，versionCode 16，包名 `cn.myscore.app`，minSdk 28 / targetSdk 35。没有新增生产依赖；沿用原有个人 debug 签名。
+- 更新器现在同时识别两段和三段正式版本号，缺省 patch 按 0 比较，继续拒绝前导零、预发布和非本仓库附件；下载目录清理也支持两段版本文件名。新增两项 JUnit 覆盖版本比较、`v1.0` 附件解析与保存恢复。
+- **从 0.x 首次升到 1.0 必须手动覆盖安装。** 已发布旧客户端的三段版本解析规则无法通过服务器附件绕过；1.0 起支持后续两段 / 三段更新。签名一致，无需卸载，不要求清除设置、缓存或日历关联。
+
+## 本发布包已验证
+
+- `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest` 全部通过，日志 `artifacts/build-1.0.log`。93 项 JUnit，0 failures/errors；Lint 0 errors、20 warnings。
+- 实际 1.0 APK 在 API 35 / Android 15 x86_64 模拟器（1080×2400、420dpi、1.0 字号）通过 465 项完整运行检查，启用 `network=true details=true lol=true`；覆盖来源、日历、设置重建、更新签名校验与版本显示、文字 / 队标布局、浅深详情与 LoL 小局。日志 `artifacts/android-tests-1.0.txt`、`artifacts/android-tests-1.0-runtime.log`。
+- 同一 APK 在实际 360dp 窗口、1.3 倍系统字号下通过 202 项基础回归，本轮不再次执行全套在线详情；日志 `artifacts/android-tests-1.0-360dp-large.txt`。结束后恢复原始分辨率与 1.0 字号。
+- 1.0 实际页面截图：`artifacts/review-1.0/` 40 张，`artifacts/review-lol-1.0/` 8 张；不使用设备目录内两张旧 `football-overview` 截图作为本版证据。
+- 发布 APK `artifacts/MyScore-1.0.apk`，899,548 字节，SHA-256：`092068d4c26b98dee90ecbad3e2f91a7340a5fbf668604c2e95a7012f0c1c1a8`；发布校验附件 `artifacts/SHA256SUMS-1.0.txt`。
+- aapt 核对包名 / SDK / 版本，apksigner 验证通过；证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`，与 0.10.0、0.10.1、0.10.2 相同。
+- K80 Pro / HyperOS、真实运营商网络、120Hz、锁屏日历通知仍未验收；没有把此前版本的性能或压力数字计入 1.0。
+
+---
+
+# MyScore 0.10.2 透明队标与视觉尺寸修复（本地包）
+
+日期：2026-10-25，北京时间。未提交、推送或发布 GitHub Release；保留 0.10.1 APK 及其历史验收记录。
+
+## 改动与规则
+
+- 共用 `Logos` 组件移除队标的白色底板与固定 3dp 内边距，加载失败时保留透明的文字占位。首页 28dp、详情 44dp、表格小徽标和 LoL 队标均直接显示图案；人物、英雄及装备图像沿用独立 artwork 路径。
+- 在后台解码后按实际 alpha 边界去掉源图透明留白，保持宽高比例居中；按不透明覆盖率调整视觉占比，实心徽章约 86%、疏朗轮廓最多约 96%，不以拉伸或裁切主体换取大小。源图颜色、内部白色细节与透明孔洞保留；没有对来源图片做白色抠除。
+- 几乎纯黑 / 纯白的单色标记只在低对比主题下适配正文墨迹色。只要存在相反的白 / 黑细节，就不整体换色，避免抹掉黑白标记内部结构。
+- 实际缓存检查发现 Spirit 来源为 600×300 的黑白双版本合并图：`https://oss.5eplay.com/sport/csgo/team/merge_cgchcqhll806h1bg2lt0.png`。仅对 5EPlay 该队标命名空间下 `merge_*.png`、且为两个等大正方形的图按主题选取一半；普通横长队标不分割。选取后再执行透明边界与视觉尺寸归一化。
+- 内存缓存键区分尺寸、队标 / artwork 和主题墨迹色；磁盘仍保存原始来源字节，16 MiB 上限沿用原实现。不新增生产依赖。
+
+## 已执行验证
+
+- `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest` 全部通过；91 项 JUnit、0 failures/errors，Lint 0 errors / 20 warnings。日志 `artifacts/build-0.10.2.log`。
+- 新增 26 项 Android `CrestChecks` 已运行通过：浅深主题的 14/28/44dp 透明槽位、透明留白不同但图案相同的尺寸一致性、居中、横竖比例、密度补偿、透明孔洞、颜色与白色细节保留、黑白标记保护、低对比单色适配、空图回退、5EPlay 合并图按主题选取及普通横长图保护。测试构造图只在内存中使用，不写入比分、队标来源或应用持久存储。
+- 最终 APK 在 API 35 / Android 15 x86_64 模拟器（1080×2400、420dpi、1.0 字号）通过 465 项完整运行检查，启用 `network=true details=true lol=true`，含九类来源、浅深详情、日历、日期切换和设置重建。日志 `artifacts/android-tests-0.10.2.txt`、`artifacts/android-tests-0.10.2-runtime.log`。
+- 同一最终 APK 在实际 945×2100 窗口（360dp）、1.3 倍系统字号下再次通过完整 465 项检查；日志 `artifacts/android-tests-0.10.2-360dp-large.txt` 及对应 `*-runtime.log`。40 张首页/详情截图、8 张 LoL 分局图分别见 `artifacts/review-0.10.2-final-360dp-large/`、`artifacts/review-0.10.2-lol-final-360dp-large/`；结束后恢复 1080×2400 和 1.0 字号。
+- 最终包常规字号的 40 张首页/详情截图见 `artifacts/review-0.10.2-final/`，LoL 分局的 8 张图见 `artifacts/review-0.10.2-lol-final/`；已剔除设备目录中两张历史 `football-overview` 图。浅深主题首页队标裁图预览：`artifacts/logo-review/transparent-crest-preview.png`。
+
+## 安装包与边界
+
+- APK：`artifacts/MyScore-0.10.2.apk`，1,221,132 字节；包名 `cn.myscore.app`，versionCode 15、versionName 0.10.2，minSdk 28 / targetSdk 35。SHA-256：`76663bcf28d24fa2b3a2b81b373cea78871ab9febeb0bd1bd955960ce8f91eee`；校验文件已同步。
+- apksigner 验证通过，证书 SHA-256 仍为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`，可覆盖安装并保留数据。没有卸载或清空应用数据。
+- 已拉回实际安装的 `base.apk`，SHA-256 与交付包一致；0.10.1 旧包及其校验文件保留。
+- 以上为 API 35 模拟器证据，未连接 K80 Pro，不声称真机手感、性能或运营商网络已验收。
+
+---
+
+# MyScore 0.10.1 稳定性与文字显示修复（本地包）
+
+日期：2026-10-25，北京时间。未提交、推送或发布 GitHub Release。
+
+## 修复范围
+
+- 共用正文与比分保留字体上下留白和 fallback line spacing；比赛卡长队名、状态、日期与球队筛选允许换行。详情表头、身份列和数值按内容测量高度，左右同一行保持对齐，取消固定行高与行数省略。日历日期格和 LoL 等级标记改为内容高度；小局结果限制在分配列宽内。
+- 切换日期 / 赛事立即显示对应内存数据或读取状态，取消过期请求，通过递增版本拒绝 A → B → A 的旧回调；切回全部时合入已更新的单项目数据。保留回收列表与适用的原地更新，不重复设置未改变的比赛文字。
+- 列表与详情的强制刷新在已有请求结束后继续执行；详情状态或比分变化会使旧缓存失效。失败详情在失败结束后退避，避免慢失败后立即重试。跨午夜的旧查询完成后仍能进入新日期加载。
+- 相同 URL / 请求头的并发来源请求合并，仅共享进行中的读取，不额外缓存成功或失败响应；已取消的共享请求所有者不取消其他有效读取方。响应读取检查中断、总读取时限与大小上限。
+- ESPN 每个来源日期单独降级；失败日期保留自己的缓存，成功日期仍可更新。全部日期失败则保留原视图缓存；空赛程和连接失败使用不同提示。部分失败写入缓存，重启后不伪装为完整成功。
+- 队标请求在视图挂载前完成也可绑定，仍按 URL 校验回收视图；缩写占位使用受限自动字号。
+- 设备验收复现快速 A → B → A 切换的真实崩溃：前一次 `notifyDataSetChanged` 尚未布局，适配器把旧比赛卡当成加载文字直接重绑。现在列表等待布局时交由 ListView 按视图类型回收；正常稳定列表仍可原地更新。
+- 设备布局检查复现 `123–124` 比分高度不足：平台 auto-size 在布局阶段改变字号，晚于 wrap-content 高度测量。现在先按宽度选字号，再测量完整行高，保留 22sp 下限及上下两行回退。
+
+## 本次已执行
+
+- JDK 17 / Gradle 8.14 / AGP 8.11.1 执行 `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest`；设备修复后再次全部通过，日志 `artifacts/build-0.10.1-device-fix.log`。测试包修正后的单独构建日志 `artifacts/build-0.10.1-device-tests.log`；最终完整构建检查 `artifacts/build-0.10.1-final.log` 通过。
+- 91 项 JUnit，0 failures/errors；新增 16 项覆盖并发合并、取消隔离、失败后重试、独立来源、跨日期部分失败 / 全失败 / 去重 / 空赛程，以及详情缓存时间、身份、状态和比分变化。
+- Android Lint：0 errors、20 warnings，没有隐藏警告。
+- `:app:verifyLiveSources` 开发机网络探测九类来源全部成功；日志 `artifacts/live-0.10.1.log`。本次 Android 运行套件另通过九类来源的赛程读取及已选真实比赛的详情身份、队标、统计/阵容检查；这不代表真实运营商网络可访问。
+- Android `LayoutChecks` 的 108 项组合检查已实际运行：320/360dp、1.0/1.3/2.0 字号、浅深主题，覆盖长中英文、表头、五行数据、姓名与数值对齐、比赛卡状态及三位数比分。测试不将构造的极端内容写入应用存储。
+- API 35 / Android 15 x86_64 模拟器 `Codex_MyScore_API35`：1080×2400、420dpi、1.0 字号，完整 439 项通过；实际窗口 945×2100（360dp）、1.3 字号，同一 APK 的完整 439 项再次通过。均启用 `network=true details=true lol=true`，包含日历、日期切换 / A → B → A、设置重建、更新校验、九类来源及浅深主题详情交互。日志 `artifacts/android-tests-0.10.1.txt`、`artifacts/android-tests-0.10.1-360dp-large.txt`，对应 `*-runtime.log` 保留具体断言。
+- 实际窗口 840×1866（320dp）、2.0 字号：176 项基础运行检查通过，未再次执行全套在线详情；日志 `artifacts/android-tests-0.10.1-320dp-2x.txt`。结束后恢复原始分辨率和 1.0 字号。
+- 本版截图：`artifacts/review-0.10.1-normal/`、`artifacts/review-0.10.1-360dp-large/` 各 40 张详情/首页图；LoL 分局图各 8 张位于 `artifacts/review-0.10.1-lol-normal/`、`artifacts/review-0.10.1-lol-360dp-large/`。320dp / 2 倍字号首页和日期 sheet 位于 `artifacts/review-0.10.1-320dp-2x/`。已剔除设备目录中两张旧版 `football-overview` 图，未把它们作为本版证据。
+- 验收同时修正三处测试问题：加载行提交后不在 ListView 布局前查找尚未挂载的 TextView；宽度检查使用排除行尾空白的可见行宽；NBA 姓名入口按现有完整姓名查找。主线程断言现会返回测试线程，执行失败报告与 finally 清理，避免断言直接杀死进程、跳过临时日历和偏好恢复。
+- 600 次随机 monkey 事件通过（seed 102、80ms throttle，禁用模拟器不支持的 flip / trackball 等事件），无输入失败、应用崩溃或 ANR；日志 `artifacts/monkey-0.10.1-final.txt`、`artifacts/crash-after-monkey-0.10.1-final.txt`、`artifacts/anr-0.10.1.txt`。前一轮 seed 101 存在模拟器 flip 注入拒绝，未作为最终无输入失败结果。
+- Mobile Dev 同时尝试 CPU / RSS / Display FPS 的 30 秒采样，包含八次 650ms 首页往返滑动；原始数据 `artifacts/performance-0.10.1.json`，recording ID `6bc27833-3d86-4e3c-87ba-316f20254adb`。CPU 平均 19.48%、峰值 91.86%（100% 为一核）；RSS 首尾 163.41 → 162.24 MiB，仅是本次混合静置/交互样本，不是内存优化基准。FPS 采集失败：`Invalid Perfetto trace stream.`，没有有效 FPS / 卡顿率，不据此声称流畅度达标。
+
+## 包与验证边界
+
+- 本地 APK 已更新为设备修复后通过验收的包：`artifacts/MyScore-0.10.1.apk`，1,214,856 字节；包名 `cn.myscore.app`，versionCode 14、versionName 0.10.1，minSdk 28 / targetSdk 35。SHA-256：`da856030e9151a2686bd22d48e80473d330537a08c8364b538dedfa4e9fa5123`；同目录校验文件已同步。apksigner 验证通过，证书仍为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 不新增生产依赖；延续原 debug 签名，供个人覆盖安装。没有卸载或清除应用数据。
+- 已从模拟器拉回实际安装的 `base.apk`，SHA-256 与上述交付 APK 一致。早期断言直接终止进程遗留的测试日历已按 `myscore-functional-tests` / `LOCAL` 账户限定清理；没有删除其他日历账户。应用最终保持打开，分辨率 1080×2400、字号 1.0。
+- Mobile Dev 的 Android 发现、安装、启动、UI 树与截图工具已可用；侧栏 `mobile_open_simulator` 仍返回 Apple Silicon / Xcode 要求，未据此声称侧栏画面正常。本次沿用该插件的 Android 工具和项目自身 ADB instrumentation，没有替换设备后端。
+- 没有连接 Redmi K80 Pro；HyperOS、真实运营商网络、120Hz、锁屏/后台日历通知、TalkBack 仍待真机验收。构造内容的布局检查及模拟器操作不能替代真机。小于 336dp 的七列日历仍不能保证每格 48dp 宽度；320dp 的列宽约 45.7dp。
+
+---
+
 # MyScore 0.10.0 深色重设计验证
 
 日期：2026-10-25，北京时间。本节只证明当前发布包的单元测试、静态检查、构建、元信息及签名，不继承旧版的设备运行验收。

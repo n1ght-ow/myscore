@@ -107,7 +107,7 @@ final class Sheet {
                 LinearLayout line=ui.row();
                 for(int c=0;c<7;c++) {
                     int index=r*7+c;
-                    if(index<offset||index>=offset+days){line.addView(new View(activity),new LinearLayout.LayoutParams(0,ui.dp(48),1));continue;}
+                    if(index<offset||index>=offset+days){line.addView(new View(activity),new LinearLayout.LayoutParams(0,-2,1));continue;}
                     LocalDate value=month[0].atDay(day++);
                     boolean picked=value.equals(selected),today=value.equals(Match.today(System.currentTimeMillis()));
                     TextView cell=ui.text(String.valueOf(value.getDayOfMonth()),14,picked?ui.onPrimary:today?ui.primary:ui.text,picked||today);
@@ -115,7 +115,7 @@ final class Sheet {
                     cell.setFocusable(true);
                     cell.setContentDescription(value.getMonthValue()+"月"+value.getDayOfMonth()+"日"+(picked?"，已选中":today?"，今天":""));
                     cell.setOnClickListener(v->{dialog.dismiss();pick.onDate(value);});
-                    line.addView(cell,new LinearLayout.LayoutParams(0,ui.dp(48),1));
+                    line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
                 }
                 grid.addView(line);
             }

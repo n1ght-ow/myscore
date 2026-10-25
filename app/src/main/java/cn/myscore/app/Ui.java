@@ -55,7 +55,7 @@ final class Ui {
     LinearLayout row(){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.HORIZONTAL);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
     TextView text(String s,int sp,int color,boolean bold) {
         TextView v=new TextView(c);v.setText(s);v.setTextSize(sp);v.setTextColor(color);
-        v.setFontFeatureSettings("tnum");v.setIncludeFontPadding(false);
+        v.setFontFeatureSettings("tnum");v.setIncludeFontPadding(true);v.setFallbackLineSpacing(true);
         v.setTypeface(bold?MEDIUM:REGULAR);
         return v;
     }
@@ -68,14 +68,14 @@ final class Ui {
         private boolean available;
         private int ceiling;
         ScoreText(String home,String away,boolean available,int maxSp){
-            super(Ui.this.c);this.maxSp=maxSp;setTypeface(MEDIUM);setFontFeatureSettings("tnum");setIncludeFontPadding(false);
+            super(Ui.this.c);this.maxSp=maxSp;setTypeface(MEDIUM);setFontFeatureSettings("tnum");setIncludeFontPadding(true);setFallbackLineSpacing(true);
             setTextColor(text);setGravity(Gravity.CENTER);setScore(home,away,available);
         }
         void setScore(String home,String away,boolean available){
             if(ceiling!=0&&this.available==available&&this.home.equals(home)&&this.away.equals(away))return;
             this.home=home;this.away=away;this.available=available;single=available?home+"–"+away:"VS";
             int next=available?maxSp:Math.min(24,maxSp);
-            if(next!=ceiling){ceiling=next;setAutoSizeTextTypeUniformWithConfiguration(22,ceiling,1,android.util.TypedValue.COMPLEX_UNIT_SP);}
+            ceiling=next;
             setContentDescription(available?"比分 "+home+" 比 "+away:"来源尚未提供比分");
             if(!single.contentEquals(getText()))setText(single);
         }
@@ -85,6 +85,15 @@ final class Ui {
             boolean stack=available&&MeasureSpec.getMode(widthSpec)!=MeasureSpec.UNSPECIFIED&&width>0&&measure.measureText(single)>width;
             String display=stack?home+"\n"+away:single;
             int lines=stack?2:1;if(getMaxLines()!=lines)setMaxLines(lines);if(!display.contentEquals(getText()))setText(display);
+            // Choose the font before measuring height. Framework auto-size can increase
+            // it during layout after a wrap-content height was measured at the default size.
+            int size=ceiling;
+            if(MeasureSpec.getMode(widthSpec)!=MeasureSpec.UNSPECIFIED&&width>0)for(;size>22;size--){
+                measure.setTextSize(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,size,c.getResources().getDisplayMetrics()));
+                if((stack?Math.max(measure.measureText(home),measure.measureText(away)):measure.measureText(single))<=width)break;
+            }
+            float pixels=android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,size,c.getResources().getDisplayMetrics());
+            if(Math.abs(getTextSize()-pixels)>.1f)setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP,size);
             super.onMeasure(widthSpec,heightSpec);
         }
     }

@@ -25,6 +25,12 @@ public final class SmokeInstrumentation extends Instrumentation {
     private long calendar=-1;
     private java.util.Map<String,?> originalSettings,originalLinks;
     private boolean network,details,lol;
+    @Override public void runOnMainSync(Runnable action){
+        Throwable[] failure=new Throwable[1];
+        super.runOnMainSync(()->{try{action.run();}catch(Throwable e){failure[0]=e;}});
+        if(failure[0] instanceof Error)throw (Error)failure[0];
+        if(failure[0]!=null)throw new RuntimeException(failure[0]);
+    }
     @Override public void onCreate(Bundle arguments){super.onCreate(arguments);network=arguments!=null&&"true".equals(arguments.getString("network"));details=arguments!=null&&"true".equals(arguments.getString("details"));lol=arguments!=null&&"true".equals(arguments.getString("lol"));start();}
     private void check(boolean condition,String description){if(!condition)throw new AssertionError(description);checks++;android.util.Log.i("MyScoreTests","PASS "+description);}
     @Override public void onStart() {
@@ -41,6 +47,8 @@ public final class SmokeInstrumentation extends Instrumentation {
             check(findText(activity.getWindow().getDecorView(),"MyScore")!=null,"sport filters stay interactive during network loads");
             calendarChecks();
             checks+=UiChecks.run(this,activity);
+            checks+=LayoutChecks.run(this,context);
+            checks+=CrestChecks.run(this,context);
             checks+=UpdateChecks.run(this,context);
             if(lol)checks+=LolChecks.run(this,context);
             if(details){DetailChecks.run(this,context);checks+=DetailChecks.checks;}

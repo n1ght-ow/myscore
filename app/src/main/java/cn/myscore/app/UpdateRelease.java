@@ -51,8 +51,8 @@ final class UpdateRelease {
         int[] a=parts(left),b=parts(right);for(int i=0;i<3;i++){int difference=Integer.compare(a[i],b[i]);if(difference!=0)return difference;}return 0;
     }
     private static int[] parts(String value)throws IOException {
-        if(value==null||!value.matches("(?:0|[1-9][0-9]{0,3})\\.(?:0|[1-9][0-9]{0,3})\\.(?:0|[1-9][0-9]{0,3})"))throw new IOException("无法识别发布版本");
-        String[] tokens=value.split("\\.");return new int[]{Integer.parseInt(tokens[0]),Integer.parseInt(tokens[1]),Integer.parseInt(tokens[2])};
+        if(value==null||!value.matches("(?:0|[1-9][0-9]{0,3})\\.(?:0|[1-9][0-9]{0,3})(?:\\.(?:0|[1-9][0-9]{0,3}))?"))throw new IOException("无法识别发布版本");
+        String[] tokens=value.split("\\.");return new int[]{Integer.parseInt(tokens[0]),Integer.parseInt(tokens[1]),tokens.length==3?Integer.parseInt(tokens[2]):0};
     }
     void verifyFile(File file)throws Exception {
         if(!file.isFile()||file.length()!=size)throw new IOException("安装包不完整，请重新下载");

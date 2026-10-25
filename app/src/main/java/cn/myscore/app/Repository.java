@@ -44,6 +44,8 @@ public final class Repository {
     }
     private static final ExecutorService NETWORK=Executors.newFixedThreadPool(10);
     private static final ExecutorService DATES=Executors.newFixedThreadPool(8);
+    private record Request(String url,Map<String,String> headers){}
+    private static final SingleFlight<Request,String> REQUESTS=new SingleFlight<>();
     private final Context context;
     private static final Object CACHE_LOCK=new Object();
     private record Failure(int count,long until,String message){}
@@ -80,29 +82,37 @@ public final class Repository {
         long ttl=to.isAfter(from)?300_000:RefreshPolicy.SCORE_CACHE;
         String key=c.id+":"+from+":"+to;Failure previous=failures.get(key);
         if(!force&&previous!=null&&previous.until>now){b.error=previous.message;return b;}
-        if(!force && b.fetched>0 && now-b.fetched>=0 && now-b.fetched<ttl) return b;
+        if(!force && b.error.isEmpty() && b.fetched>0 && now-b.fetched>=0 && now-b.fetched<ttl) return b;
         try {
+            if(Thread.currentThread().isInterrupted())throw new InterruptedException();
+            b.error="";
             List<Match> matches;
             if(c.id.equals("cs2")) matches=DomesticEsports.spirit(from,now);
             else if(c.id.equals("lol")) {matches=DomesticEsports.worlds(new JSONObject(get(DomesticEsports.LOL)),now);try{DetailSources.enrichWorlds(matches);}catch(Exception e){android.util.Log.i("MyScore","Worlds crests temporarily unavailable");}}
             else {
-                matches=espn(c,from,to,now,force);
+                matches=espn(c,from,to,now,force,b);
             }
+            if(Thread.currentThread().isInterrupted())throw new InterruptedException();
             b.matches.clear();
             for(Match m:matches) if(m.day()==null || (!m.day().isBefore(from) && !m.day().isAfter(to))) b.matches.add(m);
-            b.fetched=now;b.error="";failures.remove(key);save(b,from,to);
+            if(b.error.isEmpty()){b.fetched=System.currentTimeMillis();failures.remove(key);}
+            else recordFailure(key,previous,b.error);
+            save(b,from,to);
+        } catch(InterruptedException e) {
+            Thread.currentThread().interrupt();b.error="请求已取消";
         } catch(Exception e) {
             b.error=e instanceof java.net.SocketTimeoutException?"连接超时":e.getMessage()==null?"连接失败":e.getMessage();
-            int count=previous==null?1:previous.count+1;if(failures.size()>100)failures.clear();failures.put(key,new Failure(count,now+RefreshPolicy.retry(RefreshPolicy.SCORES,count),b.error));
+            if(!Thread.currentThread().isInterrupted())recordFailure(key,previous,b.error);
         }
         return b;
     }
-    private List<Match> espn(Competition c,LocalDate from,LocalDate to,long now,boolean force) throws Exception {
+    private void recordFailure(String key,Failure previous,String message){int count=previous==null?1:previous.count+1;if(failures.size()>100)failures.clear();failures.put(key,new Failure(count,System.currentTimeMillis()+RefreshPolicy.retry(RefreshPolicy.SCORES,count),message));}
+    private List<Match> espn(Competition c,LocalDate from,LocalDate to,long now,boolean force,Batch view) throws Exception {
         if(c.id.equals("f1")) {
             String dates=from.minusDays(7).format(DateTimeFormatter.BASIC_ISO_DATE)+"-"+to.plusDays(1).format(DateTimeFormatter.BASIC_ISO_DATE);
             return Parsers.espn(new JSONObject(get("https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/scoreboard?dates="+dates+"&limit=1000")),c,now);
         }
-        List<Future<List<Match>>> days=new ArrayList<>();
+        List<Future<Batch>> days=new ArrayList<>();
         // Team-sport scoreboards reject date ranges; fetch individual source dates.
         // Include the preceding source date to cover overnight games in Beijing time.
         for(LocalDate d=from.minusDays(1);!d.isAfter(to);d=d.plusDays(1)) {
@@ -111,15 +121,29 @@ public final class Repository {
                 Batch cached=load(c,day,day,"day_");
                 LocalDate utc=InstantNow.utcDay(now);
                 long ttl=cached.matches.stream().anyMatch(Match::live)?RefreshPolicy.SCORE_CACHE:day.isAfter(utc)?30*60_000L:day.isBefore(utc.minusDays(1))?6*60*60_000L:RefreshPolicy.SCORE_CACHE;
-                if(!force && cached.fetched>0 && now-cached.fetched>=0 && now-cached.fetched<ttl)return cached.matches;
+                if(!force && cached.fetched>0 && now-cached.fetched>=0 && now-cached.fetched<ttl)return cached;
                 String url="https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/scoreboard?dates="+day.format(DateTimeFormatter.BASIC_ISO_DATE)+"&limit=1000";
-                List<Match> parsed=Parsers.espn(new JSONObject(get(url)),c,now);
-                Batch fresh=new Batch(c);fresh.matches.addAll(parsed);fresh.fetched=now;save(fresh,day,day,"day_");
-                return parsed;
+                try{
+                    List<Match> parsed=Parsers.espn(new JSONObject(get(url)),c,System.currentTimeMillis());
+                    if(Thread.currentThread().isInterrupted())throw new InterruptedException();
+                    Batch fresh=new Batch(c);fresh.matches.addAll(parsed);fresh.fetched=System.currentTimeMillis();save(fresh,day,day,"day_");
+                    return fresh;
+                }catch(InterruptedException e){Thread.currentThread().interrupt();throw e;}
+                catch(Exception e){cached.error=day+" 赛程未更新";return cached;}
             }));
         }
+        try {
+            List<Batch> batches=new ArrayList<>();for(Future<Batch> task:days)batches.add(task.get());
+            return mergeDays(view,batches);
+        }finally{for(Future<Batch> task:days)if(!task.isDone())task.cancel(true);}
+    }
+    static List<Match> mergeDays(Batch view,List<Batch> days)throws java.io.IOException {
+        List<String> errors=new ArrayList<>();for(Batch day:days)if(!day.error.isEmpty())errors.add(day.error);
+        view.error=String.join("；",errors);
+        if(errors.size()==days.size())throw new java.io.IOException(view.error);
         Map<String,Match> unique=new java.util.LinkedHashMap<>();
-        for(Future<List<Match>> f:days)for(Match m:f.get())unique.put(m.id,m);
+        // Read stale days first, then let a successful source replace the same event identity.
+        for(boolean failed:new boolean[]{true,false})for(Batch day:days)if((!day.error.isEmpty())==failed)for(Match m:day.matches){Match old=unique.get(m.id);if(old==null||m.updated>=old.updated)unique.put(m.id,m);}
         return new ArrayList<>(unique.values());
     }
     private static final class InstantNow {
@@ -151,17 +175,22 @@ public final class Repository {
         return get(url,java.util.Collections.emptyMap());
     }
     static String get(String url,Map<String,String> headers) throws Exception {
+        Request request=new Request(url,Map.copyOf(headers));
+        return REQUESTS.execute(request,()->download(request.url,request.headers));
+    }
+    private static String download(String url,Map<String,String> headers) throws Exception {
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
         try {
             if(!headers.isEmpty())connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout(6_000);connection.setReadTimeout(8_000);
             connection.setRequestProperty("Accept","application/json");
-            connection.setRequestProperty("User-Agent","MyScore-Personal/0.3 Android");
+            connection.setRequestProperty("User-Agent","MyScore-Personal/"+BuildConfig.VERSION_NAME+" Android");
             for(Map.Entry<String,String> h:headers.entrySet())connection.setRequestProperty(h.getKey(),h.getValue());
             if(connection.getResponseCode()!=200)throw new Exception("来源返回 HTTP "+connection.getResponseCode());
             try(InputStream in=connection.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()) {
                 byte[] buffer=new byte[8192];int n;
-                while((n=in.read(buffer))!=-1) {if(out.size()+n>8_000_000)throw new Exception("来源响应过大");out.write(buffer,0,n);}
+                long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
+                while((n=in.read(buffer))!=-1) {if(Thread.currentThread().isInterrupted())throw new InterruptedException();if(System.nanoTime()>deadline)throw new java.net.SocketTimeoutException("来源响应超时");if(out.size()+n>8_000_000)throw new Exception("来源响应过大");out.write(buffer,0,n);}
                 return out.toString("UTF-8");
             }
         } finally {connection.disconnect();}
@@ -179,7 +208,7 @@ public final class Repository {
             try {
                 File file=cacheFile(c,from,to,prefix);if(!file.exists())return b;
                 JSONObject root=new JSONObject(new String(new AtomicFile(file).readFully(),StandardCharsets.UTF_8));
-                b.fetched=root.optLong("fetched");JSONArray a=root.optJSONArray("matches");
+                b.fetched=root.optLong("fetched");b.error=root.optString("error");JSONArray a=root.optJSONArray("matches");
                 if(a!=null)for(int i=0;i<a.length();i++)if(a.optJSONObject(i)!=null)b.matches.add(Match.fromJson(a.optJSONObject(i)));
             } catch(Exception e) {android.util.Log.w("MyScore","Ignoring unreadable score cache");}
         }
@@ -191,7 +220,7 @@ public final class Repository {
             AtomicFile file=new AtomicFile(cacheFile(b.competition,from,to,prefix));FileOutputStream out=null;
             try {
                 JSONArray a=new JSONArray();for(Match m:b.matches)a.put(m.json());
-                JSONObject root=new JSONObject().put("fetched",b.fetched).put("matches",a);
+                JSONObject root=new JSONObject().put("fetched",b.fetched).put("error",b.error).put("matches",a);
                 out=file.startWrite();out.write(root.toString().getBytes(StandardCharsets.UTF_8));file.finishWrite(out);
             } catch(Exception e) {if(out!=null)file.failWrite(out);android.util.Log.w("MyScore","Cannot persist score cache");}
             // Keep score cache bounded; no personal calendar data is stored here.

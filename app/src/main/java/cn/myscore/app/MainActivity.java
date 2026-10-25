@@ -47,6 +47,9 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private int tab=0,dayOffset=0,headerHeight=0,headerOffset=0;
     private String group="全部";
     private boolean active=false,busy=false,calendarBusy=false,calendarQuerying=false,pending=false,cacheReady=false;
+    private boolean pendingForce,selectionLoading;
+    private long selectionVersion;
+    private java.util.concurrent.Future<?> scoreRequest;
     private LocalDate loadedDay;
     private CalendarSync calendarSync;
     private final Set<String> subscribed=new HashSet<>();
@@ -80,8 +83,8 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
             Repository.Snapshot cached=repository.cached(initialDay,initialDay,initialGroup);
             handler.post(()-> {
                 if(isDestroyed())return;
-                cacheReady=true;busy=false;
-                if(initialTag.equals(queryTag())){snapshot=cached;rememberAll(initialGroup,initialDay,cached);render(true);}load(false);
+                cacheReady=true;
+                if(initialTag.equals(queryTag())){busy=false;snapshot=cached;rememberAll(initialGroup,initialDay,cached);render(true);}load(false);
             });
             if(CalendarSync.permitted(this)) {
                 ensureCalendar(false);
@@ -97,24 +100,26 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);executor.shutdownNow();cacheWorker.shutdownNow();calendarWorker.shutdownNow();super.onDestroy();}
     private LocalDate from(){return Match.today(System.currentTimeMillis()).plusDays(dayOffset);}
     private LocalDate to(){return from();}
-    private String queryTag(){return tab+":"+from()+":"+to()+":"+group;}
+    private String queryTag(){return selectionVersion+":"+tab+":"+from()+":"+to()+":"+group;}
 
     private void load(boolean force) {
         if(force){Logos.retryFailures();renderedScores="";}
         handler.removeCallbacks(tick);
         if(tab==1 || !active)return;
         if(!loadedDay.equals(Match.today(System.currentTimeMillis()))){loadedDay=Match.today(System.currentTimeMillis());select(tab,group,dayOffset,true);return;}
-        if(busy){pending=true;return;}
-        busy=true;pending=false;String tag=queryTag();LocalDate f=from(),t=to();String g=group;long started=System.currentTimeMillis();final boolean[] first={true};final boolean incremental=snapshot.matches().isEmpty();
-        executor.submit(()-> {
-            Repository.Snapshot next=repository.fetch(f,t,g,force,batch -> handler.post(()-> {
+        if(busy||selectionLoading){pending=true;pendingForce|=force;return;}
+        boolean forced=force||pendingForce;pendingForce=false;
+        busy=true;pending=false;String tag=queryTag();long version=selectionVersion;LocalDate f=from(),t=to();String g=group;long started=System.currentTimeMillis();final boolean[] first={true};final boolean incremental=snapshot.matches().isEmpty();
+        scoreRequest=executor.submit(()-> {
+            Repository.Snapshot next=repository.fetch(f,t,g,forced,batch -> handler.post(()-> {
                 if(first[0]){first[0]=false;android.util.Log.i("MyScorePerf","first source "+batch.competition.id+" in "+(System.currentTimeMillis()-started)+"ms");}
                 if(isDestroyed()||!active||!tag.equals(queryTag()))return;
                 // With a cached list on screen, wait for the final snapshot instead of rebuilding nine times.
                 if(incremental){snapshot.merge(batch);handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,150);}
             }));
             handler.post(()-> {
-                busy=false;if(isDestroyed())return;
+                if(isDestroyed()||version!=selectionVersion)return;busy=false;
+                if(!tag.equals(queryTag())){if(active)load(false);return;}
                 android.util.Log.i("MyScorePerf","all sources in "+(System.currentTimeMillis()-started)+"ms");
                 handler.removeCallbacks(renderSoon);
                 if(tag.equals(queryTag())){snapshot=next;rememberAll(g,f,next);if(active)render(true);}
@@ -128,30 +133,32 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private void select(int nextTab,String nextGroup,int offset,boolean force) {
         if(!force&&tab==nextTab&&group.equals(nextGroup)&&dayOffset==offset)return;
         handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);
+        selectionVersion++;if(scoreRequest!=null)scoreRequest.cancel(true);busy=false;pending=false;pendingForce=false;
         boolean inPlace=nextTab==0&&tab==0&&scoreList!=null;
         tab=nextTab;group=nextGroup;dayOffset=offset;headerOffset=0;lastScoreScroll=0;
-        if(tab==1){render(false);load(false);return;}
+        if(tab==1){selectionLoading=false;render(false);return;}
+        selectionLoading=true;
         LocalDate day=from();String selectedGroup=group;String tag=queryTag();
         if(allSnapshotDay!=null&&!allSnapshotDay.equals(day)){allSnapshot=null;allSnapshotDay=null;}
         Repository.Snapshot local=null;
         if(allSnapshot!=null&&day.equals(allSnapshotDay)) {
             if("全部".equals(selectedGroup))local=allSnapshot;
             else {
-                Repository.Snapshot subset=subset(allSnapshot,selectedGroup);
-                if(!subset.matches().isEmpty())local=subset;
+                local=subset(allSnapshot,selectedGroup);
             }
         }
-        if(local!=null)snapshot=local;
+        snapshot=local!=null?local:new Repository.Snapshot();
         renderedScores="";
         if(inPlace)rebuildHeader();else render(false);
-        if(local!=null&&inPlace)updateScoreRows();
+        if(inPlace)updateScoreRows();
         if(scoreList!=null){scoreList.setSelection(0);lastScoreScroll=0;}
         final boolean keepLocal=local!=null;
         cacheWorker.submit(()-> {
             Repository.Snapshot cached=repository.cached(day,day,selectedGroup);
             handler.post(()-> {
                 if(isDestroyed()||!tag.equals(queryTag()))return;
-                if(cached.matches().isEmpty()&&keepLocal){load(false);return;}
+                selectionLoading=false;
+                if(keepLocal){for(Repository.Batch batch:snapshot.batches){Repository.Batch disk=cached.batches.stream().filter(b->b.competition.id.equals(batch.competition.id)).findFirst().orElse(null);if(disk==null||disk.fetched<=batch.fetched)cached.merge(batch);}}
                 snapshot=cached;rememberAll(selectedGroup,day,cached);
                 load(false);
                 if(!tag.equals(queryTag()))return;
@@ -166,7 +173,8 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         return result;
     }
     private void rememberAll(String selectedGroup,LocalDate day,Repository.Snapshot value){
-        if("全部".equals(selectedGroup)&&!value.matches().isEmpty()){allSnapshot=value;allSnapshotDay=day;}
+        if("全部".equals(selectedGroup)){allSnapshot=value;allSnapshotDay=day;}
+        else if(allSnapshot!=null&&day.equals(allSnapshotDay)){Repository.Snapshot merged=subset(allSnapshot,"全部");for(Repository.Batch batch:value.batches)merged.merge(batch);allSnapshot=merged;}
     }
     /** Rebuilds only the app bar layer; the score list keeps its instance, adapter and rows. */
     private void rebuildHeader() {
@@ -277,7 +285,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private String scoreSignature(List<Match> all) {
         long now=System.currentTimeMillis();
         StringBuilder key=new StringBuilder(256);
-        key.append(group).append('|').append(tab).append('|').append(busy&&all.isEmpty()).append('|').append(snapshot.failed());
+        key.append(group).append('|').append(tab).append('|').append((busy||selectionLoading)&&all.isEmpty()).append('|').append(snapshot.failed());
         for(Repository.Batch batch:snapshot.batches)key.append('|').append(batch.competition.id).append(':').append(batch.error);
         for(Match m:all) {
             key.append('|').append(m.id).append(',').append(m.league).append(',').append(m.group).append(',')
@@ -293,12 +301,12 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         List<ScoreRow> rows=new ArrayList<>();
         if(all.isEmpty()) {
             // Never show "no matches" while a selection/source request is still running.
-            if(busy){rows.add(ScoreRow.loading("正在读取赛程…"));return rows;}
+            if(busy||selectionLoading){rows.add(ScoreRow.loading("正在读取赛程…"));return rows;}
             if(snapshot.failed()) {
                 int failures=0;for(Repository.Batch batch:snapshot.batches)if(!batch.error.isEmpty())failures++;
                 rows.add(ScoreRow.failure(failures+" 个赛事来源未更新 · 查看连接状态"));
             }
-            rows.add(ScoreRow.empty("这个日期没有已确认的比赛","可以切换日期或赛事。连接失败的来源不代表没有比赛。"));
+            rows.add(snapshot.failed()?ScoreRow.empty("暂时无法获取比赛","请检查网络后重新获取；连接失败不代表没有比赛。"):ScoreRow.empty("这个日期没有已确认的比赛","可以切换日期或赛事。"));
             return rows;
         }
         if(snapshot.failed()) {
@@ -354,7 +362,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         ui.clickable(prev,ui.surface,Ui.CONTROL_RADIUS);prev.setFocusable(true);prev.setContentDescription("前一天");prev.setOnClickListener(v->selectDay(selected.minusDays(1)));
         bar.addView(prev,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         TextView label=ui.text((selected.equals(today)?"今天 · ":"")+(selected.getYear()==today.getYear()?DateTimeFormatter.ofPattern("M月d日 EEE",Locale.CHINA).format(selected):DateTimeFormatter.ofPattern("yyyy年M月d日",Locale.CHINA).format(selected)),14,ui.text,true);
-        label.setGravity(Gravity.CENTER);label.setMinHeight(ui.dp(48));label.setMaxLines(1);label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        label.setGravity(Gravity.CENTER);label.setMinHeight(ui.dp(48));
         ui.clickable(label,ui.surface,Ui.CONTROL_RADIUS);label.setFocusable(true);label.setContentDescription("选择日期，当前"+DateTimeFormatter.ofPattern("M月d日 EEEE",Locale.CHINA).format(selected));
         label.setOnClickListener(v->Sheet.date(this,from(),this::selectDay));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMarginStart(ui.dp(8));lp.setMarginEnd(ui.dp(8));bar.addView(label,lp);

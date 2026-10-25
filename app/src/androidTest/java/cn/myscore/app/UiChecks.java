@@ -47,6 +47,22 @@ final class UiChecks {
             click(original.getWindow().getDecorView(),"全部");
         }catch(IllegalAccessException e){throw new AssertionError(e);}});checks+=4;
         test.waitForIdleSync();Thread.sleep(400);test.waitForIdleSync();
+        test.runOnMainSync(()->{try{
+            Field day=field("dayOffset"),group=field("group"),snapshot=field("snapshot"),all=field("allSnapshot");
+            int originalDay=day.getInt(original);String originalGroup=(String)group.get(original);
+            Method select=MainActivity.class.getDeclaredMethod("select",int.class,String.class,int.class);select.setAccessible(true);
+            Method tag=MainActivity.class.getDeclaredMethod("queryTag");tag.setAccessible(true);String before=(String)tag.invoke(original);
+            all.set(original,null);
+            select.invoke(original,0,originalGroup,originalDay+1);
+            require(((Repository.Snapshot)snapshot.get(original)).matches().isEmpty(),"new date never displays the previous date's matches");
+            require(field("selectionLoading").getBoolean(original),"date cache read has its own loading state");
+            // ListView attaches changed rows on its next layout; inspect the submitted data now.
+            ScoreAdapter loading=(ScoreAdapter)scoreAdapter.get(original);
+            require(loading.getCount()==1&&loading.getItem(0).type==ScoreRow.LOADING&&"正在读取赛程…".equals(loading.getItem(0).text),"date switch submits loading immediately");
+            select.invoke(original,0,originalGroup,originalDay);
+            require(!before.equals(tag.invoke(original)),"returning to the same selection rejects earlier in-flight responses");
+        }catch(ReflectiveOperationException e){throw new AssertionError(e);}});checks+=4;
+        test.waitForIdleSync();
         test.runOnMainSync(()->click(original.getWindow().getDecorView(),"设置"));test.waitForIdleSync();
         Bundle saved=new Bundle();test.runOnMainSync(()->test.callActivityOnSaveInstanceState(original,saved));
         require(saved.getInt("tab")==1&&saved.getInt("navigation_schema")==2,"settings state uses the two-tab schema");checks++;
@@ -59,7 +75,7 @@ final class UiChecks {
         require(hasText(test,recreated,"MyScore"),"matches remain reachable after recreation");checks++;
         return checks;
     }
-    private static Field field(String name)throws Exception{Field field=MainActivity.class.getDeclaredField(name);field.setAccessible(true);return field;}
+    private static Field field(String name)throws NoSuchFieldException{Field field=MainActivity.class.getDeclaredField(name);field.setAccessible(true);return field;}
     private static boolean hasText(Instrumentation test,Activity activity,String text){boolean[] visible=new boolean[1];test.runOnMainSync(()->visible[0]=find(activity.getWindow().getDecorView(),text)!=null);return visible[0];}
     private static void require(boolean value,String message){if(!value)throw new AssertionError(message);android.util.Log.i("MyScoreUiTests","PASS "+message);}
     private static TextView find(View view,String text){if(view instanceof TextView&&text.contentEquals(((TextView)view).getText()))return(TextView)view;if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){TextView result=find(group.getChildAt(i),text);if(result!=null)return result;}}return null;}

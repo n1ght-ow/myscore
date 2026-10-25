@@ -39,7 +39,7 @@ final class UpdateRepository {
         if(!release.newerThan(BuildConfig.VERSION_NAME))throw new IOException("当前已是最新版本");
         clear();File file=file(release);File directory=file.getParentFile();
         if(!directory.isDirectory()&&!directory.mkdirs())throw new IOException("无法创建更新下载目录");
-        File[] old=directory.listFiles();if(old!=null)for(File entry:old)if(entry.isFile()&&entry.getName().matches("MyScore-[0-9]+\\.[0-9]+\\.[0-9]+\\.apk")&&!entry.delete())throw new IOException("无法清理旧安装包，请稍后重试");
+        File[] old=directory.listFiles();if(old!=null)for(File entry:old)if(entry.isFile()&&entry.getName().matches("MyScore-[0-9]+\\.[0-9]+(?:\\.[0-9]+)?\\.apk")&&!entry.delete())throw new IOException("无法清理旧安装包，请稍后重试");
         DownloadManager.Request request=new DownloadManager.Request(Uri.parse(release.url));
         request.setTitle("MyScore "+release.version).setDescription("下载完成后返回 MyScore 安装更新")
             .setMimeType("application/vnd.android.package-archive").setAllowedOverMetered(true).setAllowedOverRoaming(false)

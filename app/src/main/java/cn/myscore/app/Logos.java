@@ -3,6 +3,10 @@ package cn.myscore.app;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.LruCache;
@@ -35,24 +39,24 @@ final class Logos {
         final ImageView image;
         final TextView initials;
         final int targetPx;
-        private Crest(FrameLayout box,ImageView image,TextView initials,int targetPx){this.box=box;this.image=image;this.initials=initials;this.targetPx=targetPx;}
+        final boolean artwork;
+        final int foreground;
+        private Crest(FrameLayout box,ImageView image,TextView initials,int targetPx,boolean artwork,int foreground){this.box=box;this.image=image;this.initials=initials;this.targetPx=targetPx;this.artwork=artwork;this.foreground=foreground;}
     }
 
     static Crest crest(Ui ui,int size,boolean artwork) {
         FrameLayout box=new FrameLayout(ui.c);
         box.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         box.setLayoutParams(new android.widget.LinearLayout.LayoutParams(ui.dp(size),ui.dp(size)));
-        // White backing keeps original dark crests readable in both themes.
-        box.setBackground(ui.shape(artwork?ui.tonal:0xffFFFFFF,8));box.setClipToOutline(artwork);
-        TextView fallback=ui.text(initials(""),size>40?16:11,artwork?ui.muted:0xff656870,true);
+        if(artwork)box.setBackground(ui.shape(ui.tonal,8));box.setClipToOutline(artwork);
+        TextView fallback=ui.text(initials(""),size>40?16:11,ui.muted,true);
         fallback.setGravity(Gravity.CENTER);
+        fallback.setAutoSizeTextTypeUniformWithConfiguration(6,size>40?16:11,1,android.util.TypedValue.COMPLEX_UNIT_SP);fallback.setMaxLines(1);
         box.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
         ImageView image=new ImageView(ui.c);
         image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        int padding=artwork?0:ui.dp(3);
-        image.setPadding(padding,padding,padding,padding);
         box.addView(image,new FrameLayout.LayoutParams(-1,-1));
-        return new Crest(box,image,fallback,targetPixels(ui,size));
+        return new Crest(box,image,fallback,targetPixels(ui,size),artwork,ui.text);
     }
 
     static FrameLayout view(Ui ui,String url,String name,int size) {
@@ -69,7 +73,7 @@ final class Logos {
         if(!allowed(url)) {
             image.setImageDrawable(null);image.setTag(null);fallback.setVisibility(android.view.View.VISIBLE);return;
         }
-        String key=key(url,crest.targetPx);
+        String key=key(url,crest);
         if(url.equals(image.getTag())&&image.getDrawable()!=null){fallback.setVisibility(android.view.View.GONE);return;}
         image.setImageDrawable(null);image.setTag(url);
         Bitmap memory=MEMORY.get(key);
@@ -84,9 +88,11 @@ final class Logos {
         else {
             CompletableFuture<Bitmap> request=future;
             int target=crest.targetPx;
+            boolean artwork=crest.artwork;int foreground=crest.foreground;
             POOL.submit(()-> {
                 try {
-                    Bitmap bitmap=load(app,url,target);
+                    Bitmap bitmap=load(app,url,artwork?target:Math.min(512,target*2));
+                    if(!artwork)bitmap=prepareCrest(selectCrestVariant(bitmap,url,foreground),target,foreground);
                     MEMORY.put(key,bitmap);
                     request.complete(bitmap);
                 } catch(Throwable e) {
@@ -102,7 +108,7 @@ final class Logos {
         java.lang.ref.WeakReference<TextView> placeholder=new java.lang.ref.WeakReference<>(fallback);
         future.thenAccept(bitmap->MAIN.post(()-> {
             ImageView view=target.get();TextView text=placeholder.get();
-            if(view==null||!url.equals(view.getTag())||!view.isAttachedToWindow())return;
+            if(view==null||!url.equals(view.getTag()))return;
             view.setImageBitmap(bitmap);
             if(text!=null)text.setVisibility(android.view.View.GONE);
         }));
@@ -150,7 +156,47 @@ final class Logos {
         long now=System.currentTimeMillis();
         for(File f:old)if(now-f.lastModified()>14L*86400_000&&!f.delete())android.util.Log.d("MyScore","Image cache cleanup deferred");
     }
-    private static String key(String url,int targetPx){return url+"@"+targetPx;}
+    private static String key(String url,Crest crest){return url+"@"+crest.targetPx+(crest.artwork?":art":":crest:"+crest.foreground);}
+    /** 5EPlay's merge_ team assets contain equal light/dark variants, not a wide team mark. */
+    static Bitmap selectCrestVariant(Bitmap source,String url,int foreground){
+        URI uri=URI.create(url);String path=uri.getPath();
+        if(!"oss.5eplay.com".equals(uri.getHost())||path==null||!path.matches("/(cloudx/p/)?sport/csgo/team/merge_[^/]+\\.png")||Math.abs(source.getWidth()-source.getHeight()*2)>2)return source;
+        int half=source.getWidth()/2,left=lightSurface(foreground)?0:half;
+        Bitmap selected=Bitmap.createBitmap(source,left,0,half,source.getHeight());
+        if(selected!=source)source.recycle();return selected;
+    }
+    private static boolean lightSurface(int foreground){return (((foreground>>16)&255)+((foreground>>8)&255)+(foreground&255))<384;}
+    /** Consumes an owned decode. Keep the source's colours and white details; trim alpha only. */
+    static Bitmap prepareCrest(Bitmap source,int targetPx,int foreground)throws IOException {
+        int width=source.getWidth(),height=source.getHeight();int[] pixels=new int[width*height];
+        source.getPixels(pixels,0,width,0,0,width,height);
+        int left=width,top=height,right=-1,bottom=-1;double mass=0,dark=0,light=0;
+        for(int y=0;y<height;y++)for(int x=0;x<width;x++){
+            int pixel=pixels[y*width+x],alpha=pixel>>>24;if(alpha<8)continue;
+            left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+            double weight=alpha/255.0;mass+=weight;
+            int r=(pixel>>16)&255,g=(pixel>>8)&255,b=pixel&255;
+            int high=Math.max(r,Math.max(g,b)),low=Math.min(r,Math.min(g,b));
+            if(high-low<=16){if(high<96)dark+=weight;else if(low>220)light+=weight;}
+        }
+        if(right<left){source.recycle();throw new IOException("Empty crest image");}
+        boolean lightSurface=lightSurface(foreground);
+        boolean recolor=(!lightSurface&&light==0&&dark/mass>=.98)||(lightSurface&&dark==0&&light/mass>=.98);
+        if(recolor){
+            for(int i=0;i<pixels.length;i++)pixels[i]=(pixels[i]&0xff000000)|(foreground&0xffffff);
+            Bitmap tinted=Bitmap.createBitmap(pixels,width,height,Bitmap.Config.ARGB_8888);source.recycle();source=tinted;
+        }
+        int markWidth=right-left+1,markHeight=bottom-top+1;
+        // Dense badges need more breathing room than a fine monogram or an open silhouette.
+        float coverage=(float)(mass/(markWidth*(double)markHeight));
+        float fill=.86f+.10f*(1-coverage);
+        int edge=Math.max(32,Math.min(512,targetPx));float scale=edge*fill/Math.max(markWidth,markHeight);
+        float drawnWidth=markWidth*scale,drawnHeight=markHeight*scale;
+        Bitmap result=Bitmap.createBitmap(edge,edge,Bitmap.Config.ARGB_8888);
+        Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
+        new Canvas(result).drawBitmap(source,new Rect(left,top,right+1,bottom+1),new RectF((edge-drawnWidth)/2,(edge-drawnHeight)/2,(edge+drawnWidth)/2,(edge+drawnHeight)/2),paint);
+        source.recycle();return result;
+    }
     private static int targetPixels(Ui ui,int size) {
         float density=ui.c.getResources().getDisplayMetrics().density;
         // 2x the layout size stays sharp on 420 dpi panels while keeping GPU textures small.

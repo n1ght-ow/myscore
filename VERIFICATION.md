@@ -1,3 +1,32 @@
+# MyScore 3.5.0 CS2 详情内容重排
+
+日期：2026-10-27（北京时间）。版本 `3.5.0` / versionCode `31`，发布标签 `v3.5.0`。发布入口：[MyScore 3.5.0](https://github.com/n1ght-ow/myscore/releases/tag/v3.5.0)。
+
+- CS2 详情固定为四种内容，每种只出现一次：总览、选手总数据、小局比分、每张地图的数据。总览只保留比赛信息（赛事 / 赛制 / 阶段）与来源操作，不重复比分、比分表或球员表；解析警告只在总览出现一次，来源与获取时间仍作为全局状态显示。
+- 选手页标题改为「选手总数据」，只显示全场两队上下两栏；不再混入地图比分或分图统计。Rating 仍在第一数值列，排序与两队横向滚动联动保留。
+- 小局页先显示「小局比分」地图 / 两队比分 / 状态表，这是地图总分的唯一位置；再显示「每张地图的数据」。每张有选手数据的地图按「地图标题 → 主队横栏 → 客队横栏」排列，队名和人数下方用一行 11sp 辅助文字显示该队本图的「上半场 / 下半场 / 加时」，再接本图选手表，不再生成独立「攻守半场」表或重复「总分」列。
+- 没有逐图选手数据的地图不再生成空表；Nuke 只在「小局比分」保留 0–0 / 已结束，并在分图区末尾显示一次「Nuke 暂无逐图选手数据」。分图选手表继续使用 Rating 优先列、排序和两队横滑联动。
+- 代码检查：`testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` 通过；136 项 JUnit，0 failures / errors；Lint 0 errors / 19 warnings。
+- 模拟器：Android 15 / API 35，1080×2400 / 420dpi / 1.0 字号。最终 `3.5.0 / 31` 干净构建覆盖安装后，`NbaRosterInstrumentation` 通过 **79,828 项**原生断言；`DesignReviewInstrumentation` 通过 **16,367 项**断言（CS2 四块内容、无重复表格 / 总分、缺失地图提示、地图排序、半场行、320 / 375 / 640dp × 1 / 1.3 / 2 倍字号矩阵，以及既有足球 / LOL 回归）；`RedesignInstrumentation` 通过 **17,487 项**全页文字检查；`SmokeInstrumentation` 通过 **280 项**运行检查。无本轮崩溃或 ANR。
+- 数据：CS2 使用真实缓存 Aurora–Spirit（Mirage / Anubis 分图选手，Nuke 无选手表），NBA 使用真实缓存 Milwaukee Bucks–Chicago Bulls；走同一套生产解析与界面代码，未注入模拟数据。
+- APK：`artifacts/MyScore-3.5.0.apk`，957,365 字节，SHA-256 `aaaea74bb1583ffe4d96dac4a4f8cfeb26bc6eda9c17c7e5627cc870e1a22ad5`。`aapt` 确认包名 `cn.myscore.app`、版本 `3.5.0 / 31`、minSdk 28 / targetSdk 35；`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646` 与 3.3.0 相同；设备实际安装的 base.apk 与本地产物哈希一致。校验文件 `artifacts/SHA256SUMS-3.5.0.txt`。发布附件为 `MyScore-3.5.0.apk` 与 `SHA256SUMS-3.5.0.txt`。
+- 截图：`artifacts/cs2-detail-redesign/final-3.5.0/`（总览、选手、小局顶部分组、分图半场行、缺失地图提示）与 `artifacts/cs2-detail-redesign/redesign-final-3.5.0/`（全页回归截图）。
+- 限制：只在 API 35 模拟器验收，未在 Redmi K80 Pro / HyperOS、真实运营商网络或锁屏提醒上验证；未做本轮 FPS / 性能基准，也未重新请求在线来源（使用已存在的真实详情缓存）。CS2 窄屏或大字号下仍需横向滑动查看 KAST 等末列。
+
+# MyScore 3.4.0 NBA 与 CS2 两队分栏
+
+日期：2026-10-27（北京时间）。版本 `3.4.0` / versionCode `30`。本轮为本地构建，未发布 GitHub Release。
+
+- NBA 球员页：移除「双方 / 球队」筛选和「球员 / 伤停」类别切换；主队、客队各成一段横栏，队徽、队名、人数、完整球员表和伤停名单在同一段内。伤停块固定在该队横栏的最后，显示来源人数、姓名、中文状态与可选说明；没有伤停表时显示「来源未提供伤停名单」，不显示 0 人，也不推测伤停原因。排序、两队横向滚动联动、姓名详情和首发 / 替补 / 未出场标签保留。
+- CS2 选手页：移除「双方 / 球队」筛选和「全场 / 地图」切换；选手页只显示全场两队上下两栏，Rating 回到第一数值列。分图选手统计移入小局页，每张已结束地图按「地图标题 → 攻守半场表 → 主队横栏 → 客队横栏」排列；地图选手表沿用同一套表头、横滑联动和数值排序，不丢失来源已发布的分图数据。
+- 状态映射：伤停状态补充 `Day-To-Day` / `Day To Day` → 「每日观察」，旧缓存中的英文状态在渲染时也会映射为中文。
+- 代码检查：`testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` 通过；136 项 JUnit，0 failures / errors；Lint 0 errors / 19 warnings。
+- 模拟器：Android 15 / API 35，1080×2400 / 420dpi / 1.0 字号。最终 `3.4.0 / 30` 干净构建覆盖安装后，`NbaRosterInstrumentation` 通过 **79,828 项**原生断言（两队面板、伤停归属与顺序、排序、横滑冻结、伤停弹层、320 / 375 / 640dp × 1 / 1.3 / 2 倍字号文字宽高）；`DesignReviewInstrumentation` 通过 **16,165 项**断言（CS2 双面板、Rating 优先、两队横滑联动、小局页地图分组、地图排序、320 / 375 / 640dp × 1 / 1.3 / 2 倍字号矩阵，以及既有足球 / LOL 回归）；`RedesignInstrumentation` 通过 **17,847 项**全页文字检查；`SmokeInstrumentation` 通过 **280 项**运行检查。无本轮崩溃或 ANR。
+- 数据：NBA 使用真实缓存 Milwaukee Bucks–Chicago Bulls，CS2 使用真实缓存 Aurora–Spirit（含 Mirage / Anubis 分图选手）；不是用户截图中的当场比赛，但走同一套生产解析与界面代码，未注入模拟数据。
+- APK：`artifacts/MyScore-3.4.0.apk`，955,633 字节，SHA-256 `9e6e1ef19316b150652ce28c3f1f3ebdd33cedcd07383a03dcf0c907a821f7d5`。`aapt` 确认包名 `cn.myscore.app`、版本 `3.4.0 / 30`、minSdk 28 / targetSdk 35；`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646` 与 3.3.0 相同；设备实际安装的 base.apk 与本地产物哈希一致。校验文件 `artifacts/SHA256SUMS-3.4.0.txt`。
+- 截图：`artifacts/redesign-3.4.0/final-nba/`（深浅主题面板、伤停、伤停弹层、球员表）与 `artifacts/redesign-3.4.0/final-cs2/`（选手双面板、排序、小局地图分组）；完整全页回归截图由 `RedesignInstrumentation` 写入模拟器应用外部目录 `review-2.0/phone/`。
+- 限制：只在 API 35 模拟器验收，未在 Redmi K80 Pro / HyperOS、真实运营商网络或锁屏提醒上验证；未做本轮 FPS / 性能基准，也未重新请求在线来源（使用已存在的真实详情缓存）。CS2 窄屏或大字号下仍需横向滑动查看 KAST 等末列。
+
 # MyScore 3.3.0 阵容与对位表重做
 
 日期：2026-10-26（北京时间）。版本 `3.3.0` / versionCode `29`，发布标签 `v3.3.0`。发布入口：[MyScore 3.3.0](https://github.com/n1ght-ow/myscore/releases/tag/v3.3.0)。

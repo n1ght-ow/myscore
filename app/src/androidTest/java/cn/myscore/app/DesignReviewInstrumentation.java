@@ -2,6 +2,7 @@ package cn.myscore.app;
 
 import android.app.*;
 import android.content.*;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.view.*;
@@ -46,19 +47,79 @@ public final class DesignReviewInstrumentation extends Instrumentation {
         scroll(300);capture(theme+"-football-away");
     }
     private void cs2(String theme)throws Exception{
-        MatchDetail detail=open("five:cs2:csgo_mc_2398756","CS2","cs2","lineup","Mirage",null);
-        List<View> headers=findAll(activity.getWindow().getDecorView(),"cs2-team-header");
-        require(headers.size()==2,"two CS2 team headers");
+        MatchDetail detail=open("five:cs2:csgo_mc_2398756","CS2","cs2","lineup",null,null);
+        require(findTag("detail-team-filter")==null,"CS2 team switch row removed");
+        require(findText("双方")==null,"CS2 no all-teams switch");
+        require(findText("全场")==null&&findText("Mirage")==null,"CS2 no map or scope switch");
+        require(findText("选手总数据")!=null,"CS2 overall player section is named once");
+        List<View> headers=findAll(activity.getWindow().getDecorView(),"team-panel-header");
+        require(headers.size()==2,"two CS2 team panels");
         require(headers.get(0).getContentDescription()!=null&&headers.get(0).getContentDescription().toString().contains(detail.match.home),"first panel is the home team");
         require(headers.get(1).getContentDescription()!=null&&headers.get(1).getContentDescription().toString().contains(detail.match.away),"second panel is the away team");
         List<View> tables=findAll(activity.getWindow().getDecorView(),"detail-data-table");
         require(tables.size()==2,"two stacked player tables");
+        require(findTag("team-panel-injury")==null,"CS2 has no injury block");
+        for(View table:tables){LinearLayout numbers=(LinearLayout)((HorizontalScrollView)table.findViewWithTag("detail-metrics-scroll")).getChildAt(0);LinearLayout labels=(LinearLayout)numbers.getChildAt(0);View first=labels.getChildAt(0);require(first instanceof ViewGroup&&((ViewGroup)first).getChildAt(0) instanceof TextView&&"Rating".contentEquals(((TextView)((ViewGroup)first).getChildAt(0)).getText()),"Rating leads the numeric columns");}
         List<HorizontalScrollView> scrollers=new ArrayList<>();for(View table:tables)scrollers.add((HorizontalScrollView)table.findViewWithTag("detail-metrics-scroll"));
         main(()->scrollers.get(0).scrollTo(ui().dp(90),0));settle();
         require(Math.abs(scrollers.get(1).getScrollX()-scrollers.get(0).getScrollX())<=1,"team tables scroll together");
-        main(()->{for(HorizontalScrollView scroller:scrollers)scroller.scrollTo(0,0);});settle();
-        scroll(220);capture(theme+"-cs2-first");
-        scroll(800);capture(theme+"-cs2-second");
+        main(()->{for(HorizontalScrollView scroller:scrollers)scroller.scrollTo(0,0);((ScrollView)get("scroll")).scrollTo(0,0);});settle();
+        capture(theme+"-cs2-first");
+        scroll(650);capture(theme+"-cs2-second");
+        main(()->{View view=findText("Rating");require(view!=null,"CS2 rating header");while(!view.isClickable()&&view.getParent() instanceof View)view=(View)view.getParent();view.performClick();});settle();
+        require(field("sortColumn").equals("Rating"),"CS2 numeric sort remains interactive");
+        require((boolean)field("descending"),"new CS2 sort column starts descending");
+        capture(theme+"-cs2-sorted");
+        main(()->{try{set("sortColumn","");set("tab","events");render(false);((ScrollView)get("scroll")).scrollTo(0,0);}catch(Exception e){throw new AssertionError(e);}});settle();
+        int mapTables=0,maps=0;Set<String> scope=new HashSet<>();
+        for(MatchDetail.Table table:detail.tables)if(table.tab.equals("lineup")&&!table.category.equals("全场")&&!table.category.equals("伤停")&&!table.rows.isEmpty()){mapTables++;scope.add(table.category);}
+        maps=scope.size();
+        require(mapTables>0,"real per-map player tables exist");
+        require(findAll(activity.getWindow().getDecorView(),"team-panel-header").size()==maps*2,"each finished map shows both teams");
+        int scoreTables=0;for(MatchDetail.Table table:detail.tables)if(table.tab.equals("overview"))scoreTables++;
+        require(findAll(activity.getWindow().getDecorView(),"detail-data-table").size()==scoreTables+mapTables,"map tab keeps one score table and per-map players");
+        require(findText("小局比分")!=null,"map score section is named once");
+        require(findText("每张地图的数据")!=null,"per-map section is named once");
+        require(findText("总分")==null&&findText("攻守半场")==null,"map totals and half tables are not repeated");
+        require(findAll(activity.getWindow().getDecorView(),"team-half-line").size()==maps*2,"each map team keeps only its half scores");
+        View missing=findTag("map-missing");require(missing instanceof TextView&&((TextView)missing).getText().toString().contains("Nuke")&&((TextView)missing).getText().toString().contains("暂无逐图选手数据"),"map with no player table is called out once");
+        String firstMap=scope.iterator().next();require(findText(firstMap)!=null,"per-map heading is visible");
+        capture(theme+"-cs2-maps-top");
+        main(()->{View view=findText("Rating");require(view!=null,"map rating header");while(!view.isClickable()&&view.getParent() instanceof View)view=(View)view.getParent();view.performClick();});settle();
+        require(field("sortColumn").equals("Rating"),"map panels share the numeric sort");
+        require((boolean)field("descending"),"map panel sort starts descending");
+        scroll(240);capture(theme+"-cs2-maps");
+        scroll(1400);capture(theme+"-cs2-maps-lower");
+        scroll(2400);capture(theme+"-cs2-maps-second");
+        cs2Matrix(detail,theme.equals("dark"));
+        main(()->{try{set("sortColumn","");set("tab","overview");render(false);((ScrollView)get("scroll")).scrollTo(0,0);}catch(Exception e){throw new AssertionError(e);}});settle();
+        require(findText("比赛信息")!=null,"CS2 overview keeps match facts");
+        require(findTag("detail-data-table")==null,"CS2 overview does not repeat score or player tables");
+        require(findText("来源与更新时间")!=null,"CS2 overview keeps the source action");
+        capture(theme+"-cs2-overview");
+        main(()->{try{set("tab","lineup");render(false);((ScrollView)get("scroll")).scrollTo(0,0);}catch(Exception e){throw new AssertionError(e);}});settle();
+    }
+    private void cs2Matrix(MatchDetail detail,boolean dark){
+        String map="";for(MatchDetail.Table table:detail.tables)if(table.tab.equals("lineup")&&!table.category.equals("全场")&&!table.category.equals("伤停")&&!table.rows.isEmpty()){map=table.category;break;}
+        require(!map.isBlank(),"CS2 matrix has a real map scope");String mapScope=map;
+        for(int width:new int[]{320,375,640})for(float scale:new float[]{1f,1.3f,2f})main(()->{
+            Configuration config=new Configuration(activity.getResources().getConfiguration());config.fontScale=scale;config.screenWidthDp=width;
+            Ui ui=new Ui(activity.createConfigurationContext(config),dark);
+            LinearLayout body=ui.column();body.setPadding(ui.dp(16),ui.dp(12),ui.dp(16),ui.dp(24));
+            new TeamPanelsView(ui,detail,body).show("",false,s->{},0,x->{});
+            measure(body,ui.dp(width));inspect(body);
+            require(findAll(body,"team-panel-header").size()==2,"CS2 matrix keeps two team panels");
+            LinearLayout maps=ui.column();maps.setPadding(ui.dp(16),ui.dp(12),ui.dp(16),ui.dp(24));
+            new TeamPanelsView(ui,detail,maps).scope(mapScope,"",false,null,0,null,"上半场 7 · 下半场 6 · 加时 —","上半场 5 · 下半场 4 · 加时 —");
+            measure(maps,ui.dp(width));inspect(maps);
+            require(findAll(maps,"team-panel-header").size()==2,"map matrix keeps two team panels");
+        });
+    }
+    private void measure(View view,int width){view.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));view.layout(0,0,view.getMeasuredWidth(),view.getMeasuredHeight());}
+    private void inspect(View view){
+        if(view.getVisibility()!=View.VISIBLE)return;
+        if(view instanceof TextView text&&text.length()>0&&text.getWidth()>0){android.text.Layout layout=text.getLayout();require(layout!=null,"native text layout");require(layout.getHeight()<=text.getHeight()-text.getCompoundPaddingTop()-text.getCompoundPaddingBottom(),"text height: "+text.getText());for(int i=0;i<layout.getLineCount();i++)require(layout.getEllipsisCount(i)==0&&layout.getLineMax(i)<=layout.getWidth()+1,"text width: "+text.getText());}
+        if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++){View child=group.getChildAt(i);if(!(group instanceof HorizontalScrollView))require(child.getLeft()>=0&&child.getRight()<=group.getWidth()+1,"child fits parent");inspect(child);}
     }
     private void lol(String theme)throws Exception{
         open("qq:lol:13608","LOL","lol","lineup",null,null);
@@ -83,6 +144,8 @@ public final class DesignReviewInstrumentation extends Instrumentation {
     private boolean hasDescription(View view,String text){CharSequence description=view.getContentDescription();if(description!=null&&description.toString().contains(text))return true;if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++)if(hasDescription(group.getChildAt(i),text))return true;return false;}
     private List<View> findAll(View view,String tag){List<View> result=new ArrayList<>();if(tag.equals(view.getTag()))result.add(view);if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++)result.addAll(findAll(group.getChildAt(i),tag));return result;}
     private View findTag(String tag){return activity.getWindow().getDecorView().findViewWithTag(tag);}
+    private View findText(String value){return find(activity.getWindow().getDecorView(),value);}
+    private View find(View view,String value){if(view instanceof TextView&&value.contentEquals(((TextView)view).getText()))return view;if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++){View found=find(group.getChildAt(i),value);if(found!=null)return found;}return null;}
     private void capture(String name)throws Exception{settle();Bitmap bitmap=getUiAutomation().takeScreenshot();require(bitmap!=null,"screenshot");File folder=new File(getTargetContext().getExternalFilesDir(null),"design-review/"+label);folder.mkdirs();try(FileOutputStream out=new FileOutputStream(new File(folder,name+".png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}bitmap.recycle();}
     private Object field(String name)throws Exception{Field f=DetailActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(activity);}
     private Object get(String name){try{return field(name);}catch(Exception e){throw new AssertionError(e);}}

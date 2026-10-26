@@ -140,7 +140,7 @@ public final class DetailParsers {
             case "Center Left Forward"->"左中锋";case "Center Right Forward"->"右中锋";
             case "Left Center Midfielder"->"左中前卫";case "Right Center Midfielder"->"右中前卫";
             case "Left Centre Back"->"左中卫";case "Right Centre Back"->"右中卫";case "Centre Back"->"中卫";
-            case "Out"->"缺阵";case "Doubtful"->"出战存疑";case "Questionable"->"待定";case "Injured"->"受伤";case "Suspended"->"停赛";
+            case "Out"->"缺阵";case "Doubtful"->"出战存疑";case "Questionable"->"待定";case "Injured"->"受伤";case "Suspended"->"停赛";case "Day-To-Day","Day To Day"->"每日观察";
             default->value;
         };
     }

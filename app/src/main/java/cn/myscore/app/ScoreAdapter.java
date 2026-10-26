@@ -101,9 +101,9 @@ final class ScoreAdapter extends BaseAdapter {
     }
 
     private TextView teamScore(String text){TextView score=ui.text(text,24,ui.text,true);score.setGravity(Gravity.END);score.setMinWidth(ui.dp(40));return score;}
-    private String footnote(Match m){
-        String updated=m.updated>0?java.time.format.DateTimeFormatter.ofPattern("HH:mm",java.util.Locale.CHINA).withZone(Match.ZONE).format(java.time.Instant.ofEpochMilli(m.updated))+" 更新":"更新时间未知";
-        return (m.timeConfirmed?m.time()+" · 北京时间":"时间待定")+"\n"+(m.source.isBlank()?"":m.source+" · ")+updated;
+    private String provenance(Match m){
+        String updated=m.updated>0?"更新于 "+java.time.format.DateTimeFormatter.ofPattern("HH:mm",java.util.Locale.CHINA).withZone(Match.ZONE).format(java.time.Instant.ofEpochMilli(m.updated)):"更新时间未知";
+        return (m.source.isBlank()?"":m.source+" · ")+updated;
     }
     private String stateText(Match m){return Rules.stateLabel(m.state);}
     private void text(TextView view,String value){if(!value.contentEquals(view.getText()))view.setText(value);}
@@ -136,7 +136,8 @@ final class ScoreAdapter extends BaseAdapter {
 
     private final class MatchHolder {
         final LinearLayout root,card,metaRow;
-        final TextView league,state,home,homeScore,away,awayScore,foot,stale;
+        final TextView league,state,home,homeScore,away,awayScore,stale;
+        final Ui.MatchTime foot;
         final Logos.Crest homeCrest,awayCrest;
         final FrameLayout homeSlot,awaySlot,sub;
         final Ui.Icon subIcon;
@@ -171,7 +172,7 @@ final class ScoreAdapter extends BaseAdapter {
             card.addView(awayRow);ui.gap(card,8);card.addView(ui.divider());ui.gap(card,4);
 
             LinearLayout footRow=ui.row();
-            foot=ui.text("",12,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
+            foot=ui.new MatchTime();footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             sub=new FrameLayout(ui.c);
             subIcon=new Ui.Icon(ui.c,"calendar-add",ui.primary);
             sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
@@ -193,7 +194,7 @@ final class ScoreAdapter extends BaseAdapter {
             text(homeScore,m.hasScore()?m.homeScore:"—");
             text(awayScore,m.hasScore()?m.awayScore:"—");
             homeScore.setTextColor(m.live()?ui.primary:ui.text);awayScore.setTextColor(m.live()?ui.primary:ui.text);
-            text(foot,footnote(m));
+            foot.bind(m.timeConfirmed?m.time():"时间待定",provenance(m));
             boolean staleNow=m.live()&&System.currentTimeMillis()-m.updated>120_000;
             stale.setVisibility(staleNow?View.VISIBLE:View.GONE);
             Logos.bind(homeCrest,m.homeLogo,m.home);
@@ -206,7 +207,8 @@ final class ScoreAdapter extends BaseAdapter {
 
     private final class F1Holder {
         final LinearLayout root,card;
-        final TextView league,state,title,first,second,foot,stale;
+        final TextView league,state,title,first,second,stale;
+        final Ui.MatchTime foot;
         final FrameLayout sub;
         final Ui.Icon subIcon;
         Match match;
@@ -225,7 +227,7 @@ final class ScoreAdapter extends BaseAdapter {
             second=ui.text("",12,ui.muted,false);second.setPadding(0,ui.dp(5),0,0);card.addView(second);
             ui.gap(card,12);card.addView(ui.divider());ui.gap(card,4);
             LinearLayout footRow=ui.row();
-            foot=ui.text("",12,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
+            foot=ui.new MatchTime();footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             sub=new FrameLayout(ui.c);
             subIcon=new Ui.Icon(ui.c,"calendar-add",ui.primary);
             sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
@@ -245,7 +247,7 @@ final class ScoreAdapter extends BaseAdapter {
             text(title,m.displayTitle());
             text(first,m.results.size()>0?m.results.get(0):"");first.setVisibility(m.results.size()>0?View.VISIBLE:View.GONE);
             text(second,m.results.size()>1?m.results.get(1):"");second.setVisibility(m.results.size()>1?View.VISIBLE:View.GONE);
-            text(foot,footnote(m));
+            foot.bind(m.timeConfirmed?m.time():"时间待定",provenance(m));
             boolean staleNow=m.live()&&System.currentTimeMillis()-m.updated>120_000;
             stale.setVisibility(staleNow?View.VISIBLE:View.GONE);
             subscription(subIcon,m,sub);

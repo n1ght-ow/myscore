@@ -1,3 +1,14 @@
+# MyScore 3.0.2 比赛时间层级优化
+
+日期：2026-10-26，北京时间。版本 `3.0.2`，versionCode `26`，标签 `v3.0.2`。用户确认将调整统一用于所有比赛卡片。
+
+- 首页普通比赛、F1 与球队赛程卡片共用时间区：比赛时间为 16sp 半粗主文字色，来源 / 更新时间为 11sp 常规辅助色；首页辅助行使用“来源 · 更新于 HH:mm”。去掉卡片中的“北京时间”，实际时区与真实时间数据保留，未确认时间仍显示待定。
+- 时间区随字体与内容增高，不截断来源信息；日历订阅操作保留 48dp 触摸区域。两行可作为一组被屏幕阅读器聚焦。复用绑定时仅更新变动文字。
+- 最终版本通过 `testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest --offline --console=plain`：118 项 JUnit，0 failures / errors；Lint 0 errors / 21 warnings。构建日志 `artifacts/build-3.0.2.log`。
+- 最终 APK 在 Android 15 / API 35 模拟器通过 **280 项运行检查**，日志 `artifacts/android-tests-3.0.2.txt`；包含 320 / 360dp、1.0 / 1.3 / 2.0 字号、深浅主题的现有布局检查。时间区人工深浅主题截图来自同一实现的 3.0.1 预览构建，见 `artifacts/time-hierarchy-review/`。辅助文字在卡片表面的对比度：深色 7.43:1、浅色 5.87:1。
+- `artifacts/MyScore-3.0.2.apk`：896,405 字节；SHA-256 `ceb1d32132b26ba1158c7df11de44e2ba18cbf7ee0d1cf4b129d4db81acf1c8b`；校验文件 `artifacts/SHA256SUMS-3.0.2.txt`。
+- aapt 确认包名 `cn.myscore.app`、版本 `3.0.2 / 26`、minSdk 28 / targetSdk 35；apksigner 校验通过，沿用既有 debug 签名。发布入口：[v3.0.2](https://github.com/n1ght-ow/myscore/releases/tag/v3.0.2)。本轮未做真机或可选赛事联网验收。
+
 # MyScore 3.0.1 品牌标志裁切与毛刺修复
 
 日期：2026-10-26，北京时间。用户反馈小米桌面 S 被放大裁切，标题与桌面边缘不顺滑。版本 `3.0.1`，versionCode `25`。

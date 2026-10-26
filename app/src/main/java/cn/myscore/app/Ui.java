@@ -142,6 +142,22 @@ final class Ui {
     }
     View divider(){View d=new View(c);d.setBackgroundColor(line);d.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(1)));return d;}
     void gap(LinearLayout into,int h){View space=new View(c);into.addView(space,new LinearLayout.LayoutParams(1,dp(h)));}
+    /** Match time leads; source freshness stays readable without competing with it. */
+    final class MatchTime extends LinearLayout {
+        private final TextView time,caption;
+        MatchTime(){
+            super(c);setOrientation(VERTICAL);setGravity(Gravity.CENTER_VERTICAL);
+            setMinimumHeight(dp(48));setPadding(0,dp(4),0,dp(4));setScreenReaderFocusable(true);
+            time=text("",16,Ui.this.text,true);caption=text("",11,muted,false);
+            addView(time,new LinearLayout.LayoutParams(-1,-2));
+            addView(caption,new LinearLayout.LayoutParams(-1,-2));
+        }
+        void bind(String start,String provenance){
+            if(!start.contentEquals(time.getText()))time.setText(start);
+            if(!provenance.contentEquals(caption.getText()))caption.setText(provenance);
+            caption.setVisibility(provenance.isBlank()?GONE:VISIBLE);
+        }
+    }
     static final class Icon extends View {
         private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);private String kind;private int color;private final Path refreshArrow=new Path();
         private Drawable glyph;private Path appPath;

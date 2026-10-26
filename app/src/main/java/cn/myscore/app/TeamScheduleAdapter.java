@@ -88,7 +88,8 @@ final class TeamScheduleAdapter extends BaseAdapter {
 
     private final class MatchHolder {
         final LinearLayout root,card;
-        final TextView date,state,opponent,detail,score,result,foot;
+        final TextView date,state,opponent,detail,score,result;
+        final Ui.MatchTime foot;
         final LinearLayout footer;
         final FrameLayout action;
         final Ui.Icon calendar;
@@ -122,7 +123,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
             ui.gap(card,12);
             footer=ui.column();footer.addView(ui.divider());
             LinearLayout controls=ui.row();
-            foot=ui.text("",12,ui.muted,false);foot.setLineSpacing(ui.dp(5),1);
+            foot=ui.new MatchTime();
             controls.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             action=new FrameLayout(ui.c);
             calendar=new Ui.Icon(ui.c,"calendar-add",ui.primary);
@@ -151,7 +152,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
             boolean eligible=value.match.scheduled()&&value.match.timeConfirmed&&value.match.start>System.currentTimeMillis();
             action.setVisibility(subscribed||eligible?View.VISIBLE:View.INVISIBLE);
             action.setEnabled(!host.isBusy());action.setAlpha(host.isBusy()?0.5f:1f);
-            text(foot,value.time+" · 北京时间\n"+value.match.source);
+            foot.bind(value.time,value.match.source);
             calendar.set(subscribed?"calendar-check":"calendar-add",ui.primary);
             action.setContentDescription((subscribed?"取消订阅":"订阅")+"对阵"+value.opponent+"的比赛");
             score.setVisibility(scored?View.VISIBLE:View.GONE);

@@ -88,13 +88,13 @@ public final class UpdateActivity extends Activity {
     }
     private void render(){
         if(headline==null)return;boolean busy=state==State.CHECKING||state==State.VERIFYING||state==State.DOWNLOADING;
-        progress.setVisibility(busy?View.VISIBLE:View.GONE);progress.setIndeterminate(state!=State.DOWNLOADING);progress.setProgress(percent);progressText.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);progressText.setText(waiting?"等待网络或系统下载调度…":"已下载 "+percent+"%");cancel.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);action.setEnabled(!busy);action.setAlpha(busy?0.5f:1f);
+        progress.setVisibility(busy?View.VISIBLE:View.GONE);progress.setIndeterminate(state!=State.DOWNLOADING);progress.setProgress(percent);progressText.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);progressText.setText(waiting?"正在连接下载服务器…":"已下载 "+percent+"%");cancel.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);action.setEnabled(!busy);action.setAlpha(busy?0.5f:1f);
         notes.setVisibility(release!=null&&state!=State.CURRENT&&!release.notes.isBlank()?View.VISIBLE:View.GONE);notes.setText(release==null?"":"更新内容\n\n"+release.summary());
         switch(state){
             case CHECKING->{headline.setText(release==null?"正在检查更新":"正在准备下载");description.setText("连接 MyScore 发布渠道…");action.setText("请稍候");}
             case CURRENT->{headline.setText("当前已是最新版本");description.setText("已发布的最新版本 "+release.version);action.setText("重新检查");}
             case AVAILABLE->{headline.setText("发现新版本 "+release.version);description.setText(String.format(Locale.CHINA,"安装包 %.1f MB · 覆盖更新保留数据",release.size/1048576d));action.setText("下载更新");}
-            case DOWNLOADING->{headline.setText("正在下载 "+release.version);description.setText("可以离开此页面，系统会继续下载。");action.setText("下载中");}
+            case DOWNLOADING->{headline.setText("正在下载 "+release.version);description.setText("可以离开此页面，MyScore 会继续下载。");action.setText("下载中");}
             case VERIFYING->{headline.setText("正在校验安装包");description.setText("核对文件完整性与应用签名…");action.setText("正在校验");}
             case READY->{headline.setText("更新已准备好");description.setText("版本 "+release.version+" · 点安装更新，在系统界面确认覆盖安装。");action.setText("安装更新");}
             case ERROR->{headline.setText("暂时无法更新");description.setText(error);action.setText(release==null?"重新检查":"重新下载");}

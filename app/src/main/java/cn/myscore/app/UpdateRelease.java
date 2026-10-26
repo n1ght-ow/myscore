@@ -13,14 +13,15 @@ final class UpdateRelease {
     static final String REPOSITORY="https://github.com/n1ght-ow/myscore";
     static final String LATEST_API="https://api.github.com/repos/n1ght-ow/myscore/releases/latest";
     static final long MAX_BYTES=100L*1024*1024;
-    final String version,url,sha256,notes;
+    final String version,url,assetUrl,sha256,notes;
     final long size;
-    private UpdateRelease(String version,String url,String digest,long size,String notes)throws IOException {
+    private UpdateRelease(String version,String url,String assetUrl,String digest,long size,String notes)throws IOException {
         parts(version);
         if(!url.equals(REPOSITORY+"/releases/download/v"+version+"/MyScore-"+version+".apk"))throw new IOException("更新文件地址不属于 MyScore 发布渠道");
+        if(!assetUrl.isEmpty()&&!assetUrl.matches("https://api\\.github\\.com/repos/n1ght-ow/myscore/releases/assets/[1-9][0-9]{0,18}"))throw new IOException("更新附件接口不属于 MyScore 发布渠道");
         if(!digest.matches("sha256:[a-fA-F0-9]{64}"))throw new IOException("发布文件缺少有效的校验信息，请稍后重试");
         if(size<=0||size>MAX_BYTES)throw new IOException("更新文件大小异常");
-        this.version=version;this.url=url;this.sha256=digest.substring(7).toLowerCase(Locale.ROOT);this.size=size;
+        this.version=version;this.url=url;this.assetUrl=assetUrl;this.sha256=digest.substring(7).toLowerCase(Locale.ROOT);this.size=size;
         this.notes=notes==null?"":notes.substring(0,Math.min(notes.length(),8000));
     }
     static UpdateRelease parse(JSONObject root)throws IOException {
@@ -31,15 +32,15 @@ final class UpdateRelease {
         if(assets!=null)for(int i=0;i<assets.length();i++){
             JSONObject asset=assets.optJSONObject(i);
             if(asset!=null&&asset.optString("name").equals("MyScore-"+version+".apk")&&asset.optString("state").equals("uploaded"))
-                return new UpdateRelease(version,asset.optString("browser_download_url"),asset.optString("digest"),asset.optLong("size"),root.optString("body"));
+                return new UpdateRelease(version,asset.optString("browser_download_url"),asset.optString("url"),asset.optString("digest"),asset.optLong("size"),root.optString("body"));
         }
         throw new IOException("新版本尚未上传安装包，请稍后重试");
     }
     static UpdateRelease restore(String json)throws Exception {
         JSONObject value=new JSONObject(json);
-        return new UpdateRelease(value.getString("version"),value.getString("url"),value.getString("digest"),value.getLong("size"),value.optString("notes"));
+        return new UpdateRelease(value.getString("version"),value.getString("url"),value.optString("assetUrl"),value.getString("digest"),value.getLong("size"),value.optString("notes"));
     }
-    String saved()throws Exception {return new JSONObject().put("version",version).put("url",url).put("digest","sha256:"+sha256).put("size",size).put("notes",notes).toString();}
+    String saved()throws Exception {return new JSONObject().put("version",version).put("url",url).put("assetUrl",assetUrl).put("digest","sha256:"+sha256).put("size",size).put("notes",notes).toString();}
     boolean newerThan(String installed)throws IOException{return compare(version,installed)>0;}
     String summary(){
         StringBuilder bullets=new StringBuilder();int count=0;

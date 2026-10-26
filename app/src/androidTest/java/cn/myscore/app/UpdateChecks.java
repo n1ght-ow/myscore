@@ -19,6 +19,22 @@ final class UpdateChecks {
     static int run(Instrumentation test,Context context)throws Exception {
         checks=0;PackageManager manager=context.getPackageManager();PackageInfo installed=manager.getPackageInfo(context.getPackageName(),PackageManager.GET_SIGNING_CERTIFICATES|PackageManager.GET_PERMISSIONS);
         check(Arrays.asList(installed.requestedPermissions).contains("android.permission.REQUEST_INSTALL_PACKAGES"),"self-update install permission declared");
+        check(Arrays.asList(installed.requestedPermissions).contains("android.permission.FOREGROUND_SERVICE_DATA_SYNC"),"background update transfer declares data-sync service permission");
+        android.content.pm.ProviderInfo provider=manager.getProviderInfo(new android.content.ComponentName(context,UpdateProvider.class),0);
+        check(!provider.exported&&provider.grantUriPermissions,"installer provider is private and grants access only through explicit URIs");
+        UpdateRepository updates=new UpdateRepository(context);java.util.Map<String,?> original=new java.util.HashMap<>(updates.preferences.getAll());
+        try {
+            updates.preferences.edit().clear().putLong("download_id",Long.MAX_VALUE).commit();
+            rejected(updates::progress,"legacy system tasks return a retryable error without querying the stalled system provider");
+            updates.preferences.edit().clear().putString("transfer_token","new-task").putInt("status",android.app.DownloadManager.STATUS_PENDING).putLong("bytes",0).commit();
+            updates.changed("cancelled-task",android.app.DownloadManager.STATUS_SUCCESSFUL,100,"");
+            check(updates.preferences.getInt("status",0)==android.app.DownloadManager.STATUS_PENDING&&updates.preferences.getLong("bytes",-1)==0,"late progress from a cancelled transfer cannot overwrite a new download");
+            try{context.getContentResolver().openInputStream(android.net.Uri.parse("content://"+context.getPackageName()+".updates/apk/9.9.9"));throw new AssertionError("unverified APK was exposed");}catch(java.io.FileNotFoundException expected){check(true,"installer provider refuses files before validation");}
+        } finally {
+            android.content.SharedPreferences.Editor editor=updates.preferences.edit().clear();
+            for(java.util.Map.Entry<String,?> entry:original.entrySet()){Object value=entry.getValue();if(value instanceof String)editor.putString(entry.getKey(),(String)value);else if(value instanceof Long)editor.putLong(entry.getKey(),(Long)value);else if(value instanceof Integer)editor.putInt(entry.getKey(),(Integer)value);else if(value instanceof Boolean)editor.putBoolean(entry.getKey(),(Boolean)value);}
+            editor.commit();
+        }
         PackageInfo previous=new PackageInfo();previous.packageName=installed.packageName;previous.versionCode=(int)installed.getLongVersionCode()-1;previous.signingInfo=installed.signingInfo;
         UpdateRepository.validateArchive(installed,previous,installed.versionName);check(true,"real signed APK is accepted over an older installed version");
         rejected(()->UpdateRepository.validateArchive(installed,installed,installed.versionName),"same version is not an upgrade");

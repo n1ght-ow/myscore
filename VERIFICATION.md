@@ -1,3 +1,27 @@
+# MyScore 2.2 已结束比赛自动移除订阅
+
+日期：2026-10-26，北京时间。versionName `2.2`，versionCode `21`，标签 `v2.2`。
+
+## 本次变更
+
+- 修复同步逻辑将进行中和已结束放在同一分支、只删除提醒却始终保留订阅记录的问题。来源确认已结束后，清除订阅关联、保存的比赛记录与指纹；保留系统日历历史日程，停止后续重复查询。
+- 旧版本已保存为 `final` 的订阅直接使用已确认状态清理，不依赖再次联网。来源暂不可用、延期及进行中的比赛继续保留，不按估算结束时间删除。
+- 进入设置及恢复设置页会自动检查，不受最近一小时已检查的限制；完成后刷新订阅数量。检查改用已有的日历工作线程，避免与比分加载争用同一执行队列。
+- 沿用原签名，无新增生产依赖。
+
+## 已执行验证
+
+- `testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest --offline --console=plain` 通过：106 项 JUnit，0 failures / errors；Lint 0 errors / 25 warnings。日志 `artifacts/build-2.2.log`。
+- Android 15 / API 35 模拟器 `emulator-5554`（1080×2400）通过 **260 项运行检查**。覆盖进行中订阅保留、结束后各订阅视图和持久记录清理、重复同步幂等、后台身份解析确认结束、旧版结束记录无网络清理、最近刚检查后进入设置仍自动清理并更新数量、历史日程保留、个人日历事件保护，以及既有界面 / 队标 / 更新等默认回归。日志 `artifacts/android-tests-2.2.txt`、`artifacts/android-runtime-2.2.log`。
+- 最终 APK 由 Mobile Dev 覆盖安装并启动，包管理器确认 `versionName=2.2 / versionCode=21`。
+- `apksigner verify --print-certs` 通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`，与实际本地 v2.1 APK 对照一致。包名 `cn.myscore.app`，minSdk 28 / targetSdk 35，可覆盖安装。
+
+## 交付包与边界
+
+- `artifacts/MyScore-2.2.apk`：1,421,442 字节；SHA-256 `b6e4a801dea4fc07fc7f6c43fe3821ab70ea4d4ece65c9e665bc82899d8290e2`；校验文件 `artifacts/SHA256SUMS-2.2.txt`。
+- 发布入口：[v2.2](https://github.com/n1ght-ow/myscore/releases/tag/v2.2)。APK、测试日志与本地工具启动记录保留在被忽略的 `artifacts/`，不加入 Git。
+- 本轮未启用可选的 `network=true details=true lol=true` 检查，未重跑全部屏幕尺寸矩阵；Redmi K80 Pro / HyperOS、运营商网络及真实锁屏提醒仍未验收。自动清理依赖来源确认结束；联网或系统后台执行受限时会延后。
+
 # MyScore 2.1 流畅性与稳定性
 
 日期：2026-10-25，北京时间。versionName `2.1`，versionCode `20`，标签 `v2.1`。

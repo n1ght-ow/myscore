@@ -30,9 +30,9 @@ public final class CalendarSync {
         @Override public String toString() {return name;}
     }
     public static final class Result {
-        public int inserted,updated,cancelled,failed;
+        public int inserted,updated,cancelled,completed,failed;
         public String error="";
-        public String message() {return "新增 "+inserted+" · 更新 "+updated+" · 取消 "+cancelled+(failed>0?" · 失败 "+failed:"");}
+        public String message() {return "新增 "+inserted+" · 更新 "+updated+" · 取消 "+cancelled+" · 已结束移除 "+completed+(failed>0?" · 失败 "+failed:"");}
     }
     private static final Object LOCK=new Object();
     private final Context context;
@@ -179,8 +179,14 @@ public final class CalendarSync {
                     if(m==null) {
                         String record=links.getString("record:"+id,"");
                         if(record.isEmpty()) {result.failed++;continue;}
-                        m=resolver.resolve(Match.fromJson(new org.json.JSONObject(record)));
+                        Match previous=Match.fromJson(new org.json.JSONObject(record));
+                        m=previous.finalised()?previous:resolver.resolve(previous);
                         if(m==null||!id.equals(m.id)) {result.failed++;continue;}
+                    }
+                    if(m.finalised()) {
+                        // Keep the historical calendar event, but stop tracking a completed match.
+                        deleteReminders(eventId);
+                        removeLink(id);result.completed++;continue;
                     }
                     long calendar=eventCalendar(eventId);
                     if(calendar<0)calendar=calendarId();
@@ -188,7 +194,7 @@ public final class CalendarSync {
                         context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),null,null);
                         removeLink(id);result.cancelled++;continue;
                     }
-                    if(m.finalised()||m.live()) {
+                    if(m.live()) {
                         deleteReminders(eventId);
                         links.edit().remove("fingerprint:"+id).apply();
                         if(m.timeConfirmed&&m.start>0)updateEvent(eventId,m,calendar);

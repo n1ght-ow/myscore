@@ -96,7 +96,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     }
     @Override protected void onSaveInstanceState(Bundle b){super.onSaveInstanceState(b);b.putInt("navigation_schema",2);b.putInt("tab",tab);b.putInt("offset",dayOffset);b.putString("group",group);}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
-    @Override public void onResume(){super.onResume();active=true;if(cacheReady){render(true);load(false);}if(calendarSync.hasSubscriptions()&&System.currentTimeMillis()-prefs.getLong("calendar_checked",0)>60*60_000L)syncSubscriptions(false);}
+    @Override public void onResume(){super.onResume();active=true;refreshSubscribed();if(cacheReady){render(true);load(false);}if(calendarSync.hasSubscriptions()&&(tab==1||System.currentTimeMillis()-prefs.getLong("calendar_checked",0)>60*60_000L))syncSubscriptions(false);}
     @Override public void onPause(){active=false;handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);super.onPause();}
     @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);executor.shutdownNow();cacheWorker.shutdownNow();calendarWorker.shutdownNow();super.onDestroy();}
     private LocalDate from(){return Match.today(System.currentTimeMillis()).plusDays(dayOffset);}
@@ -138,7 +138,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         if(selectionCacheRequest!=null){selectionCacheRequest.cancel(true);selectionCacheRequest=null;}
         boolean inPlace=nextTab==0&&tab==0&&scoreList!=null;
         tab=nextTab;group=nextGroup;dayOffset=offset;headerOffset=0;lastScoreScroll=0;
-        if(tab==1){selectionLoading=false;render(false);return;}
+        if(tab==1){selectionLoading=false;refreshSubscribed();render(false);syncSubscriptions(false);return;}
         selectionLoading=true;
         LocalDate day=from();String selectedGroup=group;String tag=queryTag();
         if(allSnapshotDay!=null&&!allSnapshotDay.equals(day)){allSnapshot=null;allSnapshotDay=null;}
@@ -505,8 +505,8 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private void syncSubscriptions(boolean feedback) {
         if(calendarBusy)return;
         if(!calendarSync.hasSubscriptions()){if(feedback)Sheet.message(this,"还没有订阅","在比赛卡上点“订阅”，把单场比赛加入手机日历。");return;}
-        calendarBusy=true;if(feedback&&tab==1)render(true);
-        executor.submit(()->{
+        calendarBusy=true;if(tab==1)render(true);
+        calendarWorker.submit(()->{
             String text;
             try{CalendarSync.Result result=calendarSync.sync(Collections.emptyList(),System.currentTimeMillis());text=result.message();}
             catch(RuntimeException e){text="检查失败，请检查网络和日历权限后重试。";}

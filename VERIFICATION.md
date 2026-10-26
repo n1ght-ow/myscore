@@ -1,3 +1,13 @@
+# MyScore 3.0.0 版本调整
+
+日期：2026-10-26，北京时间。按用户要求将当前版本改为 `3.0.0`，versionCode 由 23 递增至 `24`；发布标签 `v3.0.0`。沿用 2.3 的品牌和功能图标实现。
+
+- 最终构建通过 `testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest --offline --console=plain`：118 项 JUnit，0 failures / errors；Lint 0 errors / 21 warnings。日志 `artifacts/build-3.0.0.log`。
+- 最终 APK 覆盖安装至 Android 15 / API 35 模拟器，通过 265 项运行检查，含版本显示与更新安装校验；日志 `artifacts/android-tests-3.0.0.txt`。本轮未重新执行真机、全部屏幕尺寸或可选联网赛事验收。
+- `apksigner verify --print-certs` 通过，沿用既有 debug 证书；aapt 确认包名 `cn.myscore.app`、版本 `3.0.0 / 24`、minSdk 28 / targetSdk 35。
+- 附件 `artifacts/MyScore-3.0.0.apk`：933,210 字节；SHA-256 `77e81a3abdf85ce701677827449ec1462b84d1b4afe6966e63aa973bac57ef42`；校验文件 `artifacts/SHA256SUMS-3.0.0.txt`。
+- 发布入口：[v3.0.0](https://github.com/n1ght-ow/myscore/releases/tag/v3.0.0)。应用内更新支持三段版本号，附件按 `MyScore-3.0.0.apk` 命名。
+
 # MyScore 2.3 统一品牌与功能图标
 
 日期：2026-10-26，北京时间。版本 `2.3`（versionCode `23`），标签 `v2.3`。

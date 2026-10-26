@@ -42,10 +42,14 @@ final class Logos {
         final boolean artwork;
         final int foreground;
         private String pendingKey;
+        private java.util.function.Supplier<String> backup;
         private Crest(FrameLayout box,ImageView image,TextView initials,int targetPx,boolean artwork,int foreground){this.box=box;this.image=image;this.initials=initials;this.targetPx=targetPx;this.artwork=artwork;this.foreground=foreground;}
     }
 
     static Crest crest(Ui ui,int size,boolean artwork) {
+        return crest(ui,size,artwork,false);
+    }
+    private static Crest crest(Ui ui,int size,boolean artwork,boolean portrait) {
         FrameLayout box=new FrameLayout(ui.c);
         box.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         box.setLayoutParams(new android.widget.LinearLayout.LayoutParams(ui.dp(size),ui.dp(size)));
@@ -54,7 +58,7 @@ final class Logos {
         fallback.setGravity(Gravity.CENTER);
         fallback.setAutoSizeTextTypeUniformWithConfiguration(6,size>40?16:11,1,android.util.TypedValue.COMPLEX_UNIT_SP);fallback.setMaxLines(1);
         box.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
-        ImageView image=new ImageView(ui.c);
+        ImageView image=portrait?new PortraitImage(ui.c):new ImageView(ui.c);
         image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         box.addView(image,new FrameLayout.LayoutParams(-1,-1));
         Crest crest=new Crest(box,image,fallback,targetPixels(ui,size),artwork,ui.text);
@@ -67,6 +71,26 @@ final class Logos {
     }
     static FrameLayout artwork(Ui ui,String url,String name,int size) {
         Crest crest=crest(ui,size,true);bind(crest,url,name);return crest.box;
+    }
+    static FrameLayout portrait(Ui ui,String url,String name,int size,java.util.function.Supplier<String> backup) {
+        Crest crest=crest(ui,size,true,true);crest.backup=backup;bind(crest,url,name);return crest.box;
+    }
+    /** Official FPL photos include the torso; frame the upper part for a small circular avatar. */
+    private static final class PortraitImage extends ImageView {
+        private final android.graphics.Matrix crop=new android.graphics.Matrix();
+        private android.graphics.drawable.Drawable previous;private int width,height;private Object url;
+        PortraitImage(Context context){super(context);}
+        @Override protected void onDraw(Canvas canvas){
+            android.graphics.drawable.Drawable drawable=getDrawable();
+            if(drawable!=previous||width!=getWidth()||height!=getHeight()||!java.util.Objects.equals(url,getTag())){
+                previous=drawable;width=getWidth();height=getHeight();url=getTag();
+                if(drawable!=null&&drawable.getIntrinsicWidth()>0&&drawable.getIntrinsicHeight()>0&&url instanceof String&&((String)url).startsWith("https://resources.premierleague.com/")){
+                    float side=Math.min(drawable.getIntrinsicWidth(),drawable.getIntrinsicHeight()*.55f),scale=Math.max(width/side,height/side);
+                    crop.setScale(scale,scale);crop.postTranslate((width-drawable.getIntrinsicWidth()*scale)/2f,0);setScaleType(ScaleType.MATRIX);setImageMatrix(crop);
+                }else setScaleType(ScaleType.FIT_CENTER);
+            }
+            super.onDraw(canvas);
+        }
     }
 
     static void bind(Crest crest,String url,String name) {
@@ -95,10 +119,12 @@ final class Logos {
         else {
             CompletableFuture<Bitmap> request=future;
             int target=crest.targetPx;
-            boolean artwork=crest.artwork;int foreground=crest.foreground;
+            boolean artwork=crest.artwork;int foreground=crest.foreground;java.util.function.Supplier<String> backup=crest.backup;
             POOL.submit(()-> {
                 try {
-                    Bitmap bitmap=load(app,url,artwork?target:Math.min(512,target*2));
+                    Bitmap bitmap;
+                    try{bitmap=load(app,url,artwork?target:Math.min(512,target*2));}
+                    catch(Exception primary){String alternate=backup==null?"":backup.get();if(!allowed(alternate)||alternate.equals(url))throw primary;bitmap=load(app,alternate,target);}
                     if(!artwork)bitmap=prepareCrest(selectCrestVariant(bitmap,url,foreground),target,foreground);
                     MEMORY.put(key,bitmap);
                     request.complete(bitmap);
@@ -121,7 +147,7 @@ final class Logos {
     }
 
     static boolean allowed(String url) {
-        try{URI u=URI.create(url);String h=u.getHost();return "https".equals(u.getScheme())&&h!=null&&(h.equals("a.espncdn.com")||h.equals("oss.5eplay.com")||h.equals("img.crawler.qq.com")||h.equals("game.gtimg.cn")||h.equals("img1.gtimg.com")||h.equals("cdn.5eplay.com")||h.equals("img1.5eplay.com")||h.equals("ossweb-img.qq.com"));}catch(RuntimeException e){return false;}
+        try{URI u=URI.create(url);String h=u.getHost();return "https".equals(u.getScheme())&&h!=null&&(h.equals("a.espncdn.com")||h.equals("resources.premierleague.com")||h.equals("r2.thesportsdb.com")||h.equals("oss.5eplay.com")||h.equals("img.crawler.qq.com")||h.equals("game.gtimg.cn")||h.equals("img1.gtimg.com")||h.equals("cdn.5eplay.com")||h.equals("img1.5eplay.com")||h.equals("ossweb-img.qq.com"));}catch(RuntimeException e){return false;}
     }
     static void retryFailures(){FAILED.clear();}
     static Bitmap load(Context c,String url)throws Exception {return load(c,url,256);}

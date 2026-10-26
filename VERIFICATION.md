@@ -1,3 +1,19 @@
+# MyScore 3.2.0 足球阵容视角与 NBA 球员身份列
+
+日期：2026-10-26（北京时间）。版本 `3.2.0` / versionCode `28`，发布标签 `v3.2.0`。发布入口：[MyScore 3.2.0](https://github.com/n1ght-ow/myscore/releases/tag/v3.2.0)。
+
+- 足球阵容：横滑类别「表现 / 国籍 / 年龄 / 跑动 / 身价」，表现菜单提供评分、射门、传球、盘带、防守；所选指标同时显示在球场上方的中文说明和球员头像下的徽标，进球、黄红牌、换上 / 换下使用矢量标记并显示数量与来源分钟，点击球员保留完整姓名、球衣号和来源统计。切换球队、刷新及 Activity 重建保留当前视角，大字号改为按阵型分组的全名列表。
+- 足球头像：优先使用 ESPN 提供照片；缺失时以规范化完整姓名加相同出生日期唯一匹配英超官方（FPL）图，主图失败再经 TheSportsDB 核对姓名、生日与足球身份后加载备用图。重音归一、中间名匹配、同名异生日、歧义与无生日均拒绝，失败保持姓名缩写占位；资料缓存 24 小时，失败退避 5 分钟。
+- 菜单：移除系统默认 `PopupMenu`，改为锚定类别按钮的自有黑白圆角菜单（Inter、选中层、勾选图标、点击外部 / 返回关闭、空间不足时可显示在按钮上方），通过深浅主题及大字号人工检查。
+- NBA：姓名列不再重复球队文字，仅保留头像角标队徽；首发绿色标签、替补中性标签、未出场单独文字标签；身份列与数值列按测量高度对齐，标签与号码 / 位置按可用宽度同行或换行。球队 ID 筛选、排序、数据横向滚动及球员详情保持可用；NBA 以外的通用表格不变。
+- 数据边界：未接入单场评分、跑动和身价来源，来源未提供的指标显示「—」，不补零，不用 FPL 积分 / BPS 或赛季状态生成评分。足球照片依赖公开身份匹配，不能保证所有联赛与球员都有真人头像；首发阵型示意不代表平均站位。
+- 代码检查：`testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` 通过；**138 项 JUnit，0 failures / errors**；Lint **0 errors / 23 warnings**。日志 `artifacts/build-3.2.0.log`。
+- 最终发布 APK 覆盖安装到 Android 15 / API 35 `emulator-5554`（1080×2400 / 420dpi / 1.0 字号）后，`FootballLineupInstrumentation` 通过 **6,679 项**、`NbaRosterInstrumentation` 通过 **16,698 项**原生运行断言，使用真实缓存比赛与生产代码，覆盖球队切换、表现 / 资料视角、菜单、球员详情、照片下载、NBA 标签、筛选、排序、横向滚动与文字测量；日志 `artifacts/android-tests-3.2.0.txt`。此前布局矩阵在 320 / 375 / 640dp 与 1 / 1.3 / 2 倍字号下分别通过 **42,238 项**（足球）和 **67,028 项**（NBA）断言。
+- APK：`artifacts/MyScore-3.2.0.apk`，948,049 字节，SHA-256 `a25930d4967ac991f0fc733b1f7c3d38d08cb718d4ea7d11b7c17691b454554e`。`aapt` 确认包名 `cn.myscore.app`、版本 `3.2.0 / 28`、minSdk 28 / targetSdk 35；`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646` 与 3.1.0 相同。校验文件 `artifacts/SHA256SUMS-3.2.0.txt`。
+- 发布包比对：与预览包 `artifacts/MyScore-ui-preview.apk` 的 20 个条目一一对应，仅 `AndroidManifest.xml` 与 `classes2.dex`（含 `BuildConfig` 版本号）内容不同；预览包另含 406,756 字节未被中央目录引用的打包残留，正式包完整重打包后不含这些字节，因此体积由 1,354,805 字节降为 948,049 字节。
+- 截图：沿用 `artifacts/football-lineup/final-nba-bundle/`、`artifacts/nba-roster/nba-roster-review/` 中已人工查看的深色 / 浅色、竖屏 / 横屏 / 2 倍字号截图；本轮最终包运行结束后模拟器退出，未补拉 `release-3.2.0` 标签截图。
+- 限制：只在 API 35 模拟器验收，未在 Redmi K80 Pro / HyperOS、真实运营商网络或锁屏提醒上验证；未做本轮 FPS / 性能基准。
+
 # MyScore 3.1.0 赛事内容重设计
 
 日期：2026-10-26（北京时间）。版本 `3.1.0` / versionCode `27`，发布标签 `v3.1.0`。发布入口：[MyScore 3.1.0](https://github.com/n1ght-ow/myscore/releases/tag/v3.1.0)。
@@ -698,3 +714,39 @@
 - 0.1.0：绿色初版，已被用户拒绝。
 
 不把模拟器成功等同于所有真机、网络和时段可用。
+
+## 足球阵容分类与球员事件标记（开发预览，2026-10-26）
+
+- 实现：顶部横滑类别（表现、国籍、年龄、跑动、身价）；表现原生单选下拉（评分、射门、传球、盘带、防守）；球员所选指标徽标、进球及次数、红黄牌、换上 / 换下及来源分钟；完整姓名与球衣号详情、替补所选指标；球队切换与详情刷新保留视角，Activity 状态保存包含该选择。没有新增生产依赖。
+- 数据边界：ESPN 本次真实比赛提供射门 / 射正、进球 / 助攻、犯规和牌等数据，未返回的评分、国籍、年龄、传球、盘带、抢断继续显示「—」。跑动和身价没有接入数据源。不会把缺失指标填成 0，也不会计算或拼接其他服务的评分。部分 ESPN 球员照片无法加载，保留姓名缩写占位。
+- 最终代码检查：`testDebugUnitTest`、`assembleDebug`、`assembleDebugAndroidTest`、`lintDebug` 通过，132 项 JVM 测试，Lint 0 错误 / 21 警告。新增测试验证缺失与真实零、成对指标部分缺失、资料字段、事件数量、旧表兼容及 JSON 缓存保真。一次长驻 Gradle JVM 崩溃后，以 `--no-daemon` 完成全部检查；日志保存在忽略的本地验收目录。
+- 模拟器：`emulator-5554`，API 35，最终 APK 已由 Mobile Dev 安装。`FootballLineupInstrumentation` 使用真实 ESPN 详情及其生产缓存，验证原生菜单选择、球队切换保留指标、资料类别、球员详情、完整文本测量和左右边界。最终构建在 375dp 竖屏（984×2100）、横屏（1800×984）、375dp / 2 倍系统字号下分别通过 7,337 / 7,292 / 7,904 项运行断言，深浅主题均截图；同时关闭系统动画完成这些运行，结束后恢复原分辨率、1 倍字号和动画设置。首轮布局矩阵另覆盖 320 / 375 / 640dp、1 / 1.3 / 2 倍字号。
+- 最终运行截图位于 `artifacts/football-lineup/football-review/phone375/`、`landscape/`、`largefont/`。已人工检查小屏射门视角、菜单及球场截图。截图来自安装后的原生界面，没有渲染样机或替换比分 / 评分。
+- 预览安装包：`artifacts/MyScore-lineup-preview.apk`，1,340,973 字节，SHA-256 `710d8f225ef16005aacf899be3fede7e38901d8330a5c122e786737637f8317f`。沿用 3.1.0 / 27 和既有签名，便于本地覆盖安装；不是新版本发布，未提交、推送或更新 GitHub Release。
+- 验收限制：Mobile Dev Android 发现 / 安装 / 启动 / UI 树 / 截图可用，侧栏仍返回 Apple Silicon / Xcode 限制；使用该插件的 Android 控制和项目自身 instrumentation。未在 Redmi / HyperOS 真机及运营商网络验收，也未进行本轮 FPS / 性能基准测量。
+
+## 头像缺失与菜单样式修复（第二轮开发预览，2026-10-26）
+
+此记录取代上一节预览包的源码、包哈希与最终验收结果。
+
+- 根因：实际 ESPN 球员资料对哈兰德、麦金等人没有 `headshot`，按正确 ESPN ID 生成的图片地址也返回 404。英超官方 FPL 提供照片代码和生日，照片代码不是 ESPN ID，不能直接混用。
+- 修复：从两队 ESPN 名单按球员 ID 获取身份；FPL 以规范化完整姓名 / 来源明确别名加相同出生日期唯一匹配，生成英超官方图片地址。球队资料与 FPL 缓存 24 小时，连接失败退避 5 分钟并保留已有缓存。主图片失败后，通过 TheSportsDB 免费公开接口再次核对完整姓名、生日及足球运动身份，再加载可信 CDN 的备用照片；图片沿用原有磁盘与有界内存缓存。没有新增生产库、Key 或付费订阅。
+- 实测：测试比赛 22 名首发均找到英超图片身份，21 名照片在 API 35 模拟器实际下载和解码成功（包含主图失败后的备用来源）。Alysson 的官方图不可用，TheSportsDB 查到的是生日不同的另一名 Alysson，已拒绝错误照片，继续姓名占位。此结果不保证所有联赛与球员都有照片。英超图增加上半部裁切，使圆形小头像中的脸部清楚；已有照片可能沿用旧球队球衣。
+- 菜单：移除系统默认 `PopupMenu`；改为锚定类别按钮的自有黑白圆角列表、Inter 字体、浅灰选中层与勾选图标，支持点击外部 / 返回关闭、滚动、深浅主题和大字号，空间不足时可显示在按钮上方。
+- 验证：138 项 JVM 测试通过，构建 / 测试包 / Lint 通过（0 错误、23 警告）。新增身份匹配测试覆盖重音、中间名、相同姓名不同生日、歧义匹配、无生日、可信图片域名与备用源。最终包原生布局矩阵通过 42,238 项断言；375dp 竖屏、横屏、2 倍字号实际窗口分别通过 6,703 / 6,655 / 7,279 项断言，深浅主题均截图。另用 Mobile Dev 实际点击、滑动打开切尔西对热刺阵容页，确认照片、黄红牌与换人显示。模拟器原分辨率及 1 倍字号已恢复。
+- 截图：`artifacts/football-lineup/football-review/portraits-phone375/dark-shooting.png`、`portraits-theme/dark-menu.png`、`portraits-largefont/light-menu.png` 等。已查看实际小屏照片、深色菜单及大字号浅色菜单。
+- 评分边界：本轮 ESPN 详情和球员资料均未提供评分。已核查 API-Football `/fixtures/players` 的 `games.rating` 与 Sportmonks 单场球员统计；二者需要服务 Key，免费档覆盖受赛季或联赛限制。未购买服务、未接通评分，也未把 FPL 积分、BPS 或赛季状态转换成单场评分。TheSportsDB 目前核验的免费接口只解决头像 / 资料，不能据此声称解决单场评分。
+- 官方参考：[FPL 原始资料](https://fantasy.premierleague.com/api/bootstrap-static/)、[TheSportsDB API](https://api.thesportsdb.com/documentation)、[API-Football 文档](https://www.api-football.com/documentation_v3)、[API-Football 价格](https://www.api-football.com/pricing)、[Sportmonks 说明](https://www.sportmonks.com/faq/)。
+
+- 最新预览 APK：artifacts/MyScore-lineup-preview.apk，1352813 字节；SHA-256 1b58f7623b1e2a1f5c501036d0cb05c0eabef46b502f71f276b5c793e0e5112d。仍沿用 3.1.0 / 27 与既有签名；未提交、推送或发布新版本。真机、运营商网络与本轮性能基准仍未验收。
+
+## NBA 球员身份列与界面合集（2026-10-26 开发预览）
+
+- 按用户新要求停止评分 / API Key 申请工作，完成其余界面改动。NBA 姓名列移除球队文字，仅保留头像角标队徽；首发为绿色标签、替补为中性标签、未出场单独显示文字标签。标签与号码 / 位置自适应同行或换行，球队完整身份保留在球员详情及无障碍描述。缺照片时仍保留队徽。NBA 使用显式展示选项，其余运动的通用表格不改变身份规则。
+- 最终包包含此前足球球场、事件标记、头像多来源补全和自有主题表现菜单；本轮未新增生产库、未连接评分服务、未提交 / 推送 / 发布。
+- 构建、测试 APK、138 项 JVM 测试、Lint 均通过；Lint 为 0 错误 / 23 警告，没有本次 NBA 组件新增警告。
+- `NbaRosterInstrumentation` 使用真实缓存比赛 `espn:nba:401909848:401909848`，检查姓名元数据不出现球队名、队徽保留、首发 / 替补明确标记、球队 ID 筛选、排序、数值横向滚动、详情弹层和文字布局。320 / 375 / 640dp、1 / 1.3 / 2 倍字体、深浅主题的原生测量矩阵与默认窗口通过 67,028 项断言。375dp 竖屏、横屏、2 倍字号实际窗口分别通过 16,698 / 16,692 / 17,022 项断言，结束后恢复原分辨率和 1 倍字号。
+- 最终同一生产 APK 重新运行足球交互与头像检查，通过 6,679 项断言，复查球队切换、表现菜单、资料类别、球员详情与照片下载。评分保留真实缺失状态，个别没有可靠来源的照片继续姓名占位。
+- 已查看最终原生小屏深色 NBA 标签、浅色列表和 2 倍字号截图。NBA 截图在 `artifacts/nba-roster/nba-roster-review/nba-phone375/`、`nba-landscape/`、`nba-largefont/`；最终足球截图在 `artifacts/football-lineup/final-nba-bundle/`。所有截图均为安装后的模拟器界面，没有伪造比赛或替换评分。
+- 合集安装包：`artifacts/MyScore-ui-preview.apk`，1,354,805 字节，SHA-256 `a5af2fea048418d994a4abd70aa29e644dc9a6f62fb9e7bd7bf5751e0dde6127`，校验文件 `artifacts/SHA256SUMS-ui-preview.txt`。仍为 3.1.0 / 27 与既有签名，可手动覆盖安装；不作为正式新版本发布。
+- 边界：本次实际窗口为 API 35 Android 模拟器，未在 Redmi / HyperOS 真机及运营商网络验收，也未做本轮性能基准。Mobile Dev Android 工具可连接、安装、启动和截图，侧栏仍受 Apple Silicon / Xcode 平台限制。

@@ -23,6 +23,7 @@ public final class DetailActivity extends Activity {
     private TextView[] tabLabels;private View[] tabRules;private String[] tabKeys,tabNames;
     private String tab="overview",error="";private boolean busy,active,chromeBuilt,fingerDown;private int selectedGame=-1,failures;
     private boolean pendingForce;
+    private String footballMetric="评分";
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final Runnable tick=()->load(false);
@@ -33,7 +34,7 @@ public final class DetailActivity extends Activity {
         boolean dark=Ui.isDark(this);
         setTheme(dark?R.style.AppThemeDark:R.style.AppTheme);super.onCreate(saved);ui=new Ui(this,dark);
         try{match=Match.fromJson(new JSONObject(getIntent().getStringExtra("match")));if(match.id.isBlank())throw new IllegalArgumentException();}catch(Exception e){finish();return;}
-        if(saved!=null){tab=saved.getString("tab","overview");selectedGame=saved.getInt("game",-1);teamFilter=saved.getString("team","all");categoryFilter=saved.getString("category","");sortColumn=saved.getString("sort","");descending=saved.getBoolean("descending",true);metricsX=saved.getInt("metricsX");eventsLimit=saved.getInt("eventsLimit",50);playerLimit=saved.getInt("playerLimit",16);}if((match.group.equals("F1")||match.group.equals("LOL"))&&tab.equals("events"))tab="overview";repository=new DetailRepository(this);
+        if(saved!=null){footballMetric=FootballMetrics.valid(saved.getString("footballMetric","评分"));tab=saved.getString("tab","overview");selectedGame=saved.getInt("game",-1);teamFilter=saved.getString("team","all");categoryFilter=saved.getString("category","");sortColumn=saved.getString("sort","");descending=saved.getBoolean("descending",true);metricsX=saved.getInt("metricsX");eventsLimit=saved.getInt("eventsLimit",50);playerLimit=saved.getInt("playerLimit",16);}if((match.group.equals("F1")||match.group.equals("LOL"))&&tab.equals("events"))tab="overview";repository=new DetailRepository(this);
         getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.bg);getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(ui.bg));if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         root=ui.column();setContentView(root);root.setOnApplyWindowInsetsListener((v,insets)->{if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left+ui.pageInset(),i.top,i.right+ui.pageInset(),i.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft()+ui.pageInset(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight()+ui.pageInset(),insets.getSystemWindowInsetBottom());return insets;});root.requestApplyInsets();render(false);
     }
@@ -41,7 +42,7 @@ public final class DetailActivity extends Activity {
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     @Override public void onPause(){active=false;fingerDown=false;handler.removeCallbacks(tick);handler.removeCallbacks(update);super.onPause();}
     @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdownNow();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("tab",tab);state.putInt("game",selectedGame);state.putString("team",teamFilter);state.putString("category",categoryFilter);state.putString("sort",sortColumn);state.putBoolean("descending",descending);state.putInt("metricsX",metricsX);state.putInt("eventsLimit",eventsLimit);state.putInt("playerLimit",playerLimit);}
+    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("footballMetric",footballMetric);state.putString("tab",tab);state.putInt("game",selectedGame);state.putString("team",teamFilter);state.putString("category",categoryFilter);state.putString("sort",sortColumn);state.putBoolean("descending",descending);state.putInt("metricsX",metricsX);state.putInt("eventsLimit",eventsLimit);state.putInt("playerLimit",playerLimit);}
     private void load(boolean force){
         if(force){Logos.retryFailures();rendered="";}
         handler.removeCallbacks(tick);if(busy||!active){pendingForce|=force;return;}boolean forced=force||pendingForce;pendingForce=false;busy=true;if(status!=null)status.setText("正在更新详情…");
@@ -121,7 +122,7 @@ public final class DetailActivity extends Activity {
     }
     private void updateStatus(){if(status!=null)status.setText(statusText());}
     private String bodyKey(){
-        StringBuilder key=new StringBuilder(96).append(tab).append(':').append(selectedGame).append(':').append(teamFilter).append(':').append(categoryFilter).append(':').append(sortColumn).append(':').append(descending).append(':').append(eventsLimit).append(':').append(playerLimit).append(':').append(error).append(':').append(match.group);
+        StringBuilder key=new StringBuilder(96).append(tab).append(':').append(footballMetric).append(':').append(selectedGame).append(':').append(teamFilter).append(':').append(categoryFilter).append(':').append(sortColumn).append(':').append(descending).append(':').append(eventsLimit).append(':').append(playerLimit).append(':').append(error).append(':').append(match.group);
         if(detail==null)key.append(":empty:").append(busy);else key.append(':').append(detail.bodySignature());
         return key.toString();
     }
@@ -134,7 +135,7 @@ public final class DetailActivity extends Activity {
         if(!error.isEmpty()){LinearLayout warning=panel();warning.addView(ui.text("暂未更新 · "+error+(detail==null?"":"\n显示上次获取的数据"),13,ui.error,false));ui.gap(warning,12);warning.addView(ui.button("重新加载",false,()->load(true)));body.addView(warning);ui.gap(body,14);}
         if(detail!=null&&!detail.warning.isBlank()){body.addView(ui.text(detail.warning,12,ui.muted,false));ui.gap(body,12);}
         if(detail==null)empty(busy?"正在读取比赛数据":"比赛详情暂不可用",busy?"正在连接本场比赛的数据来源。":"请检查网络并重新加载，列表仍保留上次记录。");
-        else if(match.group.equals("LOL"))lol();else if(tab.equals("overview"))overview();else if(tab.equals("stats"))statistics();else if(tab.equals("events"))events();else if(match.group.equals("足球"))new FootballLineupView(ui,detail,body).show(teamFilter,id->{teamFilter=id;render(false);});else if(match.group.equals("F1"))f1Drivers();else roster("lineup");
+        else if(match.group.equals("LOL"))lol();else if(tab.equals("overview"))overview();else if(tab.equals("stats"))statistics();else if(tab.equals("events"))events();else if(match.group.equals("足球"))new FootballLineupView(ui,detail,body).show(teamFilter,footballMetric,id->{teamFilter=id;render(true);},metric->{footballMetric=metric;render(true);});else if(match.group.equals("F1"))f1Drivers();else roster("lineup");
         if(scroll!=null)scroll.post(()->scroll.scrollTo(0,preserve?y:0));
     }
     private String statusText(){if(detail==null)return busy?"正在读取详情…":"尚未获取详情";if(match.group.equals("LOL"))return detail.lolFetched>0?"小局 "+time(detail.lolFetched,"HH:mm:ss")+" 获取 · 赛程 "+time(match.updated,"HH:mm:ss")+" 发布":"赛程 "+time(detail.fetched,"HH:mm:ss")+" 获取 · 小局尚未提供";return (System.currentTimeMillis()-detail.fetched>120_000?"缓存 · ":"")+detail.source+" · "+time(detail.fetched,"HH:mm:ss")+" 获取";}

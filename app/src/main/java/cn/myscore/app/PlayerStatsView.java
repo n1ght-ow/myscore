@@ -24,7 +24,7 @@ final class PlayerStatsView {
         LinearLayout caption=ui.row();TextView title=ui.text(detail.match.group.equals("NBA")?"球员数据":category,15,ui.text,true);caption.addView(title,new LinearLayout.LayoutParams(0,-2,1));caption.addView(ui.text(truncated?"显示 "+shown+" / "+total+" 人":total+" 人",11,ui.muted,false));body.addView(caption);ui.gap(body,8);
         if(rows.isEmpty()){body.addView(ui.text("这支队伍的本项数据尚未提供。",14,ui.muted,false));return;}
         TextView hint=ui.text("点姓名查看详情",11,ui.muted,false);body.addView(hint);ui.gap(body,8);
-        View table=new DetailTableView(ui).build(schema.columns,rows,sorted,selected.descending,label->changed.accept(new Selection(team,category,label,sorted.equals(label)?!selected.descending:true)),savedScroll,scrollX);body.addView(table,new LinearLayout.LayoutParams(-1,-2));
+        View table=new DetailTableView(ui,detail.match.group.equals("NBA")).build(schema.columns,rows,sorted,selected.descending,label->changed.accept(new Selection(team,category,label,sorted.equals(label)?!selected.descending:true)),savedScroll,scrollX);body.addView(table,new LinearLayout.LayoutParams(-1,-2));
         if(truncated){ui.gap(body,10);body.addView(ui.button("显示更多 · 剩余 "+(total-shown)+" 人",false,more));}
         HorizontalScrollView metrics=table.findViewWithTag("detail-metrics-scroll");boolean sortable=false;for(DetailRows.Entry row:rows)for(int i=1;i<row.values().size();i++)if(!Double.isNaN(DetailRows.number(row.values().get(i))))sortable=true;boolean hasSort=sortable;metrics.post(()->hint.setText((hasSort?"点数值列排序 · ":"")+(metrics.canScrollHorizontally(1)||metrics.canScrollHorizontally(-1)?"横向滑动查看更多 · ":"")+"点姓名查看详情"));
     }

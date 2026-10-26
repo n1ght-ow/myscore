@@ -9,7 +9,9 @@ import java.util.function.Consumer;
 /** Frozen identity rail and horizontally scrollable numeric columns. */
 final class DetailTableView {
     private final Ui ui;
-    DetailTableView(Ui ui){this.ui=ui;}
+    private final boolean nba;
+    DetailTableView(Ui ui){this(ui,false);}
+    DetailTableView(Ui ui,boolean nba){this.ui=ui;this.nba=nba;}
     View build(List<String> columns,List<DetailRows.Entry> entries,String sorted,boolean descending,Consumer<String> sort,java.util.function.IntConsumer savedScroll,int scrollX){
         LinearLayout shell=ui.row();shell.setGravity(Gravity.TOP);shell.setBackground(ui.panel());shell.setClipToOutline(true);shell.setTag("detail-data-table");
         float scale=Math.max(1,ui.c.getResources().getConfiguration().fontScale);int rowHeight=ui.dp(56*scale),headerHeight=ui.dp(48*scale);
@@ -41,10 +43,32 @@ final class DetailTableView {
     private View identity(DetailRows.Entry entry,int rank){
         LinearLayout row=ui.row();row.setPadding(ui.dp(10),ui.dp(6),ui.dp(8),ui.dp(6));MatchDetail.Person p=entry.person();
         boolean compact=entry.table().columns.get(0).equals("选手");
-        if(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())){FrameLayout portrait=new FrameLayout(ui.c);portrait.addView(Logos.artwork(ui,p.photo(),p.name(),30));if(!p.photo().isBlank()&&!p.teamLogo().isBlank())portrait.addView(Logos.view(ui,p.teamLogo(),p.team(),14),new FrameLayout.LayoutParams(ui.dp(14),ui.dp(14),Gravity.BOTTOM|Gravity.END));row.addView(portrait,new LinearLayout.LayoutParams(ui.dp(30),ui.dp(30)));}
+        if(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())){FrameLayout portrait=new FrameLayout(ui.c);portrait.addView(Logos.artwork(ui,p.photo(),p.name(),30));if((nba||!p.photo().isBlank())&&!p.teamLogo().isBlank())portrait.addView(Logos.view(ui,p.teamLogo(),p.team(),14),new FrameLayout.LayoutParams(ui.dp(14),ui.dp(14),Gravity.BOTTOM|Gravity.END));if(nba)portrait.setTag("nba-player-portrait");row.addView(portrait,new LinearLayout.LayoutParams(ui.dp(30),ui.dp(30)));}
         LinearLayout words=ui.column();LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(0,-2,1);wp.setMarginStart(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())?ui.dp(8):0);String name=p==null?DetailRows.cell(entry.values(),0):entry.table().columns.get(0).equals("球员")?p.shortName().matches("^\\p{L}\\..*|^[A-Z]{2}\\..*")?p.shortName():DetailFormat.shortName(p.name()):p.name();TextView title=ui.text(name,12,ui.text,true);words.addView(title);
-        String sub=p==null?"":String.join(" · ",java.util.stream.Stream.of(p.jersey(),p.position(),p.absent()?"未出场":p.starter()?"首发":p.team()).filter(s->!s.isBlank()).toArray(String[]::new));if(!sub.isBlank()){ui.gap(words,4);TextView caption=ui.text(sub,11,ui.muted,false);words.addView(caption);}row.addView(words,wp);
-        ui.clickable(row,ui.surface,0);row.setFocusable(true);row.setContentDescription(p==null?DetailRows.cell(entry.values(),0):p.name()+"，"+sub);row.setOnClickListener(v->{StringBuilder detail=new StringBuilder();if(p!=null){if(!p.team().isBlank())detail.append(p.team()).append('\n');if(!p.jersey().isBlank())detail.append("球衣号  ").append(p.jersey()).append('\n');if(!p.position().isBlank())detail.append("位置  ").append(p.position()).append('\n');if(p.absent()||p.starter())detail.append(p.absent()?"未出场":"首发").append('\n');detail.append('\n');}for(int i=1;i<entry.table().columns.size();i++)detail.append(entry.table().columns.get(i)).append("  ").append(DetailRows.cell(entry.values(),i)).append('\n');Sheet.message((Activity)ui.c,p==null?DetailRows.cell(entry.values(),0):p.name(),detail.toString());});return row;
+        boolean nbaPlayer=nba&&p!=null&&entry.table().category.equals("球员");
+        String sub=p==null?"":String.join(" · ",java.util.stream.Stream.of(p.jersey(),p.position(),nba?"":p.absent()?"未出场":p.starter()?"首发":p.team()).filter(s->!s.isBlank()).toArray(String[]::new));
+        if(nbaPlayer){title.setTag("nba-player-name");row.setTag("nba-player-row");ui.gap(words,4);words.addView(nbaCaption(p,sub));}
+        else if(!sub.isBlank()){ui.gap(words,4);TextView caption=ui.text(sub,11,ui.muted,false);words.addView(caption);}row.addView(words,wp);
+        ui.clickable(row,ui.surface,0);row.setFocusable(true);row.setContentDescription(p==null?DetailRows.cell(entry.values(),0):p.name()+"，"+(nba?p.team()+"，":"")+(nbaPlayer?role(p)+"，":"")+sub);row.setOnClickListener(v->{StringBuilder detail=new StringBuilder();if(p!=null){if(!p.team().isBlank())detail.append(p.team()).append('\n');if(!p.jersey().isBlank())detail.append("球衣号  ").append(p.jersey()).append('\n');if(!p.position().isBlank())detail.append("位置  ").append(p.position()).append('\n');if(nbaPlayer||p.absent()||p.starter())detail.append(role(p)).append('\n');detail.append('\n');}for(int i=1;i<entry.table().columns.size();i++)detail.append(entry.table().columns.get(i)).append("  ").append(DetailRows.cell(entry.values(),i)).append('\n');Sheet.message((Activity)ui.c,p==null?DetailRows.cell(entry.values(),0):p.name(),detail.toString());});return row;
+    }
+    private String role(MatchDetail.Person person){return person.absent()?"未出场":person.starter()?"首发":"替补";}
+    private View nbaCaption(MatchDetail.Person person,String metadata){
+        String label=role(person);boolean starter=person.starter()&&!person.absent();
+        TextView badge=ui.text(label,11,starter?ui.onPrimary:ui.muted,true);badge.setTag("nba-player-role");badge.setPadding(ui.dp(5),ui.dp(1),ui.dp(5),ui.dp(1));badge.setBackground(ui.shape(starter?ui.primary:ui.tonal,4));
+        TextView meta=ui.text(metadata,11,ui.muted,false);meta.setTag("nba-player-meta");
+        LinearLayout caption=new LinearLayout(ui.c){
+            @Override protected void onMeasure(int width,int height){
+                int needed=(int)Math.ceil(badge.getPaint().measureText(label)+meta.getPaint().measureText(metadata))+badge.getPaddingLeft()+badge.getPaddingRight()+ui.dp(4);
+                boolean across=MeasureSpec.getSize(width)>=needed;
+                int direction=across?HORIZONTAL:VERTICAL;if(getOrientation()!=direction)setOrientation(direction);setGravity(across?Gravity.CENTER_VERTICAL:Gravity.START);
+                LinearLayout.LayoutParams params=(LinearLayout.LayoutParams)meta.getLayoutParams();params.setMarginStart(across?ui.dp(4):0);params.topMargin=across?0:ui.dp(3);
+                super.onMeasure(width,height);
+            }
+        };
+        caption.addView(badge,new LinearLayout.LayoutParams(-2,-2));if(!metadata.isBlank())caption.addView(meta,new LinearLayout.LayoutParams(-2,-2));
+        // Keep a measurable metadata child for rows whose source omits jersey and position.
+        else {meta.setVisibility(View.GONE);caption.addView(meta,new LinearLayout.LayoutParams(-2,-2));}
+        return caption;
     }
     View simple(MatchDetail.Table table){List<DetailRows.Entry> rows=new ArrayList<>();for(int i=0;i<table.rows.size();i++)rows.add(new DetailRows.Entry(table,table.rows.get(i),i<table.people.size()?table.people.get(i):null));return build(table.columns,rows,"",false,null,null,0);}
 }

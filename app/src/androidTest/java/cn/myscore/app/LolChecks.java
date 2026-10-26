@@ -23,14 +23,14 @@ final class LolChecks {
             long until=android.os.SystemClock.uptimeMillis()+5000;
             while(field(test,activity,"detail")==null&&android.os.SystemClock.uptimeMillis()<until){Thread.sleep(40);test.waitForIdleSync();}
             require(field(test,activity,"detail")!=null,"real cache loads into native LoL page "+theme);
-            click(test,activity,"比赛");require(has(test,activity,"双方阵容"),"paired lineup is reachable "+theme);require(has(test,activity,"目标与经济"),"objective section present "+theme);
+            click(test,activity,"比赛");require(has(test,activity,"位置对位"),"paired lineup is reachable "+theme);require(has(test,activity,"目标与经济"),"objective section present "+theme);
             click(test,activity,"第 1 局");require(((Integer)field(test,activity,"selectedGame"))==1,"first game selected "+theme);
-            require(has(test,activity,"C9 Thanatos")&&has(test,activity,"KC Canna"),"real opposing top laners stay paired "+theme);
+            require(has(test,activity,"Thanatos")&&has(test,activity,"Canna"),"real opposing top laners stay paired "+theme);
             capture(test,context,"lol-match-"+theme);test.runOnMainSync(()->{View panel=activity.getWindow().getDecorView().findViewWithTag("lol-lineup");((ScrollView)read(activity,"scroll")).scrollTo(0,Math.max(0,panel.getTop()-Math.round(32*activity.getResources().getDisplayMetrics().density)));});capture(test,context,"lol-lineup-"+theme);test.runOnMainSync(()->((ScrollView)read(activity,"scroll")).fullScroll(View.FOCUS_DOWN));capture(test,context,"lol-lineup-bottom-"+theme);
             click(test,activity,"第 2 局");require(((Integer)field(test,activity,"selectedGame"))==2,"second game selected "+theme);
             Instrumentation.ActivityMonitor monitor=test.addMonitor(DetailActivity.class.getName(),null,false);test.runOnMainSync(activity::recreate);Activity recreated=test.waitForMonitorWithTimeout(monitor,8000);test.removeMonitor(monitor);require(recreated!=null,"LoL detail recreates "+theme);test.waitForIdleSync();require(((Integer)field(test,recreated,"selectedGame"))==2,"selected game survives recreation "+theme);
             long ready=android.os.SystemClock.uptimeMillis()+5000;while(field(test,recreated,"detail")==null&&android.os.SystemClock.uptimeMillis()<ready){Thread.sleep(40);test.waitForIdleSync();}
-            click(test,recreated,"统计");require(has(test,recreated,"选手数据与出装"),"game-specific player stats present "+theme);capture(test,context,"lol-stats-"+theme);
+            click(test,recreated,"统计");require(has(test,recreated,"伤害、视野与出装"),"game-specific player stats present "+theme);capture(test,context,"lol-stats-"+theme);
             test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);test.waitForIdleSync();
         }
         return checks;

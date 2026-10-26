@@ -42,7 +42,11 @@ public final class RedesignInstrumentation extends Instrumentation {
                     require(((ScrollView)field("scroll")).getHeight()>=new Ui(context,theme.equals("dark")).dp(80),"detail keeps a usable scrolling viewport");
                     String lineup=switch(comp.group){case "足球"->"阵容";case "LOL"->"比赛";case "F1"->"车手";case "CS2"->"选手";default->"球员";};
                     click(lineup);capture(theme+"-"+target[0]+"-lineup");
-                    if(!compact){click(comp.group.equals("F1")?"成绩":"统计");capture(theme+"-"+target[0]+"-stats");}
+                    if(comp.group.equals("F1"))require(find(activity.getWindow().getDecorView(),"名次")==null,"F1 entrants do not repeat race results");
+                    if(comp.group.equals("CS2"))require(find(activity.getWindow().getDecorView(),"统计")==null,"CS2 empty statistics tab removed");
+                    if(comp.group.equals("足球")){require(activity.getWindow().getDecorView().findViewWithTag("football-pitch")!=null,"real starting formation is rendered");runOnMainSync(()->{try{((ScrollView)field("scroll")).scrollTo(0,new Ui(activity,theme.equals("dark")).dp(240));}catch(Exception e){throw new AssertionError(e);}});capture(theme+"-football-pitch");}
+                    if(comp.group.equals("LOL")&&getTargetContext().getResources().getConfiguration().fontScale<1.5f){runOnMainSync(()->{for(String tag:new String[]{"lol-economy-home","lol-economy-away"}){TextView value=activity.getWindow().getDecorView().findViewWithTag(tag);require(value!=null&&value.getLineCount()==1,"LoL economy stays on one line");}});}
+                    if(!compact){click(comp.group.equals("CS2")?"小局":comp.group.equals("F1")?"成绩":"统计");capture(theme+"-"+target[0]+"-stats");if(comp.group.equals("LOL"))require(find(activity.getWindow().getDecorView(),"击杀")==null,"LoL statistics omit duplicate game scoreboard");}
                 }
             }
             report.putString("stream","\nPASS: "+checks+" native interface checks ("+label+").\n");

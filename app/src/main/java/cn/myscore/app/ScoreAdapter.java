@@ -193,7 +193,7 @@ final class ScoreAdapter extends BaseAdapter {
             text(away,m.away);
             text(homeScore,m.hasScore()?m.homeScore:"—");
             text(awayScore,m.hasScore()?m.awayScore:"—");
-            homeScore.setTextColor(m.live()?ui.primary:ui.text);awayScore.setTextColor(m.live()?ui.primary:ui.text);
+            homeScore.setTextColor(ui.scoreColor(m,true));awayScore.setTextColor(ui.scoreColor(m,false));
             foot.bind(m.timeConfirmed?m.time():"时间待定",provenance(m));
             boolean staleNow=m.live()&&System.currentTimeMillis()-m.updated>120_000;
             stale.setVisibility(staleNow?View.VISIBLE:View.GONE);

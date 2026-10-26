@@ -144,7 +144,11 @@ final class TeamScheduleAdapter extends BaseAdapter {
             text(detail,value.side.isEmpty()?value.detail:value.side+" · "+value.detail);
             boolean scored=!value.score.isEmpty();
             if(scored) {
-                text(score,value.score);score.setTextSize(20);score.setTextColor(value.match.live()?ui.primary:ui.text);
+                score.setTextSize(20);score.setTextColor(ui.text);
+                String own=value.home?value.match.homeScore:value.match.awayScore,other=value.home?value.match.awayScore:value.match.homeScore;
+                android.text.SpannableString colored=new android.text.SpannableString(value.score);
+                int split=value.score.indexOf('–');if(split<0)split=value.score.indexOf(':');if(split<0)split=value.score.indexOf('-');
+                if(split>0){colored.setSpan(new android.text.style.ForegroundColorSpan(ui.scoreColor(own,other,value.match.finalised())),0,split,0);colored.setSpan(new android.text.style.ForegroundColorSpan(ui.scoreColor(other,own,value.match.finalised())),split+1,colored.length(),0);}score.setText(colored);
             } else {
                 text(score,"VS");score.setTextSize(14);score.setTextColor(ui.muted);
             }

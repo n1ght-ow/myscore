@@ -25,10 +25,10 @@ public final class DetailParsers {
         JSONArray comp=arr(header,"competitions");JSONObject co=comp.optJSONObject(0);if(co!=null){JSONArray notes=arr(co,"notes");for(int i=0;i<notes.length();i++)d.fact("说明",objAt(notes,i).optString("headline"));lineScores(d,co);}
         teamStats(d,arr(obj(root,"boxscore"),"teams"));
         if(c.group.equals("足球"))d.stats.sort(Comparator.comparingInt(s->switch(s.label()){case "控球率 %"->0;case "射门"->1;case "射正"->2;case "角球"->3;case "成功传球"->4;case "传球"->5;default->6;}));
-        if(c.group.equals("足球"))soccerRoster(d,arr(root,"rosters"));else players(d,arr(obj(root,"boxscore"),"players"));
+        if(c.group.equals("足球"))soccerRoster(d,arr(root,"rosters"),arr(root,"keyEvents"));else players(d,arr(obj(root,"boxscore"),"players"));
         JSONArray events=arr(root,c.group.equals("足球")?"keyEvents":c.id.equals("nfl")?"scoringPlays":"plays");
         for(int i=events.length()-1;i>=0;i--){JSONObject e=events.optJSONObject(i);if(e==null)continue;String clock=obj(e,"clock").optString("displayValue");int period=obj(e,"period").optInt("number");String time=(c.group.equals("足球")?"":period>0?"Q"+period+" ":"")+clock;String type=obj(e,"type").optString("text");String text=e.optString("text");if(text.isEmpty())continue;d.events.add(new MatchDetail.Event(time,label(type),text));}
-        JSONArray injuries=arr(root,"injuries");for(int i=0;i<injuries.length();i++){JSONObject team=objAt(injuries,i);MatchDetail.Table t=new MatchDetail.Table("lineup",obj(team,"team").optString("displayName")+" · 伤停","球员","状态","说明");t.teamId=obj(team,"team").optString("id");t.category="伤停";JSONArray list=arr(team,"injuries");for(int j=0;j<list.length();j++){JSONObject r=objAt(list,j);t.row(obj(r,"athlete").optString("displayName"),r.optString("status"),r.optString("shortComment"));}d.table(t);}
+        JSONArray injuries=arr(root,"injuries");for(int i=0;i<injuries.length();i++){JSONObject team=objAt(injuries,i);MatchDetail.Table t=new MatchDetail.Table("lineup",obj(team,"team").optString("displayName")+" · 伤停","球员","状态","说明");t.teamId=obj(team,"team").optString("id");t.category="伤停";JSONArray list=arr(team,"injuries");for(int j=0;j<list.length();j++){JSONObject r=objAt(list,j);t.row(obj(r,"athlete").optString("displayName"),label(r.optString("status")),r.optString("shortComment"));t.people.add(person(r,obj(team,"team"),d.match));}d.table(t);}
         if(c.group.equals("NBA"))for(MatchDetail.Table table:d.tables)if(table.category.equals("球员"))orderColumns(table,List.of("球员","时间","得分","篮板","助攻","抢断","盖帽","失误","投篮","三分","罚球","前场板","后场板","犯规","正负值"));
         return d;
     }
@@ -44,16 +44,25 @@ public final class DetailParsers {
         if(h==null||a==null)return;Map<String,JSONObject> away=new LinkedHashMap<>();JSONArray aa=arr(a,"statistics");for(int i=0;i<aa.length();i++){JSONObject s=objAt(aa,i);away.put(s.optString("name"),s);}
         JSONArray hh=arr(h,"statistics");for(int i=0;i<hh.length();i++){JSONObject s=objAt(hh,i);String key=s.optString("name"),v=val(s,"displayValue");JSONObject other=away.get(key);String av=other==null?"":val(other,"displayValue");String title=key.equals("possessionPct")?"控球率 %":key.equals("possessionTime")?"控球时间":label(s.optString("label",key));if(!v.isEmpty()||!av.isEmpty())d.stats.add(new MatchDetail.Stat(title,show(v),show(av)));}
     }
-    private static void soccerRoster(MatchDetail d,JSONArray rosters){
+    private static void soccerRoster(MatchDetail d,JSONArray rosters,JSONArray events){
         for(int i=0;i<rosters.length();i++){JSONObject r=objAt(rosters,i);String team=obj(r,"team").optString("displayName");String formation=r.optString("formation");d.fact(team+" 阵型",formation);
-            for(boolean starter:new boolean[]{true,false}){MatchDetail.Table t=new MatchDetail.Table("lineup",team+" · "+(starter?"首发":"替补"),"球员","位置","状态");t.teamId=obj(r,"team").optString("id");t.category=starter?"首发":"替补";JSONArray list=arr(r,"roster");for(int j=0;j<list.length();j++){JSONObject p=objAt(list,j);if(p.optBoolean("starter")!=starter)continue;String name=obj(p,"athlete").optString("displayName");if(name.isBlank())continue;t.row((p.optString("jersey").isBlank()?"":p.optString("jersey")+"  ")+name,label(obj(p,"position").optString("displayName")),p.optBoolean("subbedOut")?"已换下":p.optBoolean("subbedIn")?"替补登场":starter?"首发":"替补");t.people.add(person(p,obj(r,"team"),d.match));}d.table(t);}
+            for(boolean starter:new boolean[]{true,false}){MatchDetail.Table t=new MatchDetail.Table("lineup",team+" · "+(starter?"首发":"替补"),"球员","位置","状态","站位","进球","黄牌","红牌","换人");t.teamId=obj(r,"team").optString("id");t.category=starter?"首发":"替补";JSONArray list=arr(r,"roster");for(int j=0;j<list.length();j++){JSONObject p=objAt(list,j);if(p.optBoolean("starter")!=starter)continue;String name=obj(p,"athlete").optString("displayName");if(name.isBlank())continue;t.row((p.optString("jersey").isBlank()?"":p.optString("jersey")+"  ")+name,label(obj(p,"position").optString("displayName")),p.optBoolean("subbedOut")?"已换下":p.optBoolean("subbedIn")?"替补登场":starter?"首发":"替补",p.optString("formationPlace"),rosterStat(p,"totalGoals"),rosterStat(p,"yellowCards"),rosterStat(p,"redCards"),substitution(events,obj(p,"athlete").optString("id")));t.people.add(person(p,obj(r,"team"),d.match));}d.table(t);}
         }
+    }
+    private static String rosterStat(JSONObject player,String name){JSONArray stats=arr(player,"stats");for(int i=0;i<stats.length();i++){JSONObject stat=objAt(stats,i);if(stat.optString("name").equals(name))return show(val(stat,"displayValue").isBlank()?val(stat,"value"):val(stat,"displayValue"));}return "—";}
+    private static String substitution(JSONArray events,String player){
+        if(player.isBlank())return "";
+        for(int i=0;i<events.length();i++){JSONObject event=objAt(events,i);if(!obj(event,"type").optString("text").equals("Substitution"))continue;JSONArray people=arr(event,"participants");if(people.length()!=2)continue;JSONObject in=obj(objAt(people,0),"athlete"),out=obj(objAt(people,1),"athlete");String clock=obj(event,"clock").optString("displayValue");if(in.optString("id").equals(player))return clock+" 换上 · 换下 "+out.optString("displayName");if(out.optString("id").equals(player))return clock+" 换下 · 换上 "+in.optString("displayName");}return "";
+    }
+    static String soccerPhoto(String photo,String id){
+        if(photo.startsWith("https://")&&!photo.contains("/teamlogos/")&&!photo.contains("/jersey"))return photo;
+        return id.matches("[0-9]+")?"https://a.espncdn.com/i/headshots/soccer/players/full/"+id+".png":"";
     }
     private static void players(MatchDetail d,JSONArray teams){
         for(int i=0;i<teams.length();i++){JSONObject r=objAt(teams,i);String team=obj(r,"team").optString("displayName");JSONArray groups=arr(r,"statistics");for(int j=0;j<groups.length();j++){JSONObject g=objAt(groups,j);JSONArray columns=arr(g,"labels");if(columns.length()==0)continue;MatchDetail.Table t=new MatchDetail.Table("lineup",team+(g.optString("name").isEmpty()?"":" · "+label(g.optString("name"))),"球员");t.teamId=obj(r,"team").optString("id");t.category=g.optString("name").isBlank()?"球员":label(g.optString("name"));for(int k=0;k<columns.length();k++)t.columns.add(label(columns.optString(k)));JSONArray athletes=arr(g,"athletes");for(int k=0;k<athletes.length();k++){JSONObject p=objAt(athletes,k);String name=obj(p,"athlete").optString("displayName");if(name.isBlank())continue;List<String> row=new ArrayList<>();row.add(name+(p.optBoolean("starter")?" · 首发":"")+(p.optBoolean("didNotPlay")?" · 未出场":""));JSONArray values=arr(p,"stats");for(int v=0;v<columns.length();v++)row.add(show(values.optString(v)));t.rows.add(row);t.people.add(person(p,obj(r,"team"),d.match));}d.table(t);}
         }
     }
-    private static MatchDetail.Person person(JSONObject p,JSONObject team,Match match){JSONObject a=obj(p,"athlete"),position=obj(p,"position");String role=position.optString("displayName",obj(a,"position").optString("abbreviation"));String photo=obj(a,"headshot").optString("href");return new MatchDetail.Person(a.optString("id"),a.optString("displayName"),a.optString("shortName",a.optString("displayName")),photo,p.optString("jersey",a.optString("jersey")),label(role),team.optString("id"),team.optString("displayName"),team.optString("logo",team.optString("id").equals(match.homeId)?match.homeLogo:team.optString("id").equals(match.awayId)?match.awayLogo:""),p.optBoolean("starter"),p.optBoolean("didNotPlay"));}
+    private static MatchDetail.Person person(JSONObject p,JSONObject team,Match match){JSONObject a=obj(p,"athlete"),position=obj(p,"position");String role=position.optString("displayName",obj(a,"position").optString("abbreviation"));String photo=obj(a,"headshot").optString("href");if(match.group.equals("足球"))photo=soccerPhoto(photo,a.optString("id"));String shortName=a.optString("shortName",DetailFormat.shortName(a.optString("displayName")));if((match.group.equals("NBA")||match.group.equals("NFL"))&&!a.optString("firstName").isBlank()&&!a.optString("lastName").isBlank())shortName=a.optString("firstName").substring(0,1)+". "+a.optString("lastName");return new MatchDetail.Person(a.optString("id"),a.optString("displayName"),shortName,photo,p.optString("jersey",a.optString("jersey")),label(role),team.optString("id"),team.optString("displayName"),team.optString("logo",team.optString("id").equals(match.homeId)?match.homeLogo:team.optString("id").equals(match.awayId)?match.awayLogo:""),p.optBoolean("starter"),p.optBoolean("didNotPlay"));}
     public static MatchDetail five(JSONObject root,Match previous,long now)throws Exception {
         JSONObject match=obj(obj(root,"data"),"match");if(!root.optBoolean("success"))throw new Exception("CS2 详情读取失败");Match actual=DomesticEsports.fiveMatch(match,now,true,false);if(!actual.id.equals(previous.id))throw new Exception("CS2 比赛身份不匹配");MatchDetail d=new MatchDetail(actual);d.fetched=now;JSONObject mc=obj(match,"mc_info");d.fact("赛事",obj(match,"tt_info").optString("disp_name"));d.fact("赛制",mc.optString("format").isBlank()?"":"BO"+mc.optString("format"));d.fact("阶段",mc.optString("tt_stage_desc"));
         JSONObject global=obj(match,"global_state");csPlayers(d,global,"全场",actual.home,actual.away,"t1_player_stats","t2_player_stats");
@@ -62,7 +71,7 @@ public final class DetailParsers {
         d.table(maps);d.warning="地图比分仅展示已结束小局；选手统计按来源更新。";return d;
     }
     private static void csPlayers(MatchDetail d,JSONObject source,String map,String home,String away,String hk,String ak){
-        for(int i=0;i<2;i++){MatchDetail.Table t=new MatchDetail.Table("lineup",(i==0?home:away)+" · "+map,"选手","K","D","A","ADR","KAST","Rating");t.teamId=i==0?d.match.homeId:d.match.awayId;t.category=map;JSONArray a=arr(source,i==0?hk:ak);for(int j=0;j<a.length();j++){JSONObject p=objAt(a,j);if(p.optString("name").isBlank())continue;String name=p.optString("name"),team=i==0?home:away;t.row(name,show(val(p,"kill")),show(val(p,"death")),show(val(p,"assist")),show(val(p,"adr")),show(val(p,"kast")),show(val(p,"rating")));t.people.add(new MatchDetail.Person(p.optString("id"),name,name,DetailSources.https(p.optString("avatar")),"","",t.teamId,team,"",false,false));}d.table(t);}
+        for(int i=0;i<2;i++){MatchDetail.Table t=new MatchDetail.Table("lineup",(i==0?home:away)+" · "+map,"选手","K","D","A","ADR","KAST","Rating");t.teamId=i==0?d.match.homeId:d.match.awayId;t.category=map;JSONArray a=arr(source,i==0?hk:ak);for(int j=0;j<a.length();j++){JSONObject p=objAt(a,j);if(p.optString("name").isBlank())continue;String name=p.optString("name"),team=i==0?home:away;t.row(name,show(val(p,"kill")),show(val(p,"death")),show(val(p,"assist")),DetailFormat.number(show(val(p,"adr")),2),DetailFormat.number(show(val(p,"kast")),1),DetailFormat.number(show(val(p,"rating")),2));t.people.add(new MatchDetail.Person(p.optString("id"),name,name,DetailSources.https(p.optString("avatar")),"","",t.teamId,team,"",false,false));}d.table(t);}
     }
     static JSONObject objAt(JSONArray a,int i){JSONObject o=a.optJSONObject(i);return o==null?new JSONObject():o;}
     public static MatchDetail lol(JSONObject base,JSONObject rich,Match previous,long now)throws Exception {
@@ -100,12 +109,15 @@ public final class DetailParsers {
         MatchDetail d=new MatchDetail(actual);d.fetched=now;d.fact("大奖赛",event.optString("name"));d.fact("场次",obj(session,"type").optString("abbreviation"));d.fact("赛道",obj(core,"venue").optString("fullName"));
         Map<String,String> names=new HashMap<>();JSONArray boardDrivers=arr(session,"competitors");for(int i=0;i<boardDrivers.length();i++){JSONObject p=objAt(boardDrivers,i);names.put(p.optString("id"),obj(p,"athlete").optString("displayName"));}
         List<JSONObject> drivers=new ArrayList<>();JSONArray cs=arr(core,"competitors");for(int i=0;i<cs.length();i++)drivers.add(objAt(cs,i));drivers.sort(Comparator.comparingInt(p->p.optInt("order",999)));
-        MatchDetail.Table lineup=new MatchDetail.Table("lineup","本场车手与车队","车手","名次","车队","车号");MatchDetail.Table results=new MatchDetail.Table("stats","场次成绩","车手","名次","车队","圈数","成绩 / 用时","积分","Q1","Q2","Q3");
+        MatchDetail.Table lineup=new MatchDetail.Table("lineup","本场车手与车队","车手","车队","车号");MatchDetail.Table results=new MatchDetail.Table("stats","场次成绩","车手","名次","车队","圈数","成绩 / 用时","积分","Q1","Q2","Q3");
         for(JSONObject p:drivers){String id=p.optString("id"),name=names.getOrDefault(id,"");if(name.isBlank())continue;JSONObject car=obj(p,"vehicle");Map<String,String> values=new HashMap<>();JSONObject stats=statistics.get(id);if(stats!=null){JSONArray cats=arr(obj(stats,"splits"),"categories");for(int j=0;j<cats.length();j++){JSONArray ss=arr(objAt(cats,j),"stats");for(int k=0;k<ss.length();k++){JSONObject s=objAt(ss,k);values.put(s.optString("name"),val(s,"displayValue"));}}}
             String place=show(values.getOrDefault("place",p.has("order")?p.optString("order"):""));
-            lineup.row(name,place,show(car.optString("manufacturer")),show(val(car,"number")));
+            lineup.row(name,show(car.optString("manufacturer")),show(val(car,"number")));
             if(!actual.scheduled())results.row(name,place,show(car.optString("manufacturer")),show(values.getOrDefault("lapsCompleted","")),show(values.getOrDefault("totalTime","")),show(values.getOrDefault("championshipPts","")),show(values.getOrDefault("qual1TimeMS","")),show(values.getOrDefault("qual2TimeMS","")),show(values.getOrDefault("qual3TimeMS","")));
-        }d.table(lineup);d.table(results);
+        }
+        // Qualifying splits and points are meaningful only when this session publishes them.
+        for(int i=results.columns.size()-1;i>=1;i--){String column=results.columns.get(i);final int index=i;if((column.matches("Q[1-3]")||column.equals("积分"))&&results.rows.stream().allMatch(row->DetailRows.cell(row,index).equals("—"))){results.columns.remove(i);for(int j=0;j<results.rows.size();j++){List<String> row=new ArrayList<>(results.rows.get(j));row.remove(i);results.rows.set(j,row);}}}
+        d.table(lineup);d.table(results);
         MatchDetail.Table weekend=new MatchDetail.Table("overview","比赛周末 · 北京时间","场次","开始时间","状态");JSONArray sessions=arr(event,"competitions");for(int i=0;i<sessions.length();i++){JSONObject co=objAt(sessions,i);long time=Match.parseTime(co.optString("date"));String date=time>0?java.time.format.DateTimeFormatter.ofPattern("M/d HH:mm",Locale.CHINA).withZone(Match.ZONE).format(java.time.Instant.ofEpochMilli(time)):"待定";JSONObject ty=obj(obj(co,"status"),"type");weekend.row(obj(co,"type").optString("abbreviation"),date,Rules.stateLabel(Rules.state(ty.optString("name"),ty.optString("state"))));}d.table(weekend);return d;
     }
     private static final Map<String,String> LABELS=new HashMap<>();
@@ -119,5 +131,17 @@ public final class DetailParsers {
         LABELS.put("Attacking Midfielder Left","左前腰");LABELS.put("Attacking Midfielder Right","右前腰");LABELS.put("Attacking Midfielder Center","前腰");LABELS.put("Left Attacking Midfielder","左前腰");LABELS.put("Right Attacking Midfielder","右前腰");
         LABELS.put("Defensive Midfielder Left","左后腰");LABELS.put("Defensive Midfielder Right","右后腰");LABELS.put("Left Defensive Midfielder","左后腰");LABELS.put("Right Defensive Midfielder","右后腰");LABELS.put("Left Center Back","左中卫");LABELS.put("Right Center Back","右中卫");
     }
-    public static String label(String value){return LABELS.getOrDefault(value,value);}
+    public static String label(String value){
+        if(LABELS.containsKey(value))return LABELS.get(value);
+        return switch(value){
+            case "Substitute"->"替补";case "Center Defender"->"中卫";case "Center Left Midfielder"->"左中前卫";case "Center Right Midfielder"->"右中前卫";
+            case "Center Defensive Midfielder","Defensive Midfielder Center"->"后腰";
+            case "Left Defender"->"左后卫";case "Right Defender"->"右后卫";
+            case "Center Left Forward"->"左中锋";case "Center Right Forward"->"右中锋";
+            case "Left Center Midfielder"->"左中前卫";case "Right Center Midfielder"->"右中前卫";
+            case "Left Centre Back"->"左中卫";case "Right Centre Back"->"右中卫";case "Centre Back"->"中卫";
+            case "Out"->"缺阵";case "Doubtful"->"出战存疑";case "Questionable"->"待定";case "Injured"->"受伤";case "Suspended"->"停赛";
+            default->value;
+        };
+    }
 }

@@ -72,12 +72,15 @@ final class Ui {
         return v;
     }
     ScoreText score(String home,String away,boolean available,int maxSp){return new ScoreText(home,away,available,maxSp);}
+    int scoreColor(Match match,boolean home){return scoreColor(home?match.homeScore:match.awayScore,home?match.awayScore:match.homeScore,match.finalised());}
+    int scoreColor(String own,String other,boolean finished){int result=DetailFormat.outcome(own,other,finished);return result>0?primary:result<0?error:text;}
     /** Preserve a readable minimum: narrow scoreboards stack the two scores instead of clipping. */
     final class ScoreText extends TextView {
         private final Paint measure=new Paint(Paint.ANTI_ALIAS_FLAG);
         private final int maxSp;
         private String home="",away="",single="VS";
         private boolean available;
+        private int homeColor=text,awayColor=text;
         private int ceiling;
         ScoreText(String home,String away,boolean available,int maxSp){
             super(Ui.this.c);this.maxSp=maxSp;setTypeface(medium);setFontFeatureSettings("tnum");setIncludeFontPadding(true);setFallbackLineSpacing(true);
@@ -91,12 +94,18 @@ final class Ui {
             setContentDescription(available?"比分 "+home+" 比 "+away:"来源尚未提供比分");
             if(!single.contentEquals(getText()))setText(single);
         }
+        void setResultColors(int home,int away){if(homeColor==home&&awayColor==away&&getText() instanceof android.text.Spanned)return;homeColor=home;awayColor=away;paintScore(getText().toString());}
+        private void paintScore(String display){
+            android.text.SpannableString colored=new android.text.SpannableString(display);
+            if(available){colored.setSpan(new android.text.style.ForegroundColorSpan(homeColor),0,home.length(),0);colored.setSpan(new android.text.style.ForegroundColorSpan(awayColor),display.length()-away.length(),display.length(),0);}
+            setText(colored);
+        }
         @Override protected void onMeasure(int widthSpec,int heightSpec){
             int width=MeasureSpec.getSize(widthSpec)-getPaddingLeft()-getPaddingRight();
             measure.set(getPaint());measure.setTextSize(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,22,c.getResources().getDisplayMetrics()));
             boolean stack=available&&MeasureSpec.getMode(widthSpec)!=MeasureSpec.UNSPECIFIED&&width>0&&measure.measureText(single)>width;
             String display=stack?home+"\n"+away:single;
-            int lines=stack?2:1;if(getMaxLines()!=lines)setMaxLines(lines);if(!display.contentEquals(getText()))setText(display);
+            int lines=stack?2:1;if(getMaxLines()!=lines)setMaxLines(lines);if(!display.contentEquals(getText()))paintScore(display);
             // Choose the font before measuring height. Framework auto-size can increase
             // it during layout after a wrap-content height was measured at the default size.
             int size=ceiling;

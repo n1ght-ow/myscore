@@ -1,0 +1,21 @@
+package cn.myscore.app;
+
+import org.json.*;
+import org.junit.Test;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import static org.junit.Assert.*;
+
+public class DetailRedesignTest {
+    private JSONObject fixture(String name)throws Exception{try(var in=getClass().getResourceAsStream("/details/"+name+".json")){return new JSONObject(new String(in.readAllBytes(),StandardCharsets.UTF_8));}}
+    private MatchDetail football()throws Exception{JSONObject root=fixture("epl");Match match=Parsers.espn(new JSONObject().put("events",new JSONArray().put(root.getJSONObject("header"))),Competition.find("epl"),1).get(0);return DetailParsers.espn(root,match,100);}
+    @Test public void damageRoundsFloatingPointResidueWithoutTurningMissingIntoZero(){assertEquals("16,803",DetailFormat.damage("16802.940000000002"));assertEquals("0",DetailFormat.damage("0"));assertEquals("—",DetailFormat.damage("—"));assertEquals("35.2",DetailFormat.number("35.22000000000001",1));}
+    @Test public void namesKeepSurnameSuffixParticlesAndSingleNames(){assertEquals("L. James",DetailFormat.shortName("LeBron James"));assertEquals("O. Beckham Jr.",DetailFormat.shortName("Odell Beckham Jr."));assertEquals("K. Towns",DetailFormat.shortName("Karl-Anthony Towns"));assertEquals("J. van Dijk",DetailFormat.shortName("John van Dijk"));assertEquals("Pelé",DetailFormat.shortName("Pelé"));}
+    @Test public void onlyConfirmedFinalScoresHaveOutcomeColors(){assertEquals(1,DetailFormat.outcome("2","1",true));assertEquals(-1,DetailFormat.outcome("0","2",true));assertEquals(0,DetailFormat.outcome("1","1",true));assertEquals(0,DetailFormat.outcome("2","1",false));assertEquals(0,DetailFormat.outcome("—","0",true));}
+    @Test public void footballPositionsAreTranslated(){for(String position:List.of("Center Defender","Center Left Midfielder","Center Right Midfielder","Center Left Forward","Center Right Forward","Substitute"))assertFalse(DetailParsers.label(position).matches(".*[A-Za-z].*"));}
+    @Test public void footballHeadshotsNeverUseTeamLogosOrJerseyImages(){assertEquals("https://a.espncdn.com/i/headshots/soccer/players/full/42.png",DetailParsers.soccerPhoto("https://a.espncdn.com/i/teamlogos/soccer/500/2.png","42"));assertEquals("",DetailParsers.soccerPhoto("","invalid"));assertEquals("https://images.espn.com/portrait.png",DetailParsers.soccerPhoto("https://images.espn.com/portrait.png","42"));}
+    @Test public void realFormationHasElevenUniquePlayersAndCorrectLines()throws Exception{MatchDetail d=football();for(MatchDetail.Table t:d.tables)if(t.category.equals("首发")){List<List<DetailRows.Entry>> lines=FootballLayout.lines(t,"4-2-3-1");assertEquals(List.of(1,4,2,3,1),lines.stream().map(List::size).toList());assertEquals("门将",lines.get(0).get(0).person().position());assertEquals(11,lines.stream().flatMap(List::stream).map(e->e.person().id()).distinct().count());assertTrue(t.columns.contains("站位"));assertEquals("前腰",lines.get(3).get(1).person().position());}}
+    @Test public void incompleteOrInvalidFormationCannotBecomeAnInventedPitch()throws Exception{MatchDetail.Table t=football().tables.stream().filter(x->x.category.equals("首发")).findFirst().orElseThrow();assertTrue(FootballLayout.lines(t,"4-4-4").isEmpty());assertTrue(FootballLayout.lines(t,"").isEmpty());t.rows.remove(0);assertTrue(FootballLayout.lines(t,"4-2-3-1").isEmpty());}
+    @Test public void newFootballMetadataSurvivesDiskCache()throws Exception{MatchDetail d=football(),copy=MatchDetail.fromJson(d.json());for(int i=0;i<d.tables.size();i++){assertEquals(d.tables.get(i).columns,copy.tables.get(i).columns);assertEquals(d.tables.get(i).rows,copy.tables.get(i).rows);assertEquals(d.tables.get(i).people,copy.tables.get(i).people);}}
+    @Test public void f1EntrantsContainNoResults()throws Exception{JSONObject board=fixture("f1-board"),event=board.getJSONArray("events").getJSONObject(0);Match match=Parsers.espn(board,Competition.find("f1"),1).get(0);MatchDetail d=DetailParsers.f1(event,event.getJSONArray("competitions").getJSONObject(0),fixture("f1-core"),Map.of("5503",fixture("f1-stats")),match,100);MatchDetail.Table entrants=d.tables.stream().filter(t->t.tab.equals("lineup")).findFirst().orElseThrow();assertEquals(List.of("车手","车队","车号"),entrants.columns);assertTrue(d.tables.stream().anyMatch(t->t.tab.equals("stats")&&t.columns.contains("名次")));}
+}

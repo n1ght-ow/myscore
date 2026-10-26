@@ -91,7 +91,7 @@ public final class DetailActivity extends Activity {
         }else{
             LinearLayout row=ui.row();row.setGravity(Gravity.CENTER);LinearLayout homeSide=team(true);row.addView(homeSide,new LinearLayout.LayoutParams(0,-2,1));
             LinearLayout center=ui.column();center.setGravity(Gravity.CENTER);
-            headerScore=ui.score(match.homeScore,match.awayScore,match.hasScore(),34);center.addView(headerScore,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,8);
+            headerScore=ui.score(match.homeScore,match.awayScore,match.hasScore(),34);headerScore.setResultColors(ui.scoreColor(match,true),ui.scoreColor(match,false));center.addView(headerScore,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,8);
             headerState=ui.text(match.status,12,match.live()?ui.primary:ui.muted,true);headerState.setGravity(Gravity.CENTER);center.addView(headerState,new LinearLayout.LayoutParams(-1,-2));ui.gap(center,6);
             headerStart=ui.text(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定",11,ui.muted,false);headerStart.setGravity(Gravity.CENTER);center.addView(headerStart,new LinearLayout.LayoutParams(-1,-2));
             row.addView(center,new LinearLayout.LayoutParams(0,-2,1.35f));
@@ -104,7 +104,7 @@ public final class DetailActivity extends Activity {
     private TextView stackedTeam(LinearLayout card,boolean home){
         LinearLayout side=team(home);TextView name=(TextView)side.getChildAt(2);if(home)headerHome=name;else headerAway=name;
         View crest=side.getChildAt(0);side.removeView(crest);LinearLayout line=ui.row();line.addView(crest,new LinearLayout.LayoutParams(ui.dp(56),ui.dp(56)));
-        TextView score=ui.text(match.hasScore()?(home?match.homeScore:match.awayScore):"—",26,match.live()?ui.primary:ui.text,true);score.setGravity(Gravity.END);line.addView(score,new LinearLayout.LayoutParams(0,-2,1));card.addView(line);
+        TextView score=ui.text(match.hasScore()?(home?match.homeScore:match.awayScore):"—",26,ui.scoreColor(match,home),true);score.setGravity(Gravity.END);line.addView(score,new LinearLayout.LayoutParams(0,-2,1));card.addView(line);
         name.setGravity(Gravity.START);side.setGravity(Gravity.START);card.addView(side,new LinearLayout.LayoutParams(-1,-2));return score;
     }
     /** Header text stays live without replacing the body or the scroll container. */
@@ -113,8 +113,8 @@ public final class DetailActivity extends Activity {
             if(headerTitle!=null){headerTitle.setText(match.displayTitle());headerState.setText(match.status+" · "+(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定"));}
         }else if(headerHome!=null){
             headerHome.setText(match.home);headerAway.setText(match.away);
-            if(headerScore!=null)headerScore.setScore(match.homeScore,match.awayScore,match.hasScore());
-            else {headerHomeScore.setText(match.hasScore()?match.homeScore:"—");headerAwayScore.setText(match.hasScore()?match.awayScore:"—");headerHomeScore.setTextColor(match.live()?ui.primary:ui.text);headerAwayScore.setTextColor(match.live()?ui.primary:ui.text);}
+            if(headerScore!=null){headerScore.setScore(match.homeScore,match.awayScore,match.hasScore());headerScore.setResultColors(ui.scoreColor(match,true),ui.scoreColor(match,false));}
+            else {headerHomeScore.setText(match.hasScore()?match.homeScore:"—");headerAwayScore.setText(match.hasScore()?match.awayScore:"—");headerHomeScore.setTextColor(ui.scoreColor(match,true));headerAwayScore.setTextColor(ui.scoreColor(match,false));}
             headerState.setText(match.status);headerState.setTextColor(match.live()?ui.primary:ui.muted);headerStart.setText(match.timeConfirmed?time(match.start,"M/d HH:mm"):"时间待定");
         }
         updateTabs();updateStatus();
@@ -134,7 +134,7 @@ public final class DetailActivity extends Activity {
         if(!error.isEmpty()){LinearLayout warning=panel();warning.addView(ui.text("暂未更新 · "+error+(detail==null?"":"\n显示上次获取的数据"),13,ui.error,false));ui.gap(warning,12);warning.addView(ui.button("重新加载",false,()->load(true)));body.addView(warning);ui.gap(body,14);}
         if(detail!=null&&!detail.warning.isBlank()){body.addView(ui.text(detail.warning,12,ui.muted,false));ui.gap(body,12);}
         if(detail==null)empty(busy?"正在读取比赛数据":"比赛详情暂不可用",busy?"正在连接本场比赛的数据来源。":"请检查网络并重新加载，列表仍保留上次记录。");
-        else if(match.group.equals("LOL"))lol();else if(tab.equals("overview"))overview();else if(tab.equals("stats"))statistics();else if(tab.equals("events"))events();else roster("lineup");
+        else if(match.group.equals("LOL"))lol();else if(tab.equals("overview"))overview();else if(tab.equals("stats"))statistics();else if(tab.equals("events"))events();else if(match.group.equals("足球"))new FootballLineupView(ui,detail,body).show(teamFilter,id->{teamFilter=id;render(false);});else if(match.group.equals("F1"))f1Drivers();else roster("lineup");
         if(scroll!=null)scroll.post(()->scroll.scrollTo(0,preserve?y:0));
     }
     private String statusText(){if(detail==null)return busy?"正在读取详情…":"尚未获取详情";if(match.group.equals("LOL"))return detail.lolFetched>0?"小局 "+time(detail.lolFetched,"HH:mm:ss")+" 获取 · 赛程 "+time(match.updated,"HH:mm:ss")+" 发布":"赛程 "+time(detail.fetched,"HH:mm:ss")+" 获取 · 小局尚未提供";return (System.currentTimeMillis()-detail.fetched>120_000?"缓存 · ":"")+detail.source+" · "+time(detail.fetched,"HH:mm:ss")+" 获取";}
@@ -160,7 +160,7 @@ public final class DetailActivity extends Activity {
     }
     private String lineupName(){return switch(match.group){case "足球"->"阵容";case "LOL"->"比赛";case "F1"->"车手";case "CS2"->"选手";default->"球员";};}
     private void buildTabs(){
-        LinearLayout row=ui.row();boolean f1=match.group.equals("F1"),lol=match.group.equals("LOL");tabKeys=f1||lol?new String[]{"overview","lineup","stats"}:new String[]{"overview","lineup","stats","events"};tabNames=f1?new String[]{"总览","车手","成绩"}:lol?new String[]{"总览","比赛","统计"}:new String[]{"总览",lineupName(),"统计",match.group.equals("CS2")?"小局":"进程"};
+        LinearLayout row=ui.row();boolean f1=match.group.equals("F1"),lol=match.group.equals("LOL"),cs=match.group.equals("CS2");if(cs&&tab.equals("stats"))tab="lineup";tabKeys=cs?new String[]{"overview","lineup","events"}:f1||lol?new String[]{"overview","lineup","stats"}:new String[]{"overview","lineup","stats","events"};tabNames=cs?new String[]{"总览","选手","小局"}:f1?new String[]{"总览","车手","成绩"}:lol?new String[]{"总览","比赛","统计"}:new String[]{"总览",lineupName(),"统计","进程"};
         tabLabels=new TextView[tabKeys.length];tabRules=new View[tabKeys.length];
         for(int i=0;i<tabKeys.length;i++){String key=tabKeys[i];LinearLayout item=ui.column();item.setGravity(Gravity.CENTER);ui.clickable(item,ui.bg,0);item.setFocusable(true);TextView label=ui.text(tabNames[i],14,tab.equals(key)?ui.text:ui.muted,tab.equals(key));label.setGravity(Gravity.CENTER);label.setMinHeight(ui.dp(48));item.addView(label,new LinearLayout.LayoutParams(-1,-2));View underline=new View(this);underline.setBackground(ui.shape(tab.equals(key)?ui.text:ui.bg,2));item.addView(underline,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(2)));item.setOnClickListener(v->{tab=key;categoryFilter="";sortColumn="";metricsX=0;playerLimit=16;render(false);});row.addView(item,new LinearLayout.LayoutParams(0,-2,1));tabLabels[i]=label;tabRules[i]=underline;}
         root.addView(row);updateTabs();
@@ -172,7 +172,7 @@ public final class DetailActivity extends Activity {
     private LinearLayout panel(){LinearLayout card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(16),ui.dp(14),ui.dp(16),ui.dp(14));return card;}
     private void heading(String text){ui.gap(body,24);body.addView(ui.text(text,16,ui.text,true));ui.gap(body,12);}
     private void overview(){
-        tables("overview");
+        if(!match.group.equals("CS2"))tables("overview");
         if(!detail.stats.isEmpty()){heading("数据速览");LinearLayout card=panel();teamNames(card);for(int i=0;i<Math.min(3,detail.stats.size());i++)stat(card,detail.stats.get(i));body.addView(card);ui.gap(body,10);body.addView(ui.button("全部技术统计",false,()->{tab="stats";render(false);}));}
         if(!detail.events.isEmpty()){heading("最新进程");LinearLayout timeline=panel();for(int i=0;i<Math.min(3,detail.events.size());i++)event(timeline,detail.events.get(i));body.addView(timeline);}
         information();sourceLink();
@@ -187,14 +187,21 @@ public final class DetailActivity extends Activity {
         if(!detail.stats.isEmpty()){heading("球队对比");LinearLayout card=panel();teamNames(card);for(MatchDetail.Stat stat:detail.stats)stat(card,stat);body.addView(card);}
         boolean has=tables("stats");if(!has&&detail.stats.isEmpty()){if(match.group.equals("CS2")){empty("选手数据按全场与地图分类", "在选手页比较 K/D/A、ADR、KAST 与来源 Rating。");body.addView(ui.button("查看选手数据",false,()->{tab="lineup";render(false);}));}else empty("本场统计尚未提供",missing());}
     }
+    private void f1Drivers(){
+        Map<String,List<List<String>>> teams=new TreeMap<>();
+        for(MatchDetail.Table t:detail.tables)if(t.tab.equals("lineup"))for(List<String> row:t.rows){int team=t.columns.indexOf("车队"),number=t.columns.indexOf("车号");teams.computeIfAbsent(DetailRows.cell(row,team),key->new ArrayList<>()).add(List.of(DetailRows.cell(row,0),DetailRows.cell(row,number)));}
+        if(teams.isEmpty()){empty("参赛车手尚未提供",missing());return;}
+        body.addView(ui.text("参赛车队与车手",16,ui.text,true));ui.gap(body,8);body.addView(ui.text("车号与本场参赛名单",12,ui.muted,false));
+        for(Map.Entry<String,List<List<String>>> team:teams.entrySet()){heading(team.getKey());LinearLayout card=panel();team.getValue().sort(Comparator.comparing(row->row.get(0)));for(List<String> driver:team.getValue()){LinearLayout row=ui.row();row.setPadding(0,ui.dp(12),0,ui.dp(12));TextView number=ui.text(driver.get(1),18,ui.muted,true);number.setContentDescription("车号 "+driver.get(1));row.addView(number,new LinearLayout.LayoutParams(ui.dp(48),-2));row.addView(ui.text(driver.get(0),14,ui.text,true),new LinearLayout.LayoutParams(0,-2,1));card.addView(row);}body.addView(card);}
+    }
     private void teamNames(LinearLayout card){LinearLayout names=ui.row();TextView home=ui.text(match.home,12,ui.text,true),away=ui.text(match.away,12,ui.text,true);away.setGravity(Gravity.END);names.addView(home,new LinearLayout.LayoutParams(0,-2,1));names.addView(away,new LinearLayout.LayoutParams(0,-2,1));card.addView(names);ui.gap(card,10);card.addView(ui.divider());}
     private void stat(LinearLayout card,MatchDetail.Stat stat){LinearLayout row=ui.row();row.setPadding(0,ui.dp(13),0,ui.dp(10));TextView h=ui.text(stat.home(),16,ui.primary,true),label=ui.text(stat.label(),12,ui.muted,false),a=ui.text(stat.away(),16,ui.secondary,true);label.setGravity(Gravity.CENTER);a.setGravity(Gravity.END);row.addView(h,new LinearLayout.LayoutParams(0,-2,1));row.addView(label,new LinearLayout.LayoutParams(0,-2,2));row.addView(a,new LinearLayout.LayoutParams(0,-2,1));card.addView(row);double home=numeric(stat.home()),away=numeric(stat.away());if(home>=0&&away>=0&&home+away>0){LinearLayout track=ui.row();View left=new View(this),right=new View(this);left.setBackground(ui.shape(ui.primary,2));right.setBackground(ui.shape(ui.secondary,2));track.addView(left,new LinearLayout.LayoutParams(0,ui.dp(4),(float)home));LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,ui.dp(4),(float)away);rp.setMarginStart(ui.dp(4));track.addView(right,rp);card.addView(track);}ui.gap(card,12);card.addView(ui.divider());}
     private static double numeric(String value){try{return value.matches("[0-9]+(?:\\.[0-9]+)?%?")?Double.parseDouble(value.replace("%","")):-1;}catch(RuntimeException e){return -1;}}
     private boolean tables(String key){boolean found=false;for(MatchDetail.Table t:detail.tables)if(t.tab.equals(key)){heading(t.title);body.addView(new DetailTableView(ui).simple(t),new LinearLayout.LayoutParams(-1,-2));found=true;}return found;}
     private void roster(String key){new PlayerStatsView(ui,detail,body).show(key,new PlayerStatsView.Selection(teamFilter,categoryFilter,sortColumn,descending),selection->{if(!categoryFilter.isBlank()&&!selection.category().equals(categoryFilter))metricsX=0;if(!selection.team().equals(teamFilter)||!selection.category().equals(categoryFilter))playerLimit=16;teamFilter=selection.team();categoryFilter=selection.category();sortColumn=selection.sort();descending=selection.descending();render(false);},metricsX,value->{metricsX=value;lastScroll=SystemClock.uptimeMillis();},playerLimit,()->{playerLimit=Math.min(400,playerLimit+24);render(true);});}
-    private void events(){boolean found=tables("events");if(!detail.events.isEmpty()){heading(match.group.equals("足球")?"关键事件":match.group.equals("NFL")?"得分进程":"比赛进程");LinearLayout timeline=panel();for(int i=0;i<Math.min(eventsLimit,detail.events.size());i++)event(timeline,detail.events.get(i));body.addView(timeline);if(detail.events.size()>eventsLimit){ui.gap(body,12);body.addView(ui.button("加载更多进程 · 剩余 "+(detail.events.size()-eventsLimit)+" 条",false,()->{eventsLimit+=50;render(true);}));}}else if(!found)empty("暂无比赛进程",missing());}
+    private void events(){boolean found=match.group.equals("CS2")&&tables("overview");found=tables("events")||found;if(!detail.events.isEmpty()){heading(match.group.equals("足球")?"关键事件":match.group.equals("NFL")?"得分进程":"比赛进程");LinearLayout timeline=panel();for(int i=0;i<Math.min(eventsLimit,detail.events.size());i++)event(timeline,detail.events.get(i));body.addView(timeline);if(detail.events.size()>eventsLimit){ui.gap(body,12);body.addView(ui.button("加载更多进程 · 剩余 "+(detail.events.size()-eventsLimit)+" 条",false,()->{eventsLimit+=50;render(true);}));}}else if(!found)empty("暂无比赛进程",missing());}
     private void event(LinearLayout timeline,MatchDetail.Event event){LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setPadding(0,ui.dp(12),0,ui.dp(12));TextView clock=ui.text(event.time(),11,ui.muted,true);row.addView(clock,new LinearLayout.LayoutParams(ui.dp(56),-2));LinearLayout words=ui.column();String title=DetailParsers.plain(event.title()),text=DetailParsers.plain(event.text());if(!title.isBlank()){words.addView(ui.text(title,13,ui.text,true));ui.gap(words,4);}if(!text.isBlank())words.addView(ui.text(text,13,title.isBlank()?ui.text:ui.muted,false));row.addView(words,new LinearLayout.LayoutParams(0,-2,1));timeline.addView(row);timeline.addView(ui.divider());}
-    private void lol(){LolMatchView view=new LolMatchView(ui,detail,body,number->{selectedGame=number;if(tab.equals("overview"))tab="lineup";render(false);});if(tab.equals("overview")){view.overview();information();sourceLink();}else view.games(selectedGame,tab.equals("stats"));}
+    private void lol(){LolMatchView view=new LolMatchView(ui,detail,body,number->{selectedGame=number;if(tab.equals("overview"))tab="lineup";render(false);});view.teamSelection(teamFilter,id->{teamFilter=id;render(false);});if(tab.equals("overview")){view.overview();information();sourceLink();}else view.games(selectedGame,tab.equals("stats"));}
     private String missing(){return match.scheduled()?"赛前数据尚未发布，确认阵容和统计会随来源更新。":"来源暂未提供本项数据，空缺不代表 0。";}
     private void empty(String title,String message){ui.gap(body,24);LinearLayout card=panel();card.addView(ui.text(title,18,ui.text,true));ui.gap(card,10);card.addView(ui.text(message,14,ui.muted,false));body.addView(card);}
     private static String time(long value,String pattern){return value>0?DateTimeFormatter.ofPattern(pattern,Locale.CHINA).withZone(Match.ZONE).format(Instant.ofEpochMilli(value)):"尚未提供";}

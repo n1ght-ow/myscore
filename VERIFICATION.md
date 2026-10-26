@@ -1,3 +1,20 @@
+# MyScore 3.0.1 品牌标志裁切与毛刺修复
+
+日期：2026-10-26，北京时间。用户反馈小米桌面 S 被放大裁切，标题与桌面边缘不顺滑。版本 `3.0.1`，versionCode `25`。
+
+## 发现与修复
+
+- 此前直接使用的分割 PNG 为 238 × 225，中央斜缝存在不透明黑像素，水平边缘有不规则透明像素。BitmapDrawable 统一着色后会把黑缝一并填白，不能作为干净的单色母版。
+- 此前自适应前景为固定 52 × 49dp 的 LayerDrawable，缺少完整 108dp 内在画布。用户截图确实显示了过度放大；本轮未取得 HyperOS 桌面内部的归一化行为证据，不将某条系统实现细节视为已证实原因。
+- 按原 S 造型重建两条平滑贝塞尔路径，保存可编辑的 `docs/assets/brand-s.svg`。标题与更新页改用同源 `VectorDrawable`；移除分割 PNG。自适应前景为 108 × 108dp 矢量画布，S 居中保留安全区；兼容图标按同一矢量重新导出五种密度。
+
+## 验证与边界
+
+- 3.0.0 上新增回归检查失败：品牌标志仍为分割 PNG，日志 `artifacts/brand-regression-before.txt`。修复后通过 **280 项原生运行检查**，包括 15 项新增标志检查：斜缝着色后透明、20 / 24 / 48px 抗锯齿、108dp 内在画布、108 / 216 / 432px 的可见范围、居中和 66dp 安全圆。日志 `artifacts/android-tests-3.0.1.txt`。
+- **118 项 JUnit**，0 failures / errors；Lint 0 errors / 21 warnings；构建通过。模拟器实看首页矢量 S 和桌面主题图标，截图 `artifacts/brand-vector-fix/`。本轮未连接到小米真机，未声称完成 HyperOS 桌面验收；也未重做赛事联网与全部屏幕尺寸验收。
+- `artifacts/MyScore-3.0.1.apk`：895,973 字节；SHA-256 `2e88373f4283ec70a88fbfc672064d64fb27a59b582968237ba0e2c754dcfa81`；校验文件 `artifacts/SHA256SUMS-3.0.1.txt`。包名与签名沿用既有版本。
+- 发布入口：[v3.0.1](https://github.com/n1ght-ow/myscore/releases/tag/v3.0.1)。
+
 # MyScore 3.0.0 版本调整
 
 日期：2026-10-26，北京时间。按用户要求将当前版本改为 `3.0.0`，versionCode 由 23 递增至 `24`；发布标签 `v3.0.0`。沿用 2.3 的品牌和功能图标实现。

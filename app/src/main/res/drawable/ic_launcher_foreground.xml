@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:width="52dp" android:height="49dp" android:gravity="center">
-        <bitmap android:src="@drawable/brand_s" android:gravity="fill" android:tint="#FFFFFF" />
-    </item>
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.20625" android:scaleY="0.20625" android:translateX="29.25" android:translateY="30.9">
+        <path android:fillColor="#FFFFFF" android:pathData="M235,3 L111,3 C91,3 78,9 65,25 L45,49 C29,68 29,78 32,94 C35,116 52,131 77,131 L100,131 L133,90 L95,90 C83,90 77,86 81,76 C85,65 94,54 102,49 C106,47 111,47 117,47 L202,47 Z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M142,91 L170,91 C194,91 210,110 212,133 C214,152 204,168 189,185 L173,204 C164,215 151,219 133,219 L4,219 L35,176 L130,176 C141,176 150,165 158,154 C165,145 166,136 159,132 C156,131 152,131 148,131 L110,131 Z" />
+    </group>
+</vector>

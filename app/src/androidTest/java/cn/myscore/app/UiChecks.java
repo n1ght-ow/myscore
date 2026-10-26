@@ -16,6 +16,7 @@ final class UiChecks {
         android.graphics.drawable.Drawable icon=original.getPackageManager().getApplicationIcon(original.getPackageName());
         require(icon instanceof android.graphics.drawable.AdaptiveIconDrawable,"installed launcher icon is adaptive");checks++;
         if(android.os.Build.VERSION.SDK_INT>=33){require(((android.graphics.drawable.AdaptiveIconDrawable)icon).getMonochrome()!=null,"themed launcher icon is present");checks++;}
+        checks+=BrandChecks.run(original);
         test.runOnMainSync(()->{
             Ui.highRefresh(original.getWindow());
             android.view.Display display=original.getWindow().getDecorView().getDisplay();

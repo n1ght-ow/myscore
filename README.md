@@ -2,11 +2,13 @@
 
 一个面向 Redmi K80 Pro 的原生 Android 比分与赛程应用。中文界面，北京时间，无广告，无登录，不依赖 Google 服务，不使用厂商推送 SDK。
 
-## 3.0.0 统一品牌与功能图标
+## 3.0.1 图标裁切与边缘修复
+
+修复桌面 S 标志被放大裁切、标题栏边缘毛刺及斜缝被填上的问题。按既有造型重建平滑 SVG 母版，标题栏与桌面均使用同源矢量曲线；桌面前景改为完整 108dp 画布并保留安全区，兼容资源重新导出。已验证模拟器和原生渲染安全区，尚未在本轮实测小米桌面。
 
 桌面图标、首页与更新页使用同一套 S 品牌标志，应用内随浅色 / 深色主题切换。重新设计设置页 8 个功能图标与底栏 2 个图标，统一圆角线条、粗细和比例，分别对应日历接收、订阅、同步核对、系统日历、外观、更新、数据连接、帮助、比赛和设置。功能图标使用原生矢量路径，不新增生产依赖。
 
-[下载 MyScore 3.0.0 APK](https://github.com/n1ght-ow/myscore/releases/download/v3.0.0/MyScore-3.0.0.apk) · [发布说明与校验文件](https://github.com/n1ght-ow/myscore/releases/tag/v3.0.0)
+[下载 MyScore 3.0.1 APK](https://github.com/n1ght-ow/myscore/releases/download/v3.0.1/MyScore-3.0.1.apk) · [发布说明与校验文件](https://github.com/n1ght-ow/myscore/releases/tag/v3.0.1)
 
 ### 2.2.1 应用内更新下载修复
 
@@ -28,7 +30,7 @@
 
 ## 安装与使用
 
-1. 已安装 0.6.0 或以上版本，可在「设置 → 检查更新」下载 3.0.0；旧版系统下载器卡住时，请从本页链接手动覆盖安装 `MyScore-3.0.0.apk`。0.x 更新器无法识别两段版本号时也请手动覆盖安装。包名与签名保持一致，保留设置、缓存与日历关联。
+1. 已安装 0.6.0 或以上版本，可在「设置 → 检查更新」下载 3.0.1；旧版系统下载器卡住时，请从本页链接手动覆盖安装 `MyScore-3.0.1.apk`。0.x 更新器无法识别两段版本号时也请手动覆盖安装。包名与签名保持一致，保留设置、缓存与日历关联。
 2. 「比赛」页切换足球、NBA、NFL、F1、CS2 或 LOL。点日期打开月份日历，或用左右箭头前后一天。
 3. 点比赛打开完整详情；点队标进入该队赛程，可筛选全部、接下来与已结束。
 4. 在比赛卡右下角点日历加号订阅单场，提前 5 分钟提醒。首次授权后优先写入小米账户日历，没有则本机日历。勾选表示已订阅，再点可确认取消。
@@ -122,7 +124,7 @@ HLTV / SofaScore / BO3.gg 在未配置代理的开发环境请求中出现过 40
 .\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-APK 输出在 `app/build/outputs/apk/debug/app-debug.apk`。3.0.0 的验证结果：118 项 JUnit、Lint、构建通过；Android 15 / API 35 模拟器通过 265 项运行检查。深浅主题图标已在同一实现的预览包核对。本轮未启用可选的真实来源 / 详情 / 球队联网检查，也未重做真机验收。2.2.1 的 REDMI K80 Pro 下载与安装文件访问结果作为历史记录保留于 `VERIFICATION.md`。本地 APK 与 SHA-256 见 `artifacts/MyScore-3.0.0.apk`、`artifacts/SHA256SUMS-3.0.0.txt`。可显式运行实时接口检查：
+APK 输出在 `app/build/outputs/apk/debug/app-debug.apk`。3.0.1 的验证结果：118 项 JUnit、Lint、构建通过；Android 15 / API 35 模拟器通过 280 项运行检查，新增标题标志和自适应前景的原生渲染回归。本轮未启用可选的真实来源 / 详情 / 球队联网检查，也未重做真机验收。2.2.1 的 REDMI K80 Pro 下载与安装文件访问结果作为历史记录保留于 `VERIFICATION.md`。本地 APK 与 SHA-256 见 `artifacts/MyScore-3.0.1.apk`、`artifacts/SHA256SUMS-3.0.1.txt`。可显式运行实时接口检查：
 
 ```powershell
 .\gradlew.bat :app:verifyLiveSources

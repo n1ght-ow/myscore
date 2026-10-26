@@ -7,6 +7,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.RippleDrawable;
 import android.content.res.ColorStateList;
 import android.view.Gravity;
@@ -143,13 +144,27 @@ final class Ui {
     void gap(LinearLayout into,int h){View space=new View(c);into.addView(space,new LinearLayout.LayoutParams(1,dp(h)));}
     static final class Icon extends View {
         private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);private String kind;private int color;private final Path refreshArrow=new Path();
-        Icon(Context c,String kind,int color){super(c);this.kind=kind;this.color=color;refreshArrow.moveTo(19,3);refreshArrow.lineTo(19,9);refreshArrow.lineTo(13,9);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
-        void set(String kind,int color){if(kind.equals(this.kind)&&color==this.color)return;this.kind=kind;this.color=color;invalidate();}
+        private Drawable glyph;private Path appPath;
+        Icon(Context c,String kind,int color){super(c);this.kind=kind;this.color=color;loadGlyph();refreshArrow.moveTo(19,3);refreshArrow.lineTo(19,9);refreshArrow.lineTo(13,9);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        private void loadGlyph(){
+            appPath=AppIcons.path(kind);
+            int resource=kind.equals("mark")?R.drawable.brand_s:0;
+            glyph=resource==0?null:getContext().getDrawable(resource).mutate();
+            if(glyph!=null)glyph.setTint(color);
+        }
+        void set(String kind,int color){if(kind.equals(this.kind)&&color==this.color)return;boolean changed=!kind.equals(this.kind);this.kind=kind;this.color=color;if(changed)loadGlyph();else if(glyph!=null)glyph.setTint(color);invalidate();}
         @Override protected void onDraw(Canvas canvas){
-            super.onDraw(canvas);canvas.save();float scale=Math.min(getWidth(),getHeight())/24f;
+            super.onDraw(canvas);
+            if(glyph!=null){
+                float fit=Math.min(getWidth()/(float)glyph.getIntrinsicWidth(),getHeight()/(float)glyph.getIntrinsicHeight());
+                int width=Math.round(glyph.getIntrinsicWidth()*fit),height=Math.round(glyph.getIntrinsicHeight()*fit);
+                int left=(getWidth()-width)/2,top=(getHeight()-height)/2;
+                glyph.setBounds(left,top,left+width,top+height);glyph.draw(canvas);return;
+            }
+            canvas.save();float scale=Math.min(getWidth(),getHeight())/24f;
             canvas.translate((getWidth()-24*scale)/2,(getHeight()-24*scale)/2);canvas.scale(scale,scale);
             p.setColor(color);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.8f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
-            if(kind.equals("mark")){p.setStrokeWidth(2.4f);canvas.drawLine(17,4,8,4,p);canvas.drawLine(8,4,4,11,p);canvas.drawLine(4,11,18,11,p);canvas.drawLine(18,11,14,20,p);canvas.drawLine(14,20,5,20,p);}
+            if(appPath!=null){p.setStrokeWidth(1.7f);canvas.drawPath(appPath,p);}
             else if(kind.equals("back")){canvas.drawLine(20,12,4,12,p);canvas.drawLine(4,12,11,5,p);canvas.drawLine(4,12,11,19,p);}
             else if(kind.equals("check")){canvas.drawLine(5,12,10,17,p);canvas.drawLine(10,17,19,7,p);}
             else if(kind.equals("chevron")){canvas.drawLine(9,6,15,12,p);canvas.drawLine(15,12,9,18,p);}
@@ -165,7 +180,6 @@ final class Ui {
             else if(kind.equals("theme")){canvas.drawCircle(12,12,8,p);p.setStyle(Paint.Style.FILL);canvas.drawArc(4,4,20,20,90,180,true,p);}
             else if(kind.equals("info")){canvas.drawCircle(12,12,8.5f,p);canvas.drawLine(12,11,12,16,p);p.setStyle(Paint.Style.FILL);canvas.drawCircle(12,7.5f,1,p);}
             else if(kind.equals("download")){canvas.drawLine(12,3,12,15,p);canvas.drawLine(7,10,12,15,p);canvas.drawLine(12,15,17,10,p);canvas.drawLine(4,16,4,21,p);canvas.drawLine(4,21,20,21,p);canvas.drawLine(20,21,20,16,p);}
-            else if(kind.equals("scores")){canvas.drawRoundRect(3,4,21,20,3,3,p);canvas.drawLine(12,4,12,20,p);canvas.drawLine(6.5f,9,8.5f,9,p);canvas.drawLine(6.5f,15,8.5f,15,p);canvas.drawLine(15.5f,9,17.5f,9,p);canvas.drawLine(15.5f,15,17.5f,15,p);}
             else {canvas.drawRoundRect(3,5,21,20,2,2,p);canvas.drawLine(6,10,12,10,p);canvas.drawLine(6,15,12,15,p);canvas.drawLine(17,9,17,11,p);canvas.drawLine(17,14,17,16,p);}
             canvas.restore();
         }

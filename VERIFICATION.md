@@ -1,3 +1,32 @@
+# MyScore 2.3 统一品牌与功能图标
+
+日期：2026-10-26，北京时间。版本 `2.3`（versionCode `23`），标签 `v2.3`。
+
+- 桌面、首页及更新页共用用户选定的 S 设计，应用内透明标志随主题着色；Android 自适应图标和单色图标使用同一前景。
+- 设置页 8 项与底栏 2 项使用重新设计的原生矢量路径：日历接收、订阅勾选、同步核对、日历跳转、外观、升级、数据连接、帮助、比赛和设置。统一 24 单位画布与 1.7 单位圆角描边，设置项显式绑定图标。未引入生产依赖。
+- 最终 2.3 构建通过 `testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest --offline --console=plain`：118 项 JUnit，0 failures / errors；Lint 0 errors / 21 warnings。构建日志 `artifacts/build-2.3.log`。
+- 最终 2.3 APK 在 Android 15 / API 35 模拟器通过 265 项运行检查，日志 `artifacts/android-tests-2.3.txt`。图标实测深浅主题效果见 `artifacts/functional-icon-review-2026-10-26/`；该图标截图来自同一实现的 2.2.1 预览包。未重做真机、全部屏幕尺寸或可选联网赛事验收。
+- 发布附件 `artifacts/MyScore-2.3.apk`：933,194 字节；SHA-256 `162c2f5bd49cbfa6e975edefd8fab6cb910c626e1c4e2e6d04c332541db4d04b`。校验附件 `artifacts/SHA256SUMS-2.3.txt`。
+- `apksigner verify --print-certs` 通过，沿用既有 debug 证书，SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。包名 `cn.myscore.app`，minSdk 28 / targetSdk 35；aapt 确认版本 2.3 / 23，可按相同签名覆盖升级。
+- 发布入口：[v2.3](https://github.com/n1ght-ow/myscore/releases/tag/v2.3)。发布附件采用应用内更新要求的 `MyScore-2.3.apk` 命名；APK 与构建产物、截图和测试日志不进入源码提交。
+
+# MyScore 10 个功能图标重设计（本地预览包）
+
+日期：2026-10-26，北京时间。根据用户截图重画设置页 8 个图标与底栏 2 个图标。统一为原生 Path 矢量、24 单位画布、1.7 单位圆角描边；每项使用明确的功能符号。品牌 S 与桌面图标沿用此前的用户素材，版本仍为 2.2.1 / versionCode 22。
+
+- 最终构建、118 项 JUnit、Lint 通过（0 errors / 21 项原有 warnings）；最终 APK 在 Android 15 / API 35 模拟器通过 265 项既有运行检查。未启用可选的来源 / 详情联网检查。
+- 核对深浅主题下的设置图标与底栏选中状态；保持原有文字、触摸区域和交互。没有引入依赖。
+- 本地包：`artifacts/MyScore-icons-redesigned.apk`；SHA-256 `3331d904fac4b56c5eaeeff5835ec916dcdc7f3c744542ac92774f6316eacea6`。未发布，未做本轮真机验收。
+
+# MyScore 统一 S 图标接入（本地预览包）
+
+日期：2026-10-26，北京时间。按用户提供的图标套件替换桌面图标、首页 / 更新页品牌 S，并将显示器、人物、星标分别用于比赛、设置和已订阅比赛。素材映射及 PNG / 矢量边界见 `docs/icon-provenance.md`。保留版本 2.2.1 / versionCode 22，未发布新版本。
+
+- `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug` 通过；118 项 JUnit，0 失败 / 0 错误。Lint 为 0 errors / 21 warnings，仍有项目原有的本地化等警告。
+- 最终 APK 在 Android 15 / API 35 模拟器 `Codex_MyScore_API35`（emulator-5554，1080 × 2400）通过 265 项现有运行检查，包含自适应图标和 Android 13 单色资源检查；本轮未启用可选的真实来源 / 详情 / 球队联网检查。
+- 人工核对深浅主题首页、设置页星标与人物图标、桌面主题图标；未在本轮验证 Redmi K80 Pro 的桌面遮罩。桌面主题图标的外圈和配色由系统控制。
+- 本地预览包：`artifacts/MyScore-icons-preview.apk`，SHA-256 `63de9c6b25a60ac35198755b894589ac7e77f785591809c515751ee2d46fd3af`。这是图标预览构建，不替换已有正式发布附件。
+
 # MyScore 2.2.1 应用内下载修复
 
 日期：2026-10-26，北京时间。versionName `2.2.1`，versionCode `22`，标签 `v2.2.1`。

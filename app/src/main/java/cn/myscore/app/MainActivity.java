@@ -389,24 +389,23 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private void settings() {
         section("单场订阅");
         LinearLayout calendar=ui.column();calendar.setBackground(ui.panel());
-        settingRow(calendar,"接收日历",calendarName(),this::calendarChoice);
-        settingRow(calendar,"已订阅的比赛",calendarSync.linkedEvents()+" 场 · 提前 5 分钟提醒",this::subscribedList);
+        settingRow(calendar,"calendar-target","接收日历",calendarName(),this::calendarChoice);
+        settingRow(calendar,"subscriptions","已订阅的比赛",calendarSync.linkedEvents()+" 场 · 提前 5 分钟提醒",this::subscribedList);
         long checked=prefs.getLong("calendar_checked",0);
-        settingRow(calendar,calendarBusy?"正在检查…":"检查已订阅比赛",checked>0?"上次检查 "+formatInstant(checked,"M月d日 HH:mm"):"同步改期与取消",()->syncSubscriptions(true));
-        settingRow(calendar,"打开系统日历","查看日程与提醒",this::openCalendar);
+        settingRow(calendar,"sync-subscriptions",calendarBusy?"正在检查…":"检查已订阅比赛",checked>0?"上次检查 "+formatInstant(checked,"M月d日 HH:mm"):"同步改期与取消",()->syncSubscriptions(true));
+        settingRow(calendar,"calendar-open","打开系统日历","查看日程与提醒",this::openCalendar);
         body.addView(calendar);
         section("偏好与帮助");LinearLayout options=ui.column();options.setBackground(ui.panel());
-        settingRow(options,"外观",themeName(),this::themeChoice);
-        settingRow(options,"检查更新","当前版本 "+BuildConfig.VERSION_NAME,()->startActivity(new Intent(this,UpdateActivity.class)));
-        settingRow(options,"数据来源与连接",snapshot.failed()?"部分来源未更新":"查看来源状态",this::sourceStatus);
-        settingRow(options,"使用帮助","日历提醒与数据说明",this::help);body.addView(options);
+        settingRow(options,"appearance","外观",themeName(),this::themeChoice);
+        settingRow(options,"app-update","检查更新","当前版本 "+BuildConfig.VERSION_NAME,()->startActivity(new Intent(this,UpdateActivity.class)));
+        settingRow(options,"sources","数据来源与连接",snapshot.failed()?"部分来源未更新":"查看来源状态",this::sourceStatus);
+        settingRow(options,"help","使用帮助","日历提醒与数据说明",this::help);body.addView(options);
         ui.gap(body,24);TextView hint=ui.text("MyScore · "+BuildConfig.VERSION_NAME+"\n在比赛卡上点日历图标，订阅单场比赛。",12,ui.muted,false);hint.setLineSpacing(ui.dp(6),1);hint.setGravity(Gravity.CENTER);hint.setPadding(ui.dp(4),0,ui.dp(4),0);body.addView(hint);
     }
     private void section(String title){ui.gap(body,24);TextView h=ui.text(title,13,ui.muted,true);h.setPadding(ui.dp(4),0,0,ui.dp(12));body.addView(h);}
-    private void settingRow(LinearLayout into,String title,String detail,Runnable action){
+    private void settingRow(LinearLayout into,String kind,String title,String detail,Runnable action){
         if(into.getChildCount()>0){View line=ui.divider();LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,ui.dp(1));lp.setMarginStart(ui.dp(16));lp.setMarginEnd(ui.dp(16));into.addView(line,lp);}
         LinearLayout row=ui.row();row.setMinimumHeight(ui.dp(72));row.setPadding(ui.dp(16),ui.dp(16),ui.dp(14),ui.dp(16));ui.clickable(row,Color.TRANSPARENT,Ui.CARD_RADIUS);row.setFocusable(true);
-        String kind=title.equals("外观")?"theme":title.equals("检查更新")?"download":title.contains("来源")||title.contains("帮助")?"info":title.contains("检查")||title.contains("正在")?"refresh":"calendar";
         FrameLayout symbol=new FrameLayout(this);symbol.addView(new Ui.Icon(this,kind,ui.muted),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));LinearLayout.LayoutParams symbolParams=new LinearLayout.LayoutParams(ui.dp(24),ui.dp(40));symbolParams.setMarginEnd(ui.dp(14));row.addView(symbol,symbolParams);
         LinearLayout text=ui.column();text.addView(ui.text(title,15,ui.text,true));if(!detail.isBlank()){ui.gap(text,5);text.addView(ui.text(detail,12,ui.muted,false));}row.addView(text,new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(ui.dp(18),ui.dp(18));ip.setMarginStart(ui.dp(12));row.addView(new Ui.Icon(this,"chevron",ui.muted),ip);row.setOnClickListener(v->action.run());into.addView(row);
@@ -536,7 +535,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         Sheet.message(this,"数据来源与连接",content.toString());
     }
     private void navigation() {
-        nav=ui.row();nav.setBackgroundColor(ui.bg);nav.setPadding(ui.dp(20),ui.dp(4),ui.dp(20),ui.dp(4));String[] labels={"比赛","设置"},icons={"scores","settings"};
+        nav=ui.row();nav.setBackgroundColor(ui.bg);nav.setPadding(ui.dp(20),ui.dp(4),ui.dp(20),ui.dp(4));String[] labels={"比赛","设置"},icons={"matches","preferences"};
         for(int i=0;i<2;i++){
             int index=i;boolean selected=tab==i;LinearLayout item=ui.row();item.setGravity(Gravity.CENTER);item.setMinimumHeight(ui.dp(56));
             ui.clickable(item,Color.TRANSPARENT,Ui.CONTROL_RADIUS);item.setFocusable(true);item.setSelected(selected);item.setContentDescription(labels[i]+(selected?"，已选中":""));

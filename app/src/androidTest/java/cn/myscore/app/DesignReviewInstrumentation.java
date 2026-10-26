@@ -71,20 +71,32 @@ public final class DesignReviewInstrumentation extends Instrumentation {
         require((boolean)field("descending"),"new CS2 sort column starts descending");
         capture(theme+"-cs2-sorted");
         main(()->{try{set("sortColumn","");set("tab","events");render(false);((ScrollView)get("scroll")).scrollTo(0,0);}catch(Exception e){throw new AssertionError(e);}});settle();
-        int mapTables=0,maps=0;Set<String> scope=new HashSet<>();
-        for(MatchDetail.Table table:detail.tables)if(table.tab.equals("lineup")&&!table.category.equals("全场")&&!table.category.equals("伤停")&&!table.rows.isEmpty()){mapTables++;scope.add(table.category);}
-        maps=scope.size();
-        require(mapTables>0,"real per-map player tables exist");
-        require(findAll(activity.getWindow().getDecorView(),"team-panel-header").size()==maps*2,"each finished map shows both teams");
-        int scoreTables=0;for(MatchDetail.Table table:detail.tables)if(table.tab.equals("overview"))scoreTables++;
-        require(findAll(activity.getWindow().getDecorView(),"detail-data-table").size()==scoreTables+mapTables,"map tab keeps one score table and per-map players");
-        require(findText("小局比分")!=null,"map score section is named once");
-        require(findText("每张地图的数据")!=null,"per-map section is named once");
-        require(findText("总分")==null&&findText("攻守半场")==null,"map totals and half tables are not repeated");
-        require(findAll(activity.getWindow().getDecorView(),"team-half-line").size()==maps*2,"each map team keeps only its half scores");
-        View missing=findTag("map-missing");require(missing instanceof TextView&&((TextView)missing).getText().toString().contains("Nuke")&&((TextView)missing).getText().toString().contains("暂无逐图选手数据"),"map with no player table is called out once");
-        String firstMap=scope.iterator().next();require(findText(firstMap)!=null,"per-map heading is visible");
+        List<String> scope=new ArrayList<>();
+        for(MatchDetail.Table table:detail.tables)if(table.tab.equals("lineup")&&!table.category.equals("全场")&&!table.category.equals("伤停")&&!table.rows.isEmpty()&&!scope.contains(table.category))scope.add(table.category);
+        require(!scope.isEmpty(),"real per-map player tables exist");
+        require(findTag("cs2-map-filter")!=null,"map switch row exists");
+        List<View> chips=findAll(activity.getWindow().getDecorView(),"cs2-map-chip");
+        require(chips.size()==scope.size(),"one map button per map with data");
+        require(chips.get(0).getContentDescription()!=null&&chips.get(0).getContentDescription().toString().contains("已选中"),"first map starts selected");
+        View title=findTag("cs2-map-title");require(title instanceof TextView&&((TextView)title).getText().toString().equals(scope.get(0)),"selected map title is the first map");
+        require(findAll(activity.getWindow().getDecorView(),"team-panel-header").size()==2,"selected map shows both teams");
+        require(findAll(activity.getWindow().getDecorView(),"detail-data-table").size()==2,"selected map keeps only the two player tables");
+        List<View> bands=findAll(activity.getWindow().getDecorView(),"team-map-score");
+        require(bands.size()==2&&findAll(activity.getWindow().getDecorView(),"team-map-score-total").size()==2,"one score band and total per team");
+        require(findText("上半场")==null&&findText("下半场")==null,"T and CT labels replace first and second half");
+        String homeBand=bands.get(0).getContentDescription().toString(),awayBand=bands.get(1).getContentDescription().toString();
+        require(homeBand.startsWith(detail.match.home+"，CT 方 7")&&homeBand.contains("T 方 6")&&homeBand.contains("总分 13"),"home opens CT, score band leads with CT");
+        require(awayBand.startsWith(detail.match.away+"，T 方 5")&&awayBand.contains("CT 方 4")&&awayBand.contains("总分 9"),"away opens T, score band leads with T");
+        View missing=findTag("map-missing");require(missing instanceof TextView&&((TextView)missing).getText().toString().contains("Nuke")&&((TextView)missing).getText().toString().contains("暂无逐图数据"),"map with no data is called out once");
+        require(findText("Nuke")==null,"map without data has no button");
         capture(theme+"-cs2-maps-top");
+        main(()->{View chip=findText("Anubis");require(chip!=null,"Anubis button");while(!chip.isClickable()&&chip.getParent() instanceof View)chip=(View)chip.getParent();chip.performClick();});settle();
+        require(field("mapFilter").equals("Anubis"),"map button changes the selected map");
+        View switched=findTag("cs2-map-title");require(switched instanceof TextView&&"Anubis".contentEquals(((TextView)switched).getText()),"another map switches score and player data");
+        require(findAll(activity.getWindow().getDecorView(),"team-panel-header").size()==2&&findAll(activity.getWindow().getDecorView(),"detail-data-table").size()==2,"selected Anubis data replaces the previous map");
+        List<View> anubis=findAll(activity.getWindow().getDecorView(),"team-map-score");
+        require(anubis.get(0).getContentDescription().toString().startsWith(detail.match.home+"，CT 方 9")&&anubis.get(0).getContentDescription().toString().contains("T 方 4"),"Anubis home opens CT, score band switches");
+        require(anubis.get(1).getContentDescription().toString().startsWith(detail.match.away+"，T 方 3")&&anubis.get(1).getContentDescription().toString().contains("CT 方 3"),"Anubis away opens T, score band switches");
         main(()->{View view=findText("Rating");require(view!=null,"map rating header");while(!view.isClickable()&&view.getParent() instanceof View)view=(View)view.getParent();view.performClick();});settle();
         require(field("sortColumn").equals("Rating"),"map panels share the numeric sort");
         require((boolean)field("descending"),"map panel sort starts descending");
@@ -102,6 +114,8 @@ public final class DesignReviewInstrumentation extends Instrumentation {
     private void cs2Matrix(MatchDetail detail,boolean dark){
         String map="";for(MatchDetail.Table table:detail.tables)if(table.tab.equals("lineup")&&!table.category.equals("全场")&&!table.category.equals("伤停")&&!table.rows.isEmpty()){map=table.category;break;}
         require(!map.isBlank(),"CS2 matrix has a real map scope");String mapScope=map;
+        Map<String,String> aurora=new LinkedHashMap<>();aurora.put("CT 方","7");aurora.put("T 方","6");aurora.put("加时","—");aurora.put("总分","13");
+        Map<String,String> spirit=new LinkedHashMap<>();spirit.put("T 方","5");spirit.put("CT 方","4");spirit.put("加时","—");spirit.put("总分","9");
         for(int width:new int[]{320,375,640})for(float scale:new float[]{1f,1.3f,2f})main(()->{
             Configuration config=new Configuration(activity.getResources().getConfiguration());config.fontScale=scale;config.screenWidthDp=width;
             Ui ui=new Ui(activity.createConfigurationContext(config),dark);
@@ -110,9 +124,10 @@ public final class DesignReviewInstrumentation extends Instrumentation {
             measure(body,ui.dp(width));inspect(body);
             require(findAll(body,"team-panel-header").size()==2,"CS2 matrix keeps two team panels");
             LinearLayout maps=ui.column();maps.setPadding(ui.dp(16),ui.dp(12),ui.dp(16),ui.dp(24));
-            new TeamPanelsView(ui,detail,maps).scope(mapScope,"",false,null,0,null,"上半场 7 · 下半场 6 · 加时 —","上半场 5 · 下半场 4 · 加时 —");
+            new TeamPanelsView(ui,detail,maps).scope(mapScope,"",false,null,0,null,aurora,spirit);
             measure(maps,ui.dp(width));inspect(maps);
             require(findAll(maps,"team-panel-header").size()==2,"map matrix keeps two team panels");
+            require(findAll(maps,"team-map-score").size()==2,"map matrix keeps both T/CT score bands");
         });
     }
     private void measure(View view,int width){view.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));view.layout(0,0,view.getMeasuredWidth(),view.getMeasuredHeight());}

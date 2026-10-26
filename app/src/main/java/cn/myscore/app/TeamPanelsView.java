@@ -30,7 +30,7 @@ final class TeamPanelsView {
         body.addView(ui.text(title,16,ui.text,true));ui.gap(body,4);
         TextView hint=ui.text(players>0?"点数值列排序 · 点姓名查看详情":"伤停名单按来源发布",11,ui.muted,false);
         body.addView(hint);ui.gap(body,12);
-        List<HorizontalScrollView> scrollers=teams(category,nba,sort,descending,changed,scrollX,"","");
+        List<HorizontalScrollView> scrollers=teams(category,nba,sort,descending,changed,scrollX,Map.of(),Map.of());
         bind(scrollers,savedScroll);
         hint.post(()->{
             boolean scroll=!scrollers.isEmpty()&&(scrollers.get(0).canScrollHorizontally(1)||scrollers.get(0).canScrollHorizontally(-1));
@@ -40,27 +40,27 @@ final class TeamPanelsView {
 
     /** One scope of two team panels, used by the CS2 map tab for each finished map. */
     void scope(String category,String sort,boolean descending,Consumer<Sort> changed,int scrollX,IntConsumer savedScroll){
-        scope(category,sort,descending,changed,scrollX,savedScroll,"","");
+        scope(category,sort,descending,changed,scrollX,savedScroll,Map.of(),Map.of());
     }
 
-    /** The map variant carries each team's half scores without repeating the map total. */
-    void scope(String category,String sort,boolean descending,Consumer<Sort> changed,int scrollX,IntConsumer savedScroll,String homeHalf,String awayHalf){
-        bind(teams(category,false,sort,descending,changed,scrollX,homeHalf,awayHalf),savedScroll);
+    /** Map score bands stay inside each team panel; each label is shown once. */
+    void scope(String category,String sort,boolean descending,Consumer<Sort> changed,int scrollX,IntConsumer savedScroll,Map<String,String> homeScore,Map<String,String> awayScore){
+        bind(teams(category,false,sort,descending,changed,scrollX,homeScore,awayScore),savedScroll);
     }
 
-    private List<HorizontalScrollView> teams(String category,boolean injuries,String sort,boolean descending,Consumer<Sort> changed,int scrollX,String homeHalf,String awayHalf){
+    private List<HorizontalScrollView> teams(String category,boolean injuries,String sort,boolean descending,Consumer<Sort> changed,int scrollX,Map<String,String> homeScore,Map<String,String> awayScore){
         List<MatchDetail.Table> home=teamTables(category,detail.match.homeId),away=teamTables(category,detail.match.awayId);
         List<String> columns=!home.isEmpty()?home.get(0).columns:!away.isEmpty()?away.get(0).columns:List.of();
         String effective=effectiveSort(columns,sort);
         boolean anyInjuries=injuries&&!injuryTables(null).isEmpty();
         List<HorizontalScrollView> scrollers=new ArrayList<>();
-        scrollers.addAll(team(detail.match.homeId,category,effective,descending,changed,scrollX,anyInjuries,homeHalf));
+        scrollers.addAll(team(detail.match.homeId,category,effective,descending,changed,scrollX,anyInjuries,homeScore));
         ui.gap(body,28);
-        scrollers.addAll(team(detail.match.awayId,category,effective,descending,changed,scrollX,anyInjuries,awayHalf));
+        scrollers.addAll(team(detail.match.awayId,category,effective,descending,changed,scrollX,anyInjuries,awayScore));
         return scrollers;
     }
 
-    private List<HorizontalScrollView> team(String teamId,String category,String sort,boolean descending,Consumer<Sort> changed,int scrollX,boolean anyInjuries,String halfLine){
+    private List<HorizontalScrollView> team(String teamId,String category,String sort,boolean descending,Consumer<Sort> changed,int scrollX,boolean anyInjuries,Map<String,String> score){
         List<MatchDetail.Table> tables=displayTables(teamTables(category,teamId));
         List<DetailRows.Entry> rows=DetailRows.select(tables,category,teamId,sort,descending);
         LinearLayout section=ui.column();section.setTag("team-panel");body.addView(section);
@@ -72,9 +72,20 @@ final class TeamPanelsView {
         header.addView(ui.text(rows.size()+" 人",11,ui.muted,false));
         header.setContentDescription(name+"，"+rows.size()+" 人");
         section.addView(header);ui.gap(section,8);
-        if(halfLine!=null&&!halfLine.isBlank()){
-            TextView halves=ui.text(halfLine,11,ui.muted,false);halves.setTag("team-half-line");
-            section.addView(halves);ui.gap(section,6);
+        if(score!=null&&!score.isEmpty()){
+            LinearLayout band=ui.row();band.setTag("team-map-score");band.setPadding(ui.dp(4),ui.dp(6),ui.dp(4),ui.dp(6));
+            StringBuilder description=new StringBuilder(name);
+            for(Map.Entry<String,String> cell:score.entrySet()){
+                LinearLayout item=ui.column();item.setGravity(Gravity.CENTER_HORIZONTAL);
+                TextView label=ui.text(cell.getKey(),11,ui.muted,false);label.setGravity(Gravity.CENTER);
+                TextView value=ui.text(cell.getValue(),13,ui.text,true);value.setGravity(Gravity.CENTER);
+                if(cell.getKey().equals("总分"))value.setTag("team-map-score-total");
+                item.addView(label);item.addView(value);
+                band.addView(item,new LinearLayout.LayoutParams(0,-2,1));
+                description.append("，").append(cell.getKey()).append(' ').append(cell.getValue());
+            }
+            band.setContentDescription(description.toString());
+            section.addView(band);ui.gap(section,6);
         }
         List<HorizontalScrollView> scrollers=new ArrayList<>();
         if(rows.isEmpty()){

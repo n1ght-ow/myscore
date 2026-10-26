@@ -27,13 +27,13 @@ public final class DetailActivity extends Activity {
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final Runnable tick=()->load(false);
     private String rendered="";
-    private long lastScroll;private String teamFilter="all",categoryFilter="",sortColumn="";private boolean descending=true;private int metricsX,eventsLimit=50,playerLimit=16;
+    private long lastScroll;private String teamFilter="all",categoryFilter="",sortColumn="",mapFilter="";private boolean descending=true;private int metricsX,eventsLimit=50,playerLimit=16;
     private final Runnable update=()->{if(active&&!isDestroyed())render(true);};
     @Override public void onCreate(Bundle saved){
         boolean dark=Ui.isDark(this);
         setTheme(dark?R.style.AppThemeDark:R.style.AppTheme);super.onCreate(saved);ui=new Ui(this,dark);
         try{match=Match.fromJson(new JSONObject(getIntent().getStringExtra("match")));if(match.id.isBlank())throw new IllegalArgumentException();}catch(Exception e){finish();return;}
-        if(saved!=null){tab=saved.getString("tab","overview");selectedGame=saved.getInt("game",-1);teamFilter=saved.getString("team","all");categoryFilter=saved.getString("category","");sortColumn=saved.getString("sort","");descending=saved.getBoolean("descending",true);metricsX=saved.getInt("metricsX");eventsLimit=saved.getInt("eventsLimit",50);playerLimit=saved.getInt("playerLimit",16);}if((match.group.equals("F1")||match.group.equals("LOL"))&&tab.equals("events"))tab="overview";repository=new DetailRepository(this);
+        if(saved!=null){tab=saved.getString("tab","overview");selectedGame=saved.getInt("game",-1);teamFilter=saved.getString("team","all");categoryFilter=saved.getString("category","");sortColumn=saved.getString("sort","");descending=saved.getBoolean("descending",true);mapFilter=saved.getString("map","");metricsX=saved.getInt("metricsX");eventsLimit=saved.getInt("eventsLimit",50);playerLimit=saved.getInt("playerLimit",16);}if((match.group.equals("F1")||match.group.equals("LOL"))&&tab.equals("events"))tab="overview";repository=new DetailRepository(this);
         getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.bg);getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(ui.bg));if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         root=ui.column();setContentView(root);root.setOnApplyWindowInsetsListener((v,insets)->{if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left+ui.pageInset(),i.top,i.right+ui.pageInset(),i.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft()+ui.pageInset(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight()+ui.pageInset(),insets.getSystemWindowInsetBottom());return insets;});root.requestApplyInsets();render(false);
     }
@@ -41,7 +41,7 @@ public final class DetailActivity extends Activity {
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     @Override public void onPause(){active=false;fingerDown=false;handler.removeCallbacks(tick);handler.removeCallbacks(update);super.onPause();}
     @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdownNow();super.onDestroy();}
-    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("tab",tab);state.putInt("game",selectedGame);state.putString("team",teamFilter);state.putString("category",categoryFilter);state.putString("sort",sortColumn);state.putBoolean("descending",descending);state.putInt("metricsX",metricsX);state.putInt("eventsLimit",eventsLimit);state.putInt("playerLimit",playerLimit);}
+    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("tab",tab);state.putInt("game",selectedGame);state.putString("team",teamFilter);state.putString("category",categoryFilter);state.putString("sort",sortColumn);state.putBoolean("descending",descending);state.putString("map",mapFilter);state.putInt("metricsX",metricsX);state.putInt("eventsLimit",eventsLimit);state.putInt("playerLimit",playerLimit);}
     private void load(boolean force){
         if(force){Logos.retryFailures();rendered="";}
         handler.removeCallbacks(tick);if(busy||!active){pendingForce|=force;return;}boolean forced=force||pendingForce;pendingForce=false;busy=true;if(status!=null)status.setText("正在更新详情…");
@@ -121,7 +121,7 @@ public final class DetailActivity extends Activity {
     }
     private void updateStatus(){if(status!=null)status.setText(statusText());}
     private String bodyKey(){
-        StringBuilder key=new StringBuilder(96).append(tab).append(':').append(selectedGame).append(':').append(teamFilter).append(':').append(categoryFilter).append(':').append(sortColumn).append(':').append(descending).append(':').append(eventsLimit).append(':').append(playerLimit).append(':').append(error).append(':').append(match.group);
+        StringBuilder key=new StringBuilder(96).append(tab).append(':').append(selectedGame).append(':').append(teamFilter).append(':').append(categoryFilter).append(':').append(mapFilter).append(':').append(sortColumn).append(':').append(descending).append(':').append(eventsLimit).append(':').append(playerLimit).append(':').append(error).append(':').append(match.group);
         if(detail==null)key.append(":empty:").append(busy);else key.append(':').append(detail.bodySignature());
         return key.toString();
     }
@@ -202,63 +202,63 @@ public final class DetailActivity extends Activity {
         if(match.group.equals("NBA")||match.group.equals("CS2")){new TeamPanelsView(ui,detail,body).show(sortColumn,descending,sort->{sortColumn=sort.column();descending=sort.descending();render(true);},metricsX,value->{metricsX=value;lastScroll=SystemClock.uptimeMillis();});return;}
         new PlayerStatsView(ui,detail,body).show(key,new PlayerStatsView.Selection(teamFilter,categoryFilter,sortColumn,descending),selection->{if(!categoryFilter.isBlank()&&!selection.category().equals(categoryFilter))metricsX=0;if(!selection.team().equals(teamFilter)||!selection.category().equals(categoryFilter))playerLimit=16;teamFilter=selection.team();categoryFilter=selection.category();sortColumn=selection.sort();descending=selection.descending();render(false);},metricsX,value->{metricsX=value;lastScroll=SystemClock.uptimeMillis();},playerLimit,()->{playerLimit=Math.min(400,playerLimit+24);render(true);});}
     private void events(){if(match.group.equals("CS2")){cs2Maps();return;}boolean found=tables("events");if(!detail.events.isEmpty()){heading(match.group.equals("足球")?"关键事件":match.group.equals("NFL")?"得分进程":"比赛进程");LinearLayout timeline=panel();for(int i=0;i<Math.min(eventsLimit,detail.events.size());i++)event(timeline,detail.events.get(i));body.addView(timeline);if(detail.events.size()>eventsLimit){ui.gap(body,12);body.addView(ui.button("加载更多进程 · 剩余 "+(detail.events.size()-eventsLimit)+" 条",false,()->{eventsLimit+=50;render(true);}));}}else if(!found)empty("暂无比赛进程",missing());}
-    /** CS2 maps page: one score table, then each finished map's halves and per-player stats. */
+    /** CS2 map tab: map buttons switch one map's score bands and player tables at a time. */
     private void cs2Maps(){
-        String suffix=" · 攻守半场";boolean found=false,rendered=false;
-        List<MatchDetail.Table> scores=new ArrayList<>();
-        for(MatchDetail.Table table:detail.tables)if(table.tab.equals("overview"))scores.add(table);
-        if(!scores.isEmpty()){
-            found=true;body.addView(ui.text("小局比分",16,ui.text,true));ui.gap(body,12);
-            for(int i=0;i<scores.size();i++){if(i>0)ui.gap(body,12);body.addView(new DetailTableView(ui).simple(scores.get(i)),new LinearLayout.LayoutParams(-1,-2));}
-        }
         LinkedHashSet<String> maps=new LinkedHashSet<>();
         for(MatchDetail.Table table:detail.tables)if(table.tab.equals("lineup")&&!table.category.isBlank()&&!table.category.equals("全场")&&!table.category.equals("伤停")&&!table.rows.isEmpty())maps.add(table.category);
-        if(!maps.isEmpty()){
-            if(found)ui.gap(body,24);
-            body.addView(ui.text("每张地图的数据",16,ui.text,true));ui.gap(body,12);
-            int index=0;
-            for(String map:maps){
-                if(index++>0)ui.gap(body,24);
-                body.addView(ui.text(map,15,ui.text,true));ui.gap(body,8);
-                MatchDetail.Table halves=null;
-                for(MatchDetail.Table table:detail.tables)if(table.tab.equals("events")&&table.title.equals(map+suffix))halves=table;
-                new TeamPanelsView(ui,detail,body).scope(map,sortColumn,descending,sort->{sortColumn=sort.column();descending=sort.descending();render(true);},0,null,halfLine(halves,match.home),halfLine(halves,match.away));
-                rendered=true;
-            }
-        }else if(found){
-            ui.gap(body,12);body.addView(ui.text("来源未提供逐图选手数据",12,ui.muted,false));
+        if(maps.isEmpty()){empty("本场小局数据尚未提供",missing());return;}
+        String selected=maps.contains(mapFilter)?mapFilter:maps.iterator().next();
+        HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setHorizontalScrollBarEnabled(false);scroll.setTag("cs2-map-filter");
+        LinearLayout chips=ui.row();int index=0;
+        for(String map:maps){
+            TextView chip=ui.chip(map,map.equals(selected),()->{mapFilter=map;render(true);});chip.setTag("cs2-map-chip");
+            chip.setContentDescription(map+(map.equals(selected)?"，已选中":""));
+            LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);if(index++>0)params.setMarginStart(ui.dp(8));
+            chips.addView(chip,params);
+            if(map.equals(selected))chip.post(()->scroll.scrollTo(Math.max(0,chip.getLeft()-ui.dp(8)),0));
         }
-        List<String> missing=new ArrayList<>();
-        for(MatchDetail.Table score:scores){
-            int nameColumn=Math.max(0,score.columns.indexOf("地图")),statusColumn=score.columns.indexOf("状态");
-            for(List<String> row:score.rows){
-                String mapName=DetailRows.cell(row,nameColumn).replaceFirst("^\\d+\\s+","").trim();
-                if(mapName.isBlank()||maps.contains(mapName)||missing.contains(mapName))continue;
-                if(statusColumn>=0&&!DetailRows.cell(row,statusColumn).equals("已结束"))continue;
-                missing.add(mapName);
-            }
-        }
-        if(!maps.isEmpty()&&!missing.isEmpty()){
-            ui.gap(body,12);TextView note=ui.text(String.join("、",missing)+" 暂无逐图选手数据",12,ui.muted,false);note.setTag("map-missing");body.addView(note);
-        }
-        if(!detail.events.isEmpty()){heading("比赛进程");LinearLayout timeline=panel();for(int i=0;i<Math.min(eventsLimit,detail.events.size());i++)event(timeline,detail.events.get(i));body.addView(timeline);rendered=true;}
-        if(!found&&!rendered)empty("本场小局数据尚未提供",missing());
+        scroll.addView(chips);body.addView(scroll,new LinearLayout.LayoutParams(-1,-2));ui.gap(body,16);
+        TextView title=ui.text(selected,15,ui.text,true);title.setTag("cs2-map-title");body.addView(title);ui.gap(body,8);
+        MatchDetail.Table halves=null;
+        for(MatchDetail.Table table:detail.tables)if(table.tab.equals("events")&&table.title.startsWith(selected+" · "))halves=table;
+        new TeamPanelsView(ui,detail,body).scope(selected,sortColumn,descending,sort->{sortColumn=sort.column();descending=sort.descending();render(true);},0,null,scoreCells(halves,match.home),scoreCells(halves,match.away));
+        List<String> missing=missingMaps(maps);
+        if(!missing.isEmpty()){ui.gap(body,16);TextView note=ui.text(String.join("、",missing)+" 暂无逐图数据",12,ui.muted,false);note.setTag("map-missing");body.addView(note);}
+        if(!detail.events.isEmpty()){heading("比赛进程");LinearLayout timeline=panel();for(int i=0;i<Math.min(eventsLimit,detail.events.size());i++)event(timeline,detail.events.get(i));body.addView(timeline);}
     }
-    /** Half scores stay in the map's team panel; the map total lives only in 小局比分. */
-    private String halfLine(MatchDetail.Table halves,String team){
-        if(halves==null)return "";
+    /** Each team's first-side (T or CT) leads its score band; OT and the map total stay last. */
+    private Map<String,String> scoreCells(MatchDetail.Table halves,String team){
+        Map<String,String> cells=new LinkedHashMap<>();if(halves==null)return cells;
         int teamColumn=Math.max(0,halves.columns.indexOf("球队"));
         for(List<String> row:halves.rows){
             if(!DetailRows.cell(row,teamColumn).equals(team))continue;
-            StringBuilder line=new StringBuilder();boolean meaningful=false;
-            for(String label:new String[]{"上半场","下半场","加时"}){
-                int index=halves.columns.indexOf(label);if(index<0)continue;
-                String value=DetailRows.cell(row,index);if(!value.equals("—"))meaningful=true;
-                if(line.length()>0)line.append(" · ");line.append(label).append(' ').append(value);
+            int startColumn=halves.columns.indexOf("首开方"),tColumn=halves.columns.indexOf("T 方"),ctColumn=halves.columns.indexOf("CT 方");
+            if(tColumn>=0&&ctColumn>=0){
+                String start=startColumn<0?"":DetailRows.cell(row,startColumn);
+                String first=start.equals("CT")?"CT 方":"T 方",second=first.equals("T 方")?"CT 方":"T 方";
+                cells.put(first,DetailRows.cell(row,first.equals("T 方")?tColumn:ctColumn));
+                cells.put(second,DetailRows.cell(row,second.equals("T 方")?tColumn:ctColumn));
+            }else{
+                for(String label:new String[]{"上半场","下半场"}){int index=halves.columns.indexOf(label);if(index>=0)cells.put(label,DetailRows.cell(row,index));}
             }
-            return meaningful?line.toString():"";
+            for(String label:new String[]{"加时","总分"}){int index=halves.columns.indexOf(label);if(index>=0)cells.put(label,DetailRows.cell(row,index));}
+            break;
         }
-        return "";
+        return cells;
+    }
+    private List<String> missingMaps(Set<String> maps){
+        List<String> missing=new ArrayList<>();
+        for(MatchDetail.Table score:detail.tables){
+            if(!score.tab.equals("overview"))continue;
+            int nameColumn=Math.max(0,score.columns.indexOf("地图")),statusColumn=score.columns.indexOf("状态");
+            for(List<String> row:score.rows){
+                String name=DetailRows.cell(row,nameColumn).replaceFirst("^\\d+\\s+","").trim();
+                if(name.isBlank()||maps.contains(name)||missing.contains(name))continue;
+                if(statusColumn>=0&&!DetailRows.cell(row,statusColumn).equals("已结束"))continue;
+                missing.add(name);
+            }
+        }
+        return missing;
     }
     private void event(LinearLayout timeline,MatchDetail.Event event){LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setPadding(0,ui.dp(12),0,ui.dp(12));TextView clock=ui.text(event.time(),11,ui.muted,true);row.addView(clock,new LinearLayout.LayoutParams(ui.dp(56),-2));LinearLayout words=ui.column();String title=DetailParsers.plain(event.title()),text=DetailParsers.plain(event.text());if(!title.isBlank()){words.addView(ui.text(title,13,ui.text,true));ui.gap(words,4);}if(!text.isBlank())words.addView(ui.text(text,13,title.isBlank()?ui.text:ui.muted,false));row.addView(words,new LinearLayout.LayoutParams(0,-2,1));timeline.addView(row);timeline.addView(ui.divider());}
     private void lol(){LolMatchView view=new LolMatchView(ui,detail,body,number->{selectedGame=number;if(tab.equals("overview"))tab="lineup";render(false);});view.teamSelection(teamFilter,id->{teamFilter=id;render(false);});if(tab.equals("overview")){view.overview();information();sourceLink();}else view.games(selectedGame,tab.equals("stats"));}

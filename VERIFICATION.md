@@ -1,3 +1,32 @@
+# MyScore 3.6.1 CS2 小局首开方顺序
+
+日期：2026-10-27（北京时间）。版本 `3.6.1` / versionCode `33`，发布标签 `v3.6.1`。发布入口：[MyScore 3.6.1](https://github.com/n1ght-ow/myscore/releases/tag/v3.6.1)。
+
+- 比分条顺序修正：每队以首开方为第一列——先做 T 就把 T 方放前，先做 CT 就把 CT 方放前；另一方紧随，加时与总分保持在后。Mirage：Aurora 首开 CT 显示 CT 7 → T 6 → 总分 13，Spirit 首开 T 显示 T 5 → CT 4 → 总分 9；Anubis：Aurora CT 9 → T 4，Spirit T 3 → CT 3。之前固定 T 方在前的错误已移除。
+- 解析新增「首开方」列，来自 5EPlay `fh_role`；旧缓存迁移扩展为：仍是有效上半场 / 下半场表，或缺少首开方列的 T/CT 表，都会绕过新鲜度重新抓取一次。离线时保留旧缓存。
+- 地图按钮、单图比分 + 选手数据、Nuke 无数据提示、选中地图保留、排序与横滑联动一并进入本版；地图总分只出现一次。
+- 代码检查：`testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` 通过；138 项 JUnit，0 failures / errors；Lint 0 errors / 19 warnings。
+- 模拟器：Android 15 / API 35，1080×2400 / 420dpi / 1.0 字号。最终 `3.6.1 / 33` 干净构建覆盖安装后，`NbaRosterInstrumentation` 通过 **79,828 项**；`DesignReviewInstrumentation` 通过 **17,593 项**（首开方顺序、地图按钮切换、T/CT 比分条、Nuke 提示、排序与横滑、320 / 375 / 640dp × 1 / 1.3 / 2 倍字号矩阵，以及既有足球 / LOL 回归）；`RedesignInstrumentation` 通过 **16,743 项**全页文字检查；`SmokeInstrumentation` 通过 **280 项**运行检查。无本轮崩溃或 ANR。
+- 数据：`Cs2SidesRefreshInstrumentation` 实际请求 5EPlay，通过 5 项首开方 / T/CT 断言（含 Mirage Aurora 首开 CT、Spirit 首开 T），刷新真实缓存；模拟器直连 DNS 不可用时通过本机 7897 代理完成校验，测试后已移除模拟器全局代理与 `adb reverse`。UI 回归使用该真实缓存；Nuke 无逐图数据；NBA 使用真实缓存。
+- APK：`artifacts/MyScore-3.6.1.apk`，961,029 字节，SHA-256 `5e4ab74de33362eb953cd5b7c91e0f330ae2c464341204f7da36a093510b5db7`。`aapt` 确认包名 `cn.myscore.app`、版本 `3.6.1 / 33`、minSdk 28 / targetSdk 35；`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646` 与 3.5.0 相同；设备实际安装的 base.apk 与本地产物哈希一致。校验文件 `artifacts/SHA256SUMS-3.6.1.txt`。发布附件为 `MyScore-3.6.1.apk` 与 `SHA256SUMS-3.6.1.txt`。
+- 截图：`artifacts/cs2-map-switch/final-3.6.1/`（首开方在前、Mirage / Anubis 切换、Nuke 提示）与 `artifacts/cs2-map-switch/redesign-final-3.6.1/`（全页回归截图）。
+- 限制：只在 API 35 模拟器验收，未在 Redmi K80 Pro / HyperOS、真实运营商网络或锁屏提醒上验证；未做本轮 FPS / 性能基准。CS2 窄屏或大字号下仍需横向滑动查看 KAST 等末列。
+
+# MyScore 3.6.0 CS2 小局地图切换与 T/CT 比分
+
+日期：2026-10-27（北京时间）。版本 `3.6.0` / versionCode `32`。本轮为本地预览构建，尚未提交、推送或发布。
+
+- CS2 小局页改为地图按钮切换：有逐图数据的每张地图一个 48dp chip（本场 Mirage / Anubis），点击后只显示选中地图，比分与选手数据一起切换；选中地图在切换标签和旋转后保留。
+- 选中地图内，两队横栏各自在队名 / 人数下方显示四格比分条「T 方 / CT 方 / 加时 / 总分」，再接本图选手表。T/CT 由 5EPlay `fh_role` / `sh_role` 与上下半场比分映射，替代上半场 / 下半场标签；地图总分只在两队各自的比分条出现一次，没有全部分图拼在一起的比分表，也没有独立「攻守半场」表。
+- 没有逐图数据的地图不生成按钮或空表；Nuke 只在页末提示一次「Nuke 暂无逐图数据」。
+- 旧缓存迁移：`DetailRepository.needsSideRefresh` 检测仍含有效「上半场 / 下半场」的旧 CS2 表，命中时绕过 6 小时新鲜度并抓取一次新版 T/CT 数据；离线时保留旧缓存和半场标签。解析器新增 `cs2MapsExposeTSideAndCtSideScores` 回归，迁移判定新增 `oldCs2HalfTablesRequestAFreshReadForSides` 回归。
+- 代码检查：`testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` 通过；138 项 JUnit，0 failures / errors；Lint 0 errors / 19 warnings。
+- 模拟器：Android 15 / API 35，1080×2400 / 420dpi / 1.0 字号。最终 `3.6.0 / 32` 干净构建覆盖安装后，`NbaRosterInstrumentation` 通过 **79,828 项**原生断言；`DesignReviewInstrumentation` 通过 **17,593 项**断言（地图按钮、选中地图切换、T/CT 比分条、地图总分只出现一次、Nuke 提示、排序与横滑、320 / 375 / 640dp × 1 / 1.3 / 2 倍字号矩阵，以及既有足球 / LOL 回归）；`RedesignInstrumentation` 通过 **16,743 项**全页文字检查；`SmokeInstrumentation` 通过 **280 项**运行检查。无本轮崩溃或 ANR。
+- 数据：`Cs2SidesRefreshInstrumentation` 实际请求 5EPlay，通过 5 项侧别断言（Mirage：Aurora T 6 / CT 7 / 13，Spirit T 5 / CT 4 / 9），并刷新真实缓存；随后 UI 回归使用该缓存。Nuke 无逐图数据；NBA 使用真实缓存 Bucks–Bulls。未注入模拟数据。
+- APK：`artifacts/MyScore-3.6.0.apk`，960,225 字节，SHA-256 `903e1cf488ae47a6920efbeb7f09bb93ca23341c869054df51ce0e40baacd60f`。`aapt` 确认包名 `cn.myscore.app`、版本 `3.6.0 / 32`、minSdk 28 / targetSdk 35；`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646` 与 3.5.0 相同；设备实际安装的 base.apk 与本地产物哈希一致。校验文件 `artifacts/SHA256SUMS-3.6.0.txt`。
+- 截图：`artifacts/cs2-map-switch/final-3.6.0/`（地图按钮、Mirage / Anubis 切换、T/CT 比分条、Nuke 提示）与 `artifacts/cs2-map-switch/redesign-final-3.6.0/`（全页回归截图）。
+- 限制：只在 API 35 模拟器验收，未在 Redmi K80 Pro / HyperOS、真实运营商网络或锁屏提醒上验证；未做本轮 FPS / 性能基准。CS2 窄屏或大字号下仍需横向滑动查看 KAST 等末列。
+
 # MyScore 3.5.0 CS2 详情内容重排
 
 日期：2026-10-27（北京时间）。版本 `3.5.0` / versionCode `31`，发布标签 `v3.5.0`。发布入口：[MyScore 3.5.0](https://github.com/n1ght-ow/myscore/releases/tag/v3.5.0)。

@@ -21,4 +21,11 @@ public class DetailPresentationTest {
     @Test public void injuryStatusesUseReadableChinese(){assertEquals("每日观察",DetailParsers.label("Day-To-Day"));assertEquals("每日观察",DetailParsers.label("Day To Day"));assertEquals("缺阵",DetailParsers.label("Out"));assertEquals("出战存疑",DetailParsers.label("Doubtful"));}
     @Test public void rowMetadataAndAllStatsSurviveCache()throws Exception{MatchDetail d=nba(fixture("nba")),restored=MatchDetail.fromJson(d.json());MatchDetail.Table table=players(d).get(0),copy=players(restored).get(0);assertEquals(table.columns,copy.columns);assertEquals(table.rows,copy.rows);assertEquals(table.people,copy.people);assertEquals(table.teamId,copy.teamId);}
     @Test public void oldTablesWithoutMetadataRemainReadable()throws Exception{MatchDetail d=nba(fixture("nba"));JSONObject root=d.json();for(int i=0;i<root.getJSONArray("tables").length();i++){JSONObject table=root.getJSONArray("tables").getJSONObject(i);table.remove("people");table.remove("teamId");table.remove("category");}assertFalse(MatchDetail.fromJson(root).tables.isEmpty());}
+    @Test public void oldCs2HalfTablesRequestAFreshReadForSides(){
+        Match match=new Match();match.group="CS2";
+        MatchDetail old=new MatchDetail(match);MatchDetail.Table halves=new MatchDetail.Table("events","Mirage · 攻守半场","球队","上半场","下半场","加时","总分");halves.row("Aurora","7","6","—","13");old.table(halves);assertTrue(DetailRepository.needsSideRefresh(match,old));
+        MatchDetail preview=new MatchDetail(match);MatchDetail.Table noStart=new MatchDetail.Table("events","Mirage · T / CT","球队","T 方","CT 方","加时","总分");noStart.row("Aurora","6","7","—","13");preview.table(noStart);assertTrue(DetailRepository.needsSideRefresh(match,preview));
+        MatchDetail sides=new MatchDetail(match);MatchDetail.Table current=new MatchDetail.Table("events","Mirage · T / CT","球队","首开方","T 方","CT 方","加时","总分");current.row("Aurora","CT","6","7","—","13");sides.table(current);assertFalse(DetailRepository.needsSideRefresh(match,sides));
+        MatchDetail empty=new MatchDetail(match);MatchDetail.Table nuke=new MatchDetail.Table("events","Nuke · 攻守半场","球队","上半场","下半场","加时","总分");nuke.row("Aurora","—","—","—","0");empty.table(nuke);assertFalse(DetailRepository.needsSideRefresh(match,empty));
+    }
 }

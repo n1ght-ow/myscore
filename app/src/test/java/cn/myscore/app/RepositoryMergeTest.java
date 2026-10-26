@@ -16,4 +16,26 @@ public class RepositoryMergeTest {
     @Test public void emptySuccessfulDateDoesNotResurrectRemovedGames()throws Exception{Repository.Batch view=batch("",match("removed","1",1));assertTrue(Repository.mergeDays(view,List.of(batch(""),batch(""))).isEmpty());assertEquals("",view.error);}
     @Test public void newestDuplicateWinsRegardlessOfDateOrder()throws Exception{Match fresh=match("same","3",20),old=match("same","1",10);for(List<Repository.Batch> days:List.of(List.of(batch("",fresh),batch("",old)),List.of(batch("",old),batch("",fresh)))){List<Match> merged=Repository.mergeDays(batch(""),days);assertEquals(1,merged.size());assertSame(fresh,merged.get(0));}}
     @Test public void successfulEmptyDayStillReportsMissingOtherDate()throws Exception{Repository.Batch view=batch("");assertTrue(Repository.mergeDays(view,List.of(batch("未更新"),batch(""))).isEmpty());assertFalse(view.error.isEmpty());}
+
+    @Test public void terminalCacheWinsAgainstAChangedFreshScore(){
+        Match cached=match("same","1",100);cached.state="final";
+        Match fresh=match("same","2",200);fresh.state="final";
+        List<Match> merged=Repository.mergeTerminal(List.of(cached),List.of(fresh));
+        assertEquals(1,merged.size());assertSame(cached,merged.get(0));assertEquals("1",merged.get(0).homeScore);
+    }
+    @Test public void liveCacheIsReplacedByANewFinalEntry(){
+        Match cached=match("same","1",100);cached.state="live";
+        Match fresh=match("same","2",200);fresh.state="final";
+        List<Match> merged=Repository.mergeTerminal(List.of(cached),List.of(fresh));
+        assertEquals(1,merged.size());assertSame(fresh,merged.get(0));
+    }
+    @Test public void terminalCacheSurvivesATemporarySourceOmission(){
+        Match cached=match("same","1",100);cached.state="final";
+        List<Match> merged=Repository.mergeTerminal(List.of(cached),List.of());
+        assertEquals(1,merged.size());assertSame(cached,merged.get(0));
+    }
+    @Test public void nonTerminalCacheDoesNotSurviveAnEmptySuccessfulResponse(){
+        Match cached=match("same","1",100);cached.state="scheduled";
+        assertTrue(Repository.mergeTerminal(List.of(cached),List.of()).isEmpty());
+    }
 }

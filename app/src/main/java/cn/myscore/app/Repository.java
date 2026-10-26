@@ -16,9 +16,11 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.concurrent.*;
 
 public final class Repository {
@@ -67,22 +69,66 @@ public final class Repository {
         Map<Future<Batch>,Competition> tasks=new HashMap<>();
         int count=0;
         for(Competition c:Competition.ALL) if(group.equals("全部")||c.group.equals(group)) {tasks.put(completed.submit(()->fetchOne(c,from,to,force)),c);count++;}
-        for(int i=0;i<count;i++) {
-            try {
-                Future<Batch> task=completed.take();Batch batch;
-                try{batch=task.get();}catch(ExecutionException e){batch=load(tasks.get(task),from,to);batch.error="来源暂不可用，请稍后重试";android.util.Log.w("MyScore","Source task failed",e.getCause());}
-                result.batches.add(batch);
+        Set<String> added=new HashSet<>();
+        long deadline=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(RefreshPolicy.REFRESH_DEADLINE);
+        try {
+            for(int i=0;i<count;i++) {
+                Future<Batch> task;
+                long remaining=deadline-System.nanoTime();
+                try{task=remaining>0?completed.poll(remaining,TimeUnit.NANOSECONDS):completed.poll();}
+                catch(InterruptedException e){Thread.currentThread().interrupt();return result;}
+                if(task==null) {
+                    // A hung source must not keep every other source and the next tick waiting.
+                    android.util.Log.w("MyScore","Source refresh deadline reached");
+                    for(Future<Batch> pending:tasks.keySet())if(!pending.isDone())pending.cancel(true);
+                    addTimedOut(tasks,result,added,from,to,onBatch);
+                    break;
+                }
+                Competition c=tasks.get(task);
+                if(c==null||added.contains(c.id))continue;
+                Batch batch;
+                try{batch=task.get();}
+                catch(InterruptedException e){Thread.currentThread().interrupt();return result;}
+                catch(ExecutionException e){batch=load(c,from,to);batch.error="来源暂不可用，请稍后重试";android.util.Log.w("MyScore","Source task failed",e.getCause());}
+                catch(CancellationException e){batch=load(c,from,to);batch.error="来源响应超时";}
+                added.add(c.id);result.batches.add(batch);
                 if(onBatch!=null)onBatch.accept(batch);
-            } catch(InterruptedException e) {for(Future<Batch> task:tasks.keySet())task.cancel(true);Thread.currentThread().interrupt();break;}
+            }
+        } finally {
+            for(Future<Batch> pending:tasks.keySet())if(!pending.isDone())pending.cancel(true);
         }
         return result;
     }
+
+    /** Fill every selected source after the deadline, using a real cache when one exists. */
+    private void addTimedOut(Map<Future<Batch>,Competition> tasks,Snapshot result,Set<String> added,LocalDate from,LocalDate to,java.util.function.Consumer<Batch> onBatch) {
+        for(Map.Entry<Future<Batch>,Competition> entry:tasks.entrySet()) {
+            Competition c=entry.getValue();if(added.contains(c.id))continue;
+            Future<Batch> task=entry.getKey();Batch batch=null;
+            if(task.isDone()&&!task.isCancelled()) {
+                try{batch=task.get();}catch(Exception ignored){}
+            }
+            if(batch==null) {
+                batch=load(c,from,to);batch.error="来源响应超时";
+                String key=c.id+":"+from+":"+to;recordFailure(key,failures.get(key),batch.error);
+            }
+            added.add(c.id);result.batches.add(batch);
+            if(onBatch!=null)onBatch.accept(batch);
+        }
+    }
     private Batch fetchOne(Competition c,LocalDate from,LocalDate to,boolean force) {
         Batch b=load(c,from,to);long now=System.currentTimeMillis();
-        long ttl=to.isAfter(from)?300_000:RefreshPolicy.SCORE_CACHE;
         String key=c.id+":"+from+":"+to;Failure previous=failures.get(key);
+        // A successfully read, fully terminal batch is the user's requested end state: no new request.
+        if(!force && b.error.isEmpty() && b.fetched>0 && RefreshPolicy.settled(b.matches)) {
+            android.util.Log.i("MyScorePerf","skip settled view source="+c.id);
+            return b;
+        }
         if(!force&&previous!=null&&previous.until>now){b.error=previous.message;return b;}
-        if(!force && b.error.isEmpty() && b.fetched>0 && now-b.fetched>=0 && now-b.fetched<ttl) return b;
+        long ttl=to.isAfter(from)?300_000:RefreshPolicy.cacheTtl(b.matches,from,Match.today(now),now);
+        // A previous failure must be retried for real after its backoff, not hidden by a fresh TTL.
+        boolean retry=previous!=null||!b.error.isEmpty();
+        if(!force && !retry && b.error.isEmpty() && b.fetched>0 && now-b.fetched>=0 && now-b.fetched<ttl) return b;
         try {
             if(Thread.currentThread().isInterrupted())throw new InterruptedException();
             b.error="";
@@ -90,9 +136,10 @@ public final class Repository {
             if(c.id.equals("cs2")) matches=DomesticEsports.spirit(from,now);
             else if(c.id.equals("lol")) {matches=DomesticEsports.worlds(new JSONObject(get(DomesticEsports.LOL)),now);try{DetailSources.enrichWorlds(matches);}catch(Exception e){android.util.Log.i("MyScore","Worlds crests temporarily unavailable");}}
             else {
-                matches=espn(c,from,to,now,force,b);
+                matches=espn(c,from,to,now,force,retry,b);
             }
             if(Thread.currentThread().isInterrupted())throw new InterruptedException();
+            if(!force) matches=mergeTerminal(b.matches,matches);
             b.matches.clear();
             for(Match m:matches) if(m.day()==null || (!m.day().isBefore(from) && !m.day().isAfter(to))) b.matches.add(m);
             if(b.error.isEmpty()){b.fetched=System.currentTimeMillis();failures.remove(key);}
@@ -107,7 +154,7 @@ public final class Repository {
         return b;
     }
     private void recordFailure(String key,Failure previous,String message){int count=previous==null?1:previous.count+1;if(failures.size()>100)failures.clear();failures.put(key,new Failure(count,System.currentTimeMillis()+RefreshPolicy.retry(RefreshPolicy.SCORES,count),message));}
-    private List<Match> espn(Competition c,LocalDate from,LocalDate to,long now,boolean force,Batch view) throws Exception {
+    private List<Match> espn(Competition c,LocalDate from,LocalDate to,long now,boolean force,boolean retry,Batch view) throws Exception {
         if(c.id.equals("f1")) {
             String dates=from.minusDays(7).format(DateTimeFormatter.BASIC_ISO_DATE)+"-"+to.plusDays(1).format(DateTimeFormatter.BASIC_ISO_DATE);
             return Parsers.espn(new JSONObject(get("https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/scoreboard?dates="+dates+"&limit=1000")),c,now);
@@ -120,13 +167,19 @@ public final class Repository {
             days.add(DATES.submit(()-> {
                 Batch cached=load(c,day,day,"day_");
                 LocalDate utc=InstantNow.utcDay(now);
-                long ttl=cached.matches.stream().anyMatch(Match::live)?RefreshPolicy.SCORE_CACHE:day.isAfter(utc)?30*60_000L:day.isBefore(utc.minusDays(1))?6*60*60_000L:RefreshPolicy.SCORE_CACHE;
-                if(!force && cached.fetched>0 && now-cached.fetched>=0 && now-cached.fetched<ttl)return cached;
+                // Every match on this source date is final/cancelled and the last read succeeded.
+                if(!force && cached.error.isEmpty() && cached.fetched>0 && RefreshPolicy.settled(cached.matches)) {
+                    android.util.Log.i("MyScorePerf","skip settled source="+c.id+" day="+day);
+                    return cached;
+                }
+                long ttl=RefreshPolicy.cacheTtl(cached.matches,day,utc,now);
+                if(!force && !retry && cached.fetched>0 && now-cached.fetched>=0 && now-cached.fetched<ttl)return cached;
                 String url="https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/scoreboard?dates="+day.format(DateTimeFormatter.BASIC_ISO_DATE)+"&limit=1000";
                 try{
                     List<Match> parsed=Parsers.espn(new JSONObject(get(url)),c,System.currentTimeMillis());
                     if(Thread.currentThread().isInterrupted())throw new InterruptedException();
-                    Batch fresh=new Batch(c);fresh.matches.addAll(parsed);fresh.fetched=System.currentTimeMillis();save(fresh,day,day,"day_");
+                    List<Match> merged=force?parsed:mergeTerminal(cached.matches,parsed);
+                    Batch fresh=new Batch(c);fresh.matches.addAll(merged);fresh.fetched=System.currentTimeMillis();save(fresh,day,day,"day_");
                     return fresh;
                 }catch(InterruptedException e){Thread.currentThread().interrupt();throw e;}
                 catch(Exception e){cached.error=day+" 赛程未更新";return cached;}
@@ -145,6 +198,22 @@ public final class Repository {
         // Read stale days first, then let a successful source replace the same event identity.
         for(boolean failed:new boolean[]{true,false})for(Batch day:days)if((!day.error.isEmpty())==failed)for(Match m:day.matches){Match old=unique.get(m.id);if(old==null||m.updated>=old.updated)unique.put(m.id,m);}
         return new ArrayList<>(unique.values());
+    }
+    /**
+     * Automatic reads keep a source-confirmed terminal match exactly as it was stored. A fresh
+     * terminal entry replaces a live one; a terminal entry missing from a successful response is
+     * retained, so a temporary source omission cannot erase a finished result.
+     */
+    static List<Match> mergeTerminal(List<Match> cached,List<Match> fresh) {
+        Map<String,Match> locked=new java.util.LinkedHashMap<>();
+        if(cached!=null)for(Match m:cached)if(m!=null&&RefreshPolicy.terminal(m))locked.put(m.id,m);
+        List<Match> merged=new ArrayList<>();Set<String> seen=new HashSet<>();
+        if(fresh!=null)for(Match m:fresh) {
+            if(m==null)continue;Match use=locked.get(m.id);
+            if(seen.add(m.id))merged.add(use==null?m:use);
+        }
+        for(Match m:locked.values())if(seen.add(m.id))merged.add(m);
+        return merged;
     }
     private static final class InstantNow {
         static LocalDate utcDay(long now){return java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneOffset.UTC).toLocalDate();}

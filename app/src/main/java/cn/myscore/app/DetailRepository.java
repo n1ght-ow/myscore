@@ -15,7 +15,10 @@ final class DetailRepository {
     MatchDetail cached(Match m){try{File f=file(m);if(!f.exists())return null;MatchDetail d=MatchDetail.fromJson(new JSONObject(new String(new AtomicFile(f).readFully(),StandardCharsets.UTF_8)));if(!d.match.id.equals(m.id))return null;d.bodySignature();return d;}catch(Exception e){return null;}}
     MatchDetail fetch(Match m,boolean force)throws Exception {
         MatchDetail old=cached(m);
-        if(!force&&old!=null&&!needsSideRefresh(m,old)&&(!m.group.equals("足球")||old.facts.stream().anyMatch(f->f.label().equals("阵容资料版本")&&f.value().equals("1")))&&RefreshPolicy.freshDetail(m,old.match,old.fetched,System.currentTimeMillis()))return old;
+        boolean migration=old!=null&&(needsSideRefresh(m,old)||(m.group.equals("足球")&&old.facts.stream().noneMatch(f->f.label().equals("阵容资料版本")&&f.value().equals("1"))));
+        // A detail already fetched after both sides reached a terminal state is the final record.
+        boolean frozen=old!=null&&old.fetched>0&&RefreshPolicy.frozenDetail(m,old.match);
+        if(!force&&old!=null&&!migration&&(frozen||RefreshPolicy.freshDetail(m,old.match,old.fetched,System.currentTimeMillis())))return old;
         MatchDetail next=DetailSources.fetch(m);retainGames(old,next);if(m.group.equals("足球"))new FootballProfiles(context).enrich(next);next.bodySignature();AtomicFile atomic=new AtomicFile(file(m));FileOutputStream out=null;try{out=atomic.startWrite();out.write(next.json().toString().getBytes(StandardCharsets.UTF_8));atomic.finishWrite(out);}catch(Exception e){if(out!=null)atomic.failWrite(out);}
         File[] oldFiles=dir.listFiles();if(oldFiles!=null)for(File f:oldFiles)if(System.currentTimeMillis()-f.lastModified()>14L*86400_000)f.delete();return next;
     }

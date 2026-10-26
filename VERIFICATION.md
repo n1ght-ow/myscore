@@ -1,3 +1,19 @@
+# MyScore 4.0.0 数据获取重构
+
+日期：2026-10-27（北京时间）。版本 `4.0.0` / versionCode `34`，发布标签 `v4.0.0`。发布入口：[MyScore 4.0.0](https://github.com/n1ght-ow/myscore/releases/tag/v4.0.0)。
+
+- 规则：来源确认 `final` / `cancelled` 后，自动刷新冻结比分、状态、小局与 `updated`；成功读取且全部终态的批次直接跳过；有 live 才 10 秒，临近开赛 30 秒，远期 30 分钟，过去 / 全终态停止自动轮询；手动刷新仍可重新核对。页面跨午夜时保留一次日期重排唤醒，已锁定数据仍按规则跳过。
+- 实现：`RefreshPolicy` 新增终态、缓存 TTL、轮询节奏与详情冻结；`Repository.mergeTerminal` 保留终态条目，`fetchOne` / `espn` 增加锁定跳过与失败重试；`Repository.fetch` 增加 30 秒总截止；`MainActivity` 改为逐来源 150ms 防抖渲染、2 线程与完成兜底；`DetailRepository` 复用终态详情。
+- 代码检查：`testDebugUnitTest lintDebug assembleDebug` 通过；155 项 JUnit，0 failures / errors；Lint 0 errors / 21 warnings。
+- 安装包：`artifacts/MyScore-4.0.0.apk`，966,749 字节，SHA-256 `dfb0768e6c930c15c8eec568f5fe84083efbf7380cbbcee6099739366b43bd6d`；校验文件 `artifacts/SHA256SUMS-4.0.0.txt`。`aapt` 确认包名 `cn.myscore.app`、版本 `4.0.0` / versionCode `34`、minSdk 28 / targetSdk 35；`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646` 与 3.6.1 相同，可直接覆盖安装并保留数据。
+- 模拟器：Android 15 / API 35，1080×2400 / 420dpi。4.0.0 覆盖安装后保留原缓存。
+  - 10/25 已全部结束：6 个来源记录 `skip settled view`，`all sources` 约 68–90ms；30 秒以上无新轮询，NBA 视图缓存 mtime 保持 17:58，页面仍显示 25 场已结束。
+  - 10/27 有 LOL live：`all sources` 约每 10 秒（18:10:47–18:11:08），`view_lol_2026-10-27` 随之更新；`view_nba_2026-10-27` 停在 17:56，确认同一轮刷新不会重取非 live 来源。
+  - 快速切换日期 / 赛事无卡死；logcat 无 `FATAL EXCEPTION` 或 ANR。
+- 详情：终态详情由 `RefreshPolicy.frozenDetail` 与 JUnit 覆盖，不受 6 小时 TTL 影响；手动刷新仍可强制核对。
+- 限制：未在 Redmi K80 Pro / HyperOS、真实运营商网络或锁屏提醒上验收；来源延迟 / 限流仍可能出现。
+- README 已移除版本历史与发布说明，后续更新说明只发布在 GitHub Releases。
+
 # MyScore 3.6.1 CS2 小局首开方顺序
 
 日期：2026-10-27（北京时间）。版本 `3.6.1` / versionCode `33`，发布标签 `v3.6.1`。发布入口：[MyScore 3.6.1](https://github.com/n1ght-ow/myscore/releases/tag/v3.6.1)。

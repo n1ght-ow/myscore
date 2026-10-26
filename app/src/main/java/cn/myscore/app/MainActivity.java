@@ -36,7 +36,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private Repository.Snapshot allSnapshot;
     private LocalDate allSnapshotDay;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final ExecutorService executor=Executors.newSingleThreadExecutor();
+    private final ExecutorService executor=Executors.newFixedThreadPool(2);
     private final ExecutorService cacheWorker=Executors.newSingleThreadExecutor();
     private final ExecutorService calendarWorker=Executors.newSingleThreadExecutor();
     private LinearLayout root,body,nav,headerView;
@@ -110,21 +110,39 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         if(!loadedDay.equals(Match.today(System.currentTimeMillis()))){loadedDay=Match.today(System.currentTimeMillis());select(tab,group,dayOffset,true);return;}
         if(busy||selectionLoading){pending=true;pendingForce|=force;return;}
         boolean forced=force||pendingForce;pendingForce=false;
-        busy=true;pending=false;String tag=queryTag();long version=selectionVersion;LocalDate f=from(),t=to();String g=group;long started=System.currentTimeMillis();final boolean[] first={true};final boolean incremental=snapshot.matches().isEmpty();
+        busy=true;pending=false;String tag=queryTag();long version=selectionVersion;LocalDate f=from(),t=to();String g=group;long started=System.currentTimeMillis();
         scoreRequest=executor.submit(()-> {
-            Repository.Snapshot next=repository.fetch(f,t,g,forced,batch -> handler.post(()-> {
-                if(first[0]){first[0]=false;android.util.Log.i("MyScorePerf","first source "+batch.competition.id+" in "+(System.currentTimeMillis()-started)+"ms");}
-                if(isDestroyed()||!active||!tag.equals(queryTag()))return;
-                // With a cached list on screen, wait for the final snapshot instead of rebuilding nine times.
-                if(incremental){snapshot.merge(batch);handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,150);}
-            }));
+            Repository.Snapshot result;
+            try {
+                result=repository.fetch(f,t,g,forced,batch -> handler.post(()-> {
+                    if(isDestroyed()||!active||!tag.equals(queryTag()))return;
+                    // Every source updates the visible rows as soon as it arrives; a slow feed
+                    // never holds the whole screen until its own request finishes.
+                    snapshot.merge(batch);
+                    handler.removeCallbacks(renderSoon);
+                    handler.postDelayed(renderSoon,150);
+                }));
+            } catch(RuntimeException e) {
+                android.util.Log.w("MyScore","Score refresh interrupted",e);
+                result=repository.cached(f,t,g);
+                for(Repository.Batch batch:result.batches)if(batch.error.isEmpty())batch.error="刷新意外中断，已保留上次数据";
+            }
+            Repository.Snapshot next=result;
             handler.post(()-> {
-                if(isDestroyed()||version!=selectionVersion)return;busy=false;
+                if(isDestroyed()||version!=selectionVersion)return;
+                busy=false;
                 if(!tag.equals(queryTag())){if(active)load(false);return;}
                 android.util.Log.i("MyScorePerf","all sources in "+(System.currentTimeMillis()-started)+"ms");
                 handler.removeCallbacks(renderSoon);
-                if(tag.equals(queryTag())){snapshot=next;rememberAll(g,f,next);if(active)render(true);}
-                if(active){if(pending || !tag.equals(queryTag()))load(false);else handler.postDelayed(tick,RefreshPolicy.remaining(RefreshPolicy.SCORES,System.currentTimeMillis()-started));}
+                snapshot=next;rememberAll(g,f,next);if(active)render(true);
+                if(active){
+                    if(pending||!tag.equals(queryTag())){load(false);return;}
+                    long now=System.currentTimeMillis();
+                    long delay=RefreshPolicy.pollDelay(next.batches,f,Match.today(now),now);
+                    // A stopped page still wakes at midnight, so "today"/relative dates re-anchor.
+                    long midnight=RefreshPolicy.untilNextDay(now);
+                    handler.postDelayed(tick,delay>0?Math.min(delay,midnight):midnight);
+                }
             });
         });
     }
@@ -411,7 +429,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
         LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(ui.dp(18),ui.dp(18));ip.setMarginStart(ui.dp(12));row.addView(new Ui.Icon(this,"chevron",ui.muted),ip);row.setOnClickListener(v->action.run());into.addView(row);
     }
     private void openCalendar(){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("content://com.android.calendar/time/"+System.currentTimeMillis())));}catch(RuntimeException e){message("没有找到日历应用","请先安装或启用系统日历。");}}
-    private void help(){message("使用帮助","在比赛卡上点日历加号订阅，点勾选可取消。提醒由系统日历发送；小米 / 澎湃 OS 需要允许日历通知与后台运行。\n\n更换接收日历只影响新订阅，已有事件保留在原日历。\n\n体育由 ESPN 提供；CS2 仅 Spirit 主队，来自 5EPlay；LOL 仅 Worlds，来自英雄联盟赛事官网。前台列表约 10 秒检查，进行中详情约 10 秒（F1 约 15 秒）；失败时延长重试间隔。来源本身可能延迟；连接失败保留真实缓存，缺失数据不补零。");}
+    private void help(){message("使用帮助","在比赛卡上点日历加号订阅，点勾选可取消。提醒由系统日历发送；小米 / 澎湃 OS 需要允许日历通知与后台运行。\n\n更换接收日历只影响新订阅，已有事件保留在原日历。\n\n体育由 ESPN 提供；CS2 仅 Spirit 主队，来自 5EPlay；LOL 仅 Worlds，来自英雄联盟赛事官网。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");}
     private String calendarName(){String name=calendarSync.calendarName();return name==null||name.isBlank()?"选择手机日历":name;}
     private void calendarChoice(){chooseCalendar(null);}
     /** Calendar provider queries stay off the main thread; the sheet is built after they finish. */
@@ -531,7 +549,7 @@ public final class MainActivity extends Activity implements ScoreAdapter.Host {
     private void sourceStatus() {
         StringBuilder content=new StringBuilder();
         for(Repository.Batch b:snapshot.batches){content.append(b.competition.name).append("\n").append(b.fetched>0?"上次成功 "+formatInstant(b.fetched,"M月d日 HH:mm:ss")+" · "+b.matches.size()+" 场":"尚未成功获取");if(!b.error.isEmpty())content.append("\n").append(b.error);content.append("\n\n");}
-        content.append("来源：ESPN、5EPlay、英雄联盟赛事官网。数据可能延迟；连接失败时保留最近一次成功记录。");
+        content.append("来源：ESPN、5EPlay、英雄联盟赛事官网。数据可能延迟；连接失败时保留最近一次成功记录。已结束的比赛和详情只读取一次，不再自动更新；可点刷新手动核对。");
         Sheet.message(this,"数据来源与连接",content.toString());
     }
     private void navigation() {

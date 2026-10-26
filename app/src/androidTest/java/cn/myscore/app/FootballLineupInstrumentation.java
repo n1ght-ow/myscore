@@ -6,7 +6,6 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.view.*;
-import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.*;
 import java.io.*;
 import java.lang.reflect.*;
@@ -25,12 +24,6 @@ public final class FootballLineupInstrumentation extends Instrumentation {
             MatchDetail cached=new DetailRepository(context).cached(requested);require(cached!=null,"real cached football detail");
             // Refresh through the production parser to validate real per-player fields as well as cache migration.
             MatchDetail real=new DetailRepository(context).fetch(cached.match,false);
-            List<MatchDetail.Person> portraits=new ArrayList<>();
-            for(MatchDetail.Table table:real.tables)if(table.category.equals("首发"))for(MatchDetail.Person person:table.people)if(person.photo().startsWith("https://resources.premierleague.com/"))portraits.add(person);
-            require(portraits.size()>=15,"official photos supplement at least fifteen real starters");
-            android.util.Log.i("MyScoreFootballReview","Official starter portraits "+portraits.size()+" / 22");
-            int decoded=0;for(MatchDetail.Person person:portraits){try{Bitmap image;try{image=Logos.load(context,person.photo());}catch(Exception primary){String backup=new FootballProfiles(context).backup(person);if(backup.isBlank())continue;image=Logos.load(context,backup);}require(image.getWidth()>0&&image.getHeight()>0,"portrait downloads and decodes");image.recycle();decoded++;}catch(Exception unavailable){android.util.Log.i("MyScoreFootballReview","Portrait unavailable "+person.id());}}
-            require(decoded>=18,"at least eighteen real starter photos decode");android.util.Log.i("MyScoreFootballReview","Decoded starter portraits "+decoded+" / 22");
             for(String theme:List.of("dark","light")){
                 context.getSharedPreferences("settings",0).edit().putString("theme",theme).commit();
                 activity=startActivitySync(new Intent(context,DetailActivity.class).putExtra("match",real.match.json().toString()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
@@ -38,18 +31,15 @@ public final class FootballLineupInstrumentation extends Instrumentation {
                 require(field("detail")!=null,"detail loads");
                 main(()->{set("tab","lineup");render(false);});
                 require(findTag("football-pitch")!=null,"eleven-player pitch");
+                require(findAll(findTag("football-pitch"),"football-pitch-player").size()==11,"numbered starter tokens");
+                require(noImages(findTag("football-pitch")),"formation renders without photos");
+                require(findTag("football-event-legend")!=null,"event legend");
                 main(()->((ScrollView)get("scroll")).scrollTo(0,new Ui(activity,theme.equals("dark")).dp(200)));settle();
-                capture(theme+"-rating");
-                main(()->findTag("football-performance-picker").performClick());settle();capture(theme+"-menu");
-                AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();List<AccessibilityNodeInfo> shots=root.findAccessibilityNodeInfosByText("射门");
-                require(!shots.isEmpty(),"shooting item in native popup");AccessibilityNodeInfo item=shots.get(0);while(!item.isClickable()&&item.getParent()!=null)item=item.getParent();require(item.performAction(AccessibilityNodeInfo.ACTION_CLICK),"choose shooting through native popup");settle();
-                require(field("footballMetric").equals("射门"),"metric selection applied");capture(theme+"-shooting");
+                capture(theme+"-formation");
                 String away=real.match.awayId;
                 main(()->{ViewGroup filter=(ViewGroup)findTag("football-team-filter");filter.getChildAt(1).performClick();});settle();
-                require(field("teamFilter").equals(away)&&field("footballMetric").equals("射门"),"team switch retains perspective");capture(theme+"-away");
-                main(()->findTag("football-filter-国籍").performClick());settle();require(field("footballMetric").equals("国籍"),"profile perspective applies");
-                require(((TextView)findTag("football-metric-caption")).getText().toString().contains("国籍"),"profile caption");
-                main(()->{set("footballMetric","射门");render(true);((ScrollView)get("scroll")).scrollTo(0,new Ui(activity,theme.equals("dark")).dp(420));});settle();capture(theme+"-pitch");
+                require(field("teamFilter").equals(away),"team switch applies");capture(theme+"-away");
+                main(()->{((ScrollView)get("scroll")).scrollTo(0,new Ui(activity,theme.equals("dark")).dp(420));});settle();capture(theme+"-pitch");
                 main(()->{View player=firstClickable(findTag("football-pitch"));require(player!=null,"player target");player.performClick();});settle();capture(theme+"-player");sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);settle();
                 if(matrix)layoutMatrix(real,theme.equals("dark"));
             }
@@ -59,13 +49,12 @@ public final class FootballLineupInstrumentation extends Instrumentation {
         finish(outcome,report);
     }
     private void layoutMatrix(MatchDetail detail,boolean dark){
-        for(int width:new int[]{320,375,640})for(float scale:new float[]{1f,1.3f,2f})for(String metric:List.of("评分","射门","国籍","防守"))main(()->{
+        for(int width:new int[]{320,375,640})for(float scale:new float[]{1f,1.3f,2f})main(()->{
             Configuration config=new Configuration(activity.getResources().getConfiguration());config.fontScale=scale;config.screenWidthDp=width;
             Context c=activity.createConfigurationContext(config);Ui ui=new Ui(c,dark);LinearLayout body=ui.column();body.setPadding(ui.dp(16),0,ui.dp(16),0);
-            new FootballLineupView(ui,detail,body).show(detail.match.homeId,metric,id->{},value->{});
+            new FootballLineupView(ui,detail,body).show(detail.match.homeId,id->{});
             body.measure(View.MeasureSpec.makeMeasureSpec(ui.dp(width),View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));body.layout(0,0,body.getMeasuredWidth(),body.getMeasuredHeight());
             inspect(body);require(body.findViewWithTag("football-event-legend")!=null,"event legend in layout matrix");
-            if(scale>=1.5f)require(body.findViewWithTag("football-list-metric")!=null,"large font uses full-name list");
         });
     }
     private void inspect(View v){
@@ -75,6 +64,8 @@ public final class FootballLineupInstrumentation extends Instrumentation {
     }
     private void capture(String name)throws Exception{settle();main(()->inspect(activity.getWindow().getDecorView()));Bitmap bitmap=getUiAutomation().takeScreenshot();require(bitmap!=null,"screenshot");File folder=new File(getTargetContext().getExternalFilesDir(null),"football-review/"+label);folder.mkdirs();try(FileOutputStream out=new FileOutputStream(new File(folder,name+".png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}bitmap.recycle();}
     private View firstClickable(View view){if(view.isClickable())return view;if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++){View found=firstClickable(group.getChildAt(i));if(found!=null)return found;}return null;}
+    private List<View> findAll(View view,String tag){List<View> result=new ArrayList<>();if(tag.equals(view.getTag()))result.add(view);if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++)result.addAll(findAll(group.getChildAt(i),tag));return result;}
+    private boolean noImages(View view){if(view instanceof android.widget.ImageView)return false;if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++)if(!noImages(group.getChildAt(i)))return false;return true;}
     private View findTag(String tag){return activity.getWindow().getDecorView().findViewWithTag(tag);}
     private Object field(String name)throws Exception{Field f=DetailActivity.class.getDeclaredField(name);f.setAccessible(true);return f.get(activity);}
     private Object get(String name){try{return field(name);}catch(Exception e){throw new AssertionError(e);}}

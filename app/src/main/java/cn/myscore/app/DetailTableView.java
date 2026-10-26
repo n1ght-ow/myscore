@@ -9,13 +9,15 @@ import java.util.function.Consumer;
 /** Frozen identity rail and horizontally scrollable numeric columns. */
 final class DetailTableView {
     private final Ui ui;
-    private final boolean nba;
-    DetailTableView(Ui ui){this(ui,false);}
-    DetailTableView(Ui ui,boolean nba){this.ui=ui;this.nba=nba;}
+    private final boolean nba,showTeam,narrow;
+    DetailTableView(Ui ui){this(ui,false,true,false);}
+    DetailTableView(Ui ui,boolean nba){this(ui,nba,true,false);}
+    DetailTableView(Ui ui,boolean nba,boolean showTeam){this(ui,nba,showTeam,false);}
+    DetailTableView(Ui ui,boolean nba,boolean showTeam,boolean narrow){this.ui=ui;this.nba=nba;this.showTeam=showTeam;this.narrow=narrow;}
     View build(List<String> columns,List<DetailRows.Entry> entries,String sorted,boolean descending,Consumer<String> sort,java.util.function.IntConsumer savedScroll,int scrollX){
         LinearLayout shell=ui.row();shell.setGravity(Gravity.TOP);shell.setBackground(ui.panel());shell.setClipToOutline(true);shell.setTag("detail-data-table");
         float scale=Math.max(1,ui.c.getResources().getConfiguration().fontScale);int rowHeight=ui.dp(56*scale),headerHeight=ui.dp(48*scale);
-        int available=ui.dp(ui.contentWidthDp()-32);String identity=columns.isEmpty()?"":columns.get(0);int rail=identity.equals("选手")?Math.min(ui.dp(132*scale),(int)(available*.34f)):identity.equals("球队")?ui.dp(130):identity.equals("场次")||identity.equals("地图")?ui.dp(100):Math.min(ui.dp(164),Math.max(ui.dp(120),(int)(available*.38f)));int cell=ui.dp(48*scale);
+        int available=ui.dp(ui.contentWidthDp()-32);String identity=columns.isEmpty()?"":columns.get(0);int rail=identity.equals("选手")?Math.min(ui.dp((narrow?96:132)*scale),(int)(available*(narrow?.30f:.34f))):identity.equals("球队")?ui.dp(130):identity.equals("场次")||identity.equals("地图")?ui.dp(100):Math.min(ui.dp(164),Math.max(ui.dp(120),(int)(available*.38f)));int cell=ui.dp(48*scale);
         LinearLayout names=ui.column(),numbers=ui.column();names.addView(header(columns.isEmpty()?"球员":columns.get(0),false,false,null),new LinearLayout.LayoutParams(-1,headerHeight));
         LinearLayout labels=ui.row();labels.setGravity(Gravity.TOP);
         int[] widths=new int[Math.max(0,columns.size()-1)];
@@ -46,7 +48,7 @@ final class DetailTableView {
         if(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())){FrameLayout portrait=new FrameLayout(ui.c);portrait.addView(Logos.artwork(ui,p.photo(),p.name(),30));if((nba||!p.photo().isBlank())&&!p.teamLogo().isBlank())portrait.addView(Logos.view(ui,p.teamLogo(),p.team(),14),new FrameLayout.LayoutParams(ui.dp(14),ui.dp(14),Gravity.BOTTOM|Gravity.END));if(nba)portrait.setTag("nba-player-portrait");row.addView(portrait,new LinearLayout.LayoutParams(ui.dp(30),ui.dp(30)));}
         LinearLayout words=ui.column();LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(0,-2,1);wp.setMarginStart(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())?ui.dp(8):0);String name=p==null?DetailRows.cell(entry.values(),0):entry.table().columns.get(0).equals("球员")?p.shortName().matches("^\\p{L}\\..*|^[A-Z]{2}\\..*")?p.shortName():DetailFormat.shortName(p.name()):p.name();TextView title=ui.text(name,12,ui.text,true);words.addView(title);
         boolean nbaPlayer=nba&&p!=null&&entry.table().category.equals("球员");
-        String sub=p==null?"":String.join(" · ",java.util.stream.Stream.of(p.jersey(),p.position(),nba?"":p.absent()?"未出场":p.starter()?"首发":p.team()).filter(s->!s.isBlank()).toArray(String[]::new));
+        String sub=p==null?"":String.join(" · ",java.util.stream.Stream.of(p.jersey(),p.position(),nba?"":p.absent()?"未出场":p.starter()?"首发":showTeam?p.team():"").filter(s->!s.isBlank()).toArray(String[]::new));
         if(nbaPlayer){title.setTag("nba-player-name");row.setTag("nba-player-row");ui.gap(words,4);words.addView(nbaCaption(p,sub));}
         else if(!sub.isBlank()){ui.gap(words,4);TextView caption=ui.text(sub,11,ui.muted,false);words.addView(caption);}row.addView(words,wp);
         ui.clickable(row,ui.surface,0);row.setFocusable(true);row.setContentDescription(p==null?DetailRows.cell(entry.values(),0):p.name()+"，"+(nba?p.team()+"，":"")+(nbaPlayer?role(p)+"，":"")+sub);row.setOnClickListener(v->{StringBuilder detail=new StringBuilder();if(p!=null){if(!p.team().isBlank())detail.append(p.team()).append('\n');if(!p.jersey().isBlank())detail.append("球衣号  ").append(p.jersey()).append('\n');if(!p.position().isBlank())detail.append("位置  ").append(p.position()).append('\n');if(nbaPlayer||p.absent()||p.starter())detail.append(role(p)).append('\n');detail.append('\n');}for(int i=1;i<entry.table().columns.size();i++)detail.append(entry.table().columns.get(i)).append("  ").append(DetailRows.cell(entry.values(),i)).append('\n');Sheet.message((Activity)ui.c,p==null?DetailRows.cell(entry.values(),0):p.name(),detail.toString());});return row;

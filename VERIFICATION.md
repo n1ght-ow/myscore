@@ -1,3 +1,16 @@
+# MyScore 3.3.0 阵容与对位表重做
+
+日期：2026-10-26（北京时间）。版本 `3.3.0` / versionCode `29`，发布标签 `v3.3.0`。发布入口：[MyScore 3.3.0](https://github.com/n1ght-ow/myscore/releases/tag/v3.3.0)。
+
+- 足球阵容：删除「表现 / 国籍 / 年龄 / 跑动 / 身价」筛选行，球员名下不再显示评分、射门等视角数值；首发与替补改为球衣轮廓 + 球衣号，门将使用主绿色描边。姓名下方只保留进球（足球图标及次数）、黄牌 / 红牌色块、换下 / 换上箭头与来源分钟；替补行保留“换下 / 换上 某球员”。图例、球员详情弹层和无障碍描述保留文字等价信息。系统字号达到 1.5 倍时按阵型分组展开为完整姓名列表，球衣号固定尺寸不随字号放大。
+- CS2 选手页：同一张地图的两队拆为上下两个面板，每个面板自带队徽、队名与人数表头；姓名轨由约 116dp 收窄到 96dp，Rating 移入第一数值列，两表列宽一致、横向滚动联动，「双方」筛选下排序同时作用于两队。排序列与显示列使用同一份重排后的表数据，数值不会与表头错位；其它运动的表格结构不变。
+- LOL 位置对位：改为单表头双行对位表。表头只出现一次（位置 / 选手 / KDA / 补刀 / 经济 / 技能）；每个位置贡献主客两行，位置标签只写在该组第一行，组间用细线分隔。所有列共用一套左对齐网格，英雄头像、玩家名、英雄名、数值与技能图标分别对齐到固定列；不再重复指标标签或左右交替对齐。
+- 代码检查：`testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` 通过；135 项 JUnit，0 failures / errors；Lint 0 errors / 23 warnings。
+- 模拟器：Android 15 / API 35，1080×2400 / 420dpi / 1.0 字号。最终 `3.3.0 / 29` 覆盖安装后，`DesignReviewInstrumentation` 通过 61 项断言，覆盖深浅主题下的足球主客阵容（确认筛选行与球员名下数值均不存在）、CS2 双面板与收窄姓名轨、LOL 单表头双行表与固定列对齐、两队横向滚动联动；`FootballLineupInstrumentation` 原生布局矩阵通过 12,690 项断言，覆盖 320 / 375 / 640dp × 1 / 1.3 / 2 倍字号，无文字裁切或越界。截图在 `artifacts/design-review/release/`。
+- 数据：足球使用真实缓存 Chelsea–Tottenham Hotspur（含进球、红牌、多张黄牌与换人），CS2 使用 Aurora–Spirit 的 Mirage 数据，LOL 使用 C9–KC；不是用户截图中的当场比赛，但走同一套生产解析与界面代码。
+- APK：`artifacts/MyScore-3.3.0.apk`，946,453 字节，SHA-256 `95b77f9023c7d9c7b60da673260e1cf83c2bce7d0e1aa7857fafb30a12ee8a73`。`aapt` 确认包名 `cn.myscore.app`、版本 `3.3.0 / 29`、minSdk 28 / targetSdk 35；`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646` 与 3.2.0 相同。校验文件 `artifacts/SHA256SUMS-3.3.0.txt`。
+- 限制：只在 API 35 模拟器验收，未在 Redmi K80 Pro / HyperOS、真实运营商网络或锁屏提醒上验证；未做本轮 FPS / 性能基准。CS2 保留横向滚动，窄屏或大字号下仍需滑动查看 KAST 等末列。
+
 # MyScore 3.2.0 足球阵容视角与 NBA 球员身份列
 
 日期：2026-10-26（北京时间）。版本 `3.2.0` / versionCode `28`，发布标签 `v3.2.0`。发布入口：[MyScore 3.2.0](https://github.com/n1ght-ow/myscore/releases/tag/v3.2.0)。

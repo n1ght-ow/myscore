@@ -10,9 +10,10 @@ import java.util.function.IntConsumer;
 final class LolMatchView {
     private final Ui ui;private final MatchDetail detail;private final LinearLayout body;
     private final IntConsumer select;
+    private final int positionWidth,kdaWidth,csWidth,goldWidth,spellWidth;
     private String selectedTeam="";
     private java.util.function.Consumer<String> selectTeam;
-    LolMatchView(Ui ui,MatchDetail detail,LinearLayout body,IntConsumer select){this.ui=ui;this.detail=detail;this.body=body;this.select=select;}
+    LolMatchView(Ui ui,MatchDetail detail,LinearLayout body,IntConsumer select){this.ui=ui;this.detail=detail;this.body=body;this.select=select;positionWidth=ui.dp(30);kdaWidth=ui.dp(64);csWidth=ui.dp(32);goldWidth=ui.dp(44);spellWidth=ui.dp(40);}
     LolGame game(int selected){for(LolGame g:detail.lolGames)if(g.number==selected)return g;for(LolGame g:detail.lolGames)if(g.live)return g;return detail.lolGames.isEmpty()?null:detail.lolGames.get(detail.lolGames.size()-1);}
     void games(int selected,boolean stats){
         LolGame game=game(selected);
@@ -61,17 +62,48 @@ final class LolMatchView {
     private static String compactGold(String value){try{return String.format(Locale.ROOT,"%.1fk",Double.parseDouble(value)/1000);}catch(NumberFormatException e){return value;}}
     private void players(LolGame game){
         LinearLayout panel=ui.column();panel.setTag("lol-lineup");panel.setPadding(ui.dp(12),0,ui.dp(12),0);panel.setBackground(ui.panel());Set<String> roles=new LinkedHashSet<>(List.of("TOP","JUNGLE","MID","BOT","SUPPORT"));for(LolGame.Player p:game.home.players)roles.add(p.role());for(LolGame.Player p:game.away.players)roles.add(p.role());
-        int index=0;for(String role:roles){if(index++>0)panel.addView(ui.divider());LinearLayout pair=ui.column();pair.setPadding(0,ui.dp(12),0,ui.dp(14));TextView roleText=ui.text(LolGame.roleName(role),11,ui.muted,true);roleText.setGravity(Gravity.CENTER);pair.addView(roleText);ui.gap(pair,10);LinearLayout sides=ui.row();sides.setGravity(Gravity.TOP);sides.addView(player(game.home.atRole(role),false),new LinearLayout.LayoutParams(0,-2,1));View gap=new View(ui.c);sides.addView(gap,new LinearLayout.LayoutParams(ui.dp(18),1));sides.addView(player(game.away.atRole(role),true),new LinearLayout.LayoutParams(0,-2,1));pair.addView(sides);panel.addView(pair);}body.addView(panel,new LinearLayout.LayoutParams(-1,-2));
+        panel.addView(header());
+        int index=0;for(String role:roles){if(index++>0)panel.addView(ui.divider());panel.addView(row(game,role,game.home.atRole(role),true));panel.addView(row(game,role,game.away.atRole(role),false));}body.addView(panel,new LinearLayout.LayoutParams(-1,-2));
     }
-    private LinearLayout player(LolGame.Player player,boolean right){
-        LinearLayout block=ui.column();block.setGravity(right?Gravity.END:Gravity.START);
-        if(player==null){block.addView(ui.text("暂未提供",13,ui.muted,false));return block;}
-        TextView name=ui.text(playerName(player,right?detail.match.away:detail.match.home),14,ui.text,true);name.setGravity(right?Gravity.END:Gravity.START);block.addView(name,new LinearLayout.LayoutParams(-1,-2));ui.gap(block,8);
-        LinearLayout hero=ui.row();hero.setGravity(right?Gravity.END:Gravity.START);FrameLayout portrait=new FrameLayout(ui.c);portrait.addView(Logos.artwork(ui,player.icon(),player.hero(),36));TextView level=ui.text(player.level(),11,ui.onPrimary,true);level.setGravity(Gravity.CENTER);level.setBackground(ui.shape(ui.primary,10));FrameLayout.LayoutParams badge=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.END);level.setMinWidth(ui.dp(20));portrait.addView(level,badge);TextView champion=ui.text(player.hero(),12,ui.muted,false);champion.setGravity(right?Gravity.END:Gravity.START);LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,-2,1);if(right){hp.setMarginEnd(ui.dp(7));hero.addView(champion,hp);hero.addView(portrait,new LinearLayout.LayoutParams(ui.dp(36),ui.dp(36)));}else{hero.addView(portrait,new LinearLayout.LayoutParams(ui.dp(36),ui.dp(36)));hp.setMarginStart(ui.dp(7));hero.addView(champion,hp);}block.addView(hero,new LinearLayout.LayoutParams(-1,-2));ui.gap(block,9);
-        block.addView(ui.text(player.kda(),14,ui.text,true));ui.gap(block,5);TextView farming=ui.text("补刀 "+LolGame.value(player.data,"minionKilled")+"\n经济 "+compactGold(LolGame.value(DetailParsers.obj(player.data,"otherDetail"),"golds")),11,ui.muted,false);farming.setGravity(right?Gravity.END:Gravity.START);block.addView(farming);
-        LinearLayout spells=ui.row();spells.setGravity(right?Gravity.END:Gravity.START);for(String key:List.of("spell1Name","spell2Name")){String id=player.data.optString(key);if(!id.isBlank()){LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(ui.dp(20),ui.dp(20));sp.setMarginEnd(ui.dp(4));spells.addView(Logos.artwork(ui,LolGame.asset("spell",id),"技能",20),sp);}}if(spells.getChildCount()>0){ui.gap(block,7);block.addView(spells);}
-        return block;
+    /** A single header labels the columns once; each role contributes a home/away row pair. */
+    private View header(){
+        LinearLayout header=ui.row();header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(ui.dp(8),ui.dp(7),ui.dp(8),ui.dp(7));header.setBackground(ui.shape(ui.tonal,6));header.setTag("lol-table-header");
+        header.addView(headerLabel("位置"),new LinearLayout.LayoutParams(positionWidth,-2));
+        header.addView(headerLabel("选手"),new LinearLayout.LayoutParams(0,-2,1));
+        header.addView(headerLabel("KDA"),new LinearLayout.LayoutParams(kdaWidth,-2));
+        header.addView(headerLabel("补刀"),new LinearLayout.LayoutParams(csWidth,-2));
+        header.addView(headerLabel("经济"),new LinearLayout.LayoutParams(goldWidth,-2));
+        header.addView(headerLabel("技能"),new LinearLayout.LayoutParams(spellWidth,-2));
+        return header;
     }
+    private TextView headerLabel(String text){TextView value=ui.text(text,10,ui.muted,true);value.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);return value;}
+    private View row(LolGame game,String role,LolGame.Player player,boolean home){
+        LinearLayout row=ui.row();row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(ui.dp(8),ui.dp(5),ui.dp(8),ui.dp(5));
+        TextView position=ui.text(home?LolGame.roleName(role):"",10,ui.muted,true);position.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
+        if(home)position.setTag("lol-role-label");
+        row.addView(position,new LinearLayout.LayoutParams(positionWidth,-2));
+        row.addView(identity(player,home?detail.match.home:detail.match.away),new LinearLayout.LayoutParams(0,-2,1));
+        TextView kda=value(player==null?"—":player.kda(),true);kda.setTag(home?"lol-kda-home":"lol-kda-away");row.addView(kda,new LinearLayout.LayoutParams(kdaWidth,-2));
+        row.addView(value(stat(player,"minionKilled"),false),new LinearLayout.LayoutParams(csWidth,-2));
+        row.addView(value(gold(player),false),new LinearLayout.LayoutParams(goldWidth,-2));
+        row.addView(spellIcons(player),new LinearLayout.LayoutParams(spellWidth,-2));
+        return row;
+    }
+    private TextView value(String text,boolean strong){TextView value=ui.text(text,strong?12:11,text.equals("—")?ui.muted:ui.text,strong);value.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);return value;}
+    private View identity(LolGame.Player player,String team){
+        LinearLayout side=ui.row();side.setGravity(Gravity.CENTER_VERTICAL);
+        if(player==null){side.addView(ui.text("暂未提供",11,ui.muted,false),new LinearLayout.LayoutParams(-1,-2));return side;}
+        FrameLayout icon=new FrameLayout(ui.c);icon.addView(Logos.artwork(ui,player.icon(),player.hero(),24));side.addView(icon,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));
+        LinearLayout words=ui.column();LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(0,-2,1);wp.setMarginStart(ui.dp(6));words.addView(ui.text(playerName(player,team),12,ui.text,true),new LinearLayout.LayoutParams(-1,-2));String champion=player.hero()+(player.level().isBlank()?"":" · "+player.level());words.addView(ui.text(champion,10,ui.muted,false),new LinearLayout.LayoutParams(-1,-2));
+        side.addView(words,wp);return side;
+    }
+    private View spellIcons(LolGame.Player player){
+        LinearLayout icons=ui.row();icons.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
+        if(player!=null)for(String key:List.of("spell1Name","spell2Name")){String id=player.data.optString(key);if(id.isBlank())continue;LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ui.dp(16),ui.dp(16));lp.setMarginEnd(ui.dp(3));icons.addView(Logos.artwork(ui,LolGame.asset("spell",id),"技能",16),lp);}
+        return icons;
+    }
+    private static String stat(LolGame.Player player,String key){return player==null?"—":LolGame.value(player.data,key);}
+    private static String gold(LolGame.Player player){return player==null?"—":compactGold(LolGame.value(DetailParsers.obj(player.data,"otherDetail"),"golds"));}
     private void playerStats(LolGame.Player player,String team){
         LinearLayout block=ui.column();block.setPadding(ui.dp(16),ui.dp(14),ui.dp(16),ui.dp(14));block.setBackground(ui.panel());LinearLayout identity=ui.row();identity.addView(Logos.artwork(ui,player.icon(),player.hero(),36));LinearLayout words=ui.column();words.setPadding(ui.dp(10),0,0,0);words.addView(ui.text(playerName(player,team),15,ui.text,true));words.addView(ui.text(LolGame.roleName(player.role())+" · "+player.hero(),12,ui.muted,false));identity.addView(words,new LinearLayout.LayoutParams(0,-2,1));block.addView(identity);ui.gap(block,14);
         JSONObject damage=DetailParsers.obj(player.data,"damageDetail"),vision=DetailParsers.obj(player.data,"visionDetail");LinearLayout values=ui.row();for(String[] metric:new String[][]{{"对英雄伤害",DetailFormat.damage(LolGame.value(damage,"heroDamage"))},{"视野得分",DetailFormat.number(LolGame.value(vision,"visionScore"),1)}}){LinearLayout field=ui.column();field.addView(ui.text(metric[0],11,ui.muted,false));field.addView(ui.text(metric[1],20,ui.text,true));values.addView(field,new LinearLayout.LayoutParams(0,-2,1));}block.addView(values);ui.gap(block,14);

@@ -65,6 +65,7 @@ extends Activity {
     private MatchDetail detail;
     private DetailRepository repository;
     private WatchRepository watches;
+    private WatchLauncher watchLauncher;
     private Ui.WatchRow headerWatch;
     private LinearLayout root;
     private LinearLayout body;
@@ -151,6 +152,7 @@ extends Activity {
         }
         this.repository = new DetailRepository((Context)this);
         this.watches = WatchRepository.get(this);
+        this.watchLauncher = new WatchLauncher(this, this.watches);
         this.getWindow().setStatusBarColor(this.ui.bg);
         this.getWindow().setNavigationBarColor(this.ui.bg);
         this.getWindow().setBackgroundDrawable((Drawable)new ColorDrawable(this.ui.bg));
@@ -930,16 +932,7 @@ extends Activity {
     }
 
     private void openWatch() {
-        WatchLinks.Link link = this.watches.link(this.match);
-        if (link == null) {
-            return;
-        }
-        try {
-            this.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link.url)));
-        }
-        catch (RuntimeException e) {
-            Sheet.message(this, "无法打开直播", "手机没有可用的浏览器。");
-        }
+        this.watchLauncher.open(this.match);
     }
 
     private void resolveWatch() {

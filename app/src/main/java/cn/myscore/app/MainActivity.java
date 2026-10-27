@@ -131,6 +131,7 @@ implements ScoreAdapter.Host {
     private final Map<String, View> railDots = new LinkedHashMap<String, View>();
     private DetailRepository detailRepository;
     private WatchRepository watches;
+    private WatchLauncher watchLauncher;
     private Match padSelected;
     private String padSelectedId = "";
     private MatchDetail padDetail;
@@ -152,6 +153,7 @@ implements ScoreAdapter.Host {
         this.calendarSync = new CalendarSync((Context)this);
         this.detailRepository = new DetailRepository((Context)this);
         this.watches = WatchRepository.get(this);
+        this.watchLauncher = new WatchLauncher(this, this.watches);
         this.pad = Ui.isPad((Context)this);
         if (state != null) {
             this.tab = state.getInt("tab");
@@ -914,16 +916,7 @@ implements ScoreAdapter.Host {
 
     @Override
     public void openWatch(Match match) {
-        WatchLinks.Link link = this.watches.link(match);
-        if (link == null) {
-            return;
-        }
-        try {
-            this.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link.url)));
-        }
-        catch (RuntimeException e) {
-            this.message("无法打开直播", "手机没有可用的浏览器。");
-        }
+        this.watchLauncher.open(match);
     }
 
     @Override

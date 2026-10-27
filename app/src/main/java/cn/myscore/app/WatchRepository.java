@@ -22,8 +22,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -63,7 +63,7 @@ final class WatchRepository {
     private final Map<String, MiguMatches.Hit> miguHits = new ConcurrentHashMap<>();
     private final Map<String, Long> miguChecked = new ConcurrentHashMap<>();
     private final Map<String, Long> miguFailed = new ConcurrentHashMap<>();
-    private final Set<String> miguLoading = ConcurrentHashMap.newKeySet();
+    private final Map<String, List<Runnable>> miguWaiters = new LinkedHashMap<>();
 
     private final Object biliLock = new Object();
     private final List<Runnable> biliWaiters = new ArrayList<>();
@@ -136,7 +136,17 @@ final class WatchRepository {
         if ("lol".equals(match.league) && match.finalised()) {
             ensureBili(changed);
         } else if ("epl".equals(match.league) || "nba".equals(match.league)) {
-            resolveMigu(match, changed);
+            resolveMigu(match, changed, false);
+        }
+    }
+
+    /** A play tap must wait for the fixture lookup, including an already running lookup. */
+    void resolveForOpen(Match match, Consumer<WatchLinks.Link> ready) {
+        WatchLinks.Link cached = link(match);
+        if (cached == null || cached.kind != WatchLinks.Kind.ZONE) {
+            main.post(() -> ready.accept(cached));
+        } else {
+            resolveMigu(match, () -> ready.accept(link(match)), true);
         }
     }
 
@@ -186,14 +196,26 @@ final class WatchRepository {
         });
     }
 
-    private void resolveMigu(Match match, Runnable changed) {
+    private void resolveMigu(Match match, Runnable changed, boolean forOpen) {
         String key = key(match);
         long now = System.currentTimeMillis();
         Long failed = miguFailed.get(key);
-        if (failed != null && failed > now) return;
+        if (!forOpen && failed != null && failed > now) return;
         Long checked = miguChecked.get(key);
-        if (miguHits.containsKey(key) && checked != null && now - checked < MIGU_FOUND_TTL) return;
-        if (!miguLoading.add(key)) return;
+        if (miguHits.containsKey(key) && checked != null && now - checked < MIGU_FOUND_TTL) {
+            if (forOpen) main.post(changed);
+            return;
+        }
+        synchronized (miguWaiters) {
+            List<Runnable> waiters = miguWaiters.get(key);
+            if (waiters != null) {
+                if (changed != null) waiters.add(changed);
+                return;
+            }
+            waiters = new ArrayList<>();
+            if (changed != null) waiters.add(changed);
+            miguWaiters.put(key, waiters);
+        }
         worker.execute(() -> {
             MiguMatches.Hit hit = null;
             Log.i(TAG, "Migu lookup start " + match.league + " " + match.home + " vs " + match.away);
@@ -208,26 +230,30 @@ final class WatchRepository {
                 }
             } catch (Exception e) {
                 Log.i(TAG, "Migu match lookup unavailable: " + e.getMessage());
-            } finally {
-                miguLoading.remove(key);
             }
             boolean found = hit != null;
             if (found) {
                 Log.i(TAG, "Migu hit " + hit.pID() + " " + hit.left() + " vs " + hit.right());
-                MiguMatches.Hit previous = miguHits.put(key, hit);
+                miguHits.put(key, hit);
                 miguChecked.put(key, System.currentTimeMillis());
                 miguFailed.remove(key);
                 saveMigu();
-                if ((previous == null || !sameHit(previous, hit)) && changed != null) main.post(changed);
             } else {
                 miguFailed.put(key, System.currentTimeMillis() + MIGU_FAIL);
                 if (miguFailed.size() > 200) miguFailed.clear();
             }
+            List<Runnable> waiters;
+            synchronized (miguWaiters) {
+                waiters = miguWaiters.remove(key);
+            }
+            main.post(() -> {
+                for (Runnable waiter : waiters) {
+                    try { waiter.run(); } catch (RuntimeException e) {
+                        Log.w(TAG, "Migu watch callback failed", e);
+                    }
+                }
+            });
         });
-    }
-
-    private static boolean sameHit(MiguMatches.Hit a, MiguMatches.Hit b) {
-        return a.pID().equals(b.pID()) && a.start() == b.start();
     }
 
     private String packId() {

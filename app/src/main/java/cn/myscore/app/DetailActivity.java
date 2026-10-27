@@ -911,8 +911,6 @@ extends Activity {
         card.addView((View)this.ui.text(this.detail.source, 13, this.ui.text, true));
         this.ui.gap(card, 6);
         card.addView((View)this.ui.text("获取于 " + DetailActivity.time(this.detail.fetched, "M月d日 HH:mm:ss") + (this.match.group.equals("LOL") ? "\n赛程发布 " + DetailActivity.time(this.match.updated, "M月d日 HH:mm:ss") : ""), 11, this.ui.muted, false));
-        this.ui.gap(card, 10);
-        card.addView((View)this.ui.text("数据按来源发布，未提供的字段保持未知。", 11, this.ui.muted, false));
         this.ui.gap(card, 12);
         card.addView((View)this.ui.button("打开来源页面", false, this::openUrl), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
         into.addView((View)card);
@@ -1826,7 +1824,7 @@ extends Activity {
     }
 
     private String missing() {
-        return this.match.scheduled() ? "赛前数据尚未发布，确认阵容和统计会随来源更新。" : "来源暂未提供本项数据，空缺不代表 0。";
+        return this.match.scheduled() ? "赛前数据待发布" : "暂无数据";
     }
 
     private void empty(String title, String message) {

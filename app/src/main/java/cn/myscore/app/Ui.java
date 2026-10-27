@@ -34,6 +34,7 @@ final class Ui {
     }
     final Context c;
     static final int CARD_RADIUS=20,CONTROL_RADIUS=24,SHEET_RADIUS=28;
+    static final float ACTION_ICON_ALPHA=.75f;
     final int bg,surface,text,muted,primary,onPrimary,tonal,line,error,secondary,action,onAction;
     private static Typeface interRegular,interMedium;
     private final Typeface regular,medium;
@@ -158,84 +159,69 @@ final class Ui {
         b.setFocusable(true);b.setOnClickListener(v->action.run());return b;
     }
     /**
-     * A quiet broadcaster pill for dense score cards: a tonal capsule with a play mark and the
-     * provider's short name. The 48dp target is larger than the capsule so it stays easy to hit
-     * without stealing width from the score.
+     * A media shortcut for dense score cards. Keep the full destination in its accessible name
+     * and long-press tooltip; a bare icon sits in a transparent 48dp touch target.
      */
     final class WatchPill extends FrameLayout {
-        private final TextView name;
         private final Icon play;
         private String shown="";
         WatchPill(int targetHeightDp) {
             super(c);
-            setMinimumWidth(dp(48));setMinimumHeight(dp(targetHeightDp));
-            LinearLayout capsule=new LinearLayout(c);
-            capsule.setOrientation(LinearLayout.HORIZONTAL);capsule.setGravity(Gravity.CENTER_VERTICAL);
-            capsule.setPadding(dp(9),0,dp(11),0);capsule.setBackground(shape(tonal,14));
-            play=new Icon(c,"play",text);
-            capsule.addView(play,new LinearLayout.LayoutParams(dp(12),dp(12)));
-            name=text("",11,text,true);
-            LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-2,-2);np.setMarginStart(dp(4));
-            capsule.addView(name,np);
-            addView(capsule,new FrameLayout.LayoutParams(-2,dp(28),Gravity.CENTER));
+            setMinimumWidth(dp(48));setMinimumHeight(dp(Math.max(48,targetHeightDp)));
+            play=new Icon(c,"play",muted);play.setAlpha(ACTION_ICON_ALPHA);
+            addView(play,new FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER));
             clickable(this,Color.TRANSPARENT,CONTROL_RADIUS);setFocusable(true);
-        }
-        void bind(String label,String description,boolean live,Runnable action) {
-            String next=label+"\u0000"+(live?1:0);
-            if(!next.equals(shown)){
-                shown=next;
-                name.setText(label);name.setTextColor(live?primary:text);play.set("play",live?primary:text);
-            }
-            setContentDescription(description);setOnClickListener(v->action.run());setVisibility(VISIBLE);
+            setTag("watch-shortcut");
         }
         void bind(WatchLinks.Link link,boolean live,Runnable action) {
             if(link==null){setVisibility(GONE);return;}
-            bind(link.shortProvider,"打开 "+link.title+"（外部应用）",live,action);
+            String next=link.kind.icon;
+            if(!next.equals(shown)){
+                shown=next;
+                play.set(link.kind.icon,muted);
+            }
+            setContentDescription(link.provider+"，"+link.title+"，"+link.kind.label+"，在外部应用打开");
+            setTooltipText(link.shortProvider+" · "+link.kind.label);
+            setOnClickListener(v->action.run());setVisibility(VISIBLE);
         }
     }
     WatchPill watchPill(int targetHeightDp) {return new WatchPill(targetHeightDp);}
     /**
-     * The full-width watch row used inside match surfaces. It reads like a link, not a third
-     * competing primary button: small play badge, two lines of context, and a chevron. The row is
-     * bindable so a background match lookup can replace a league zone with the exact match page.
+     * One compact media control: provider, destination state and external-link mark. Match context
+     * already lives in the scoreboard. Rebinding preserves the row when a verified URL arrives.
      */
     final class WatchRow extends LinearLayout {
-        private final TextView title;
-        private final TextView note;
         private final TextView provider;
+        private final TextView state;
+        private final Icon play;
         WatchRow() {
             super(c);
             setOrientation(LinearLayout.HORIZONTAL);
             setGravity(Gravity.CENTER_VERTICAL);
-            setMinimumHeight(dp(52));setPadding(dp(2),dp(6),dp(2),dp(6));
-            FrameLayout badge=new FrameLayout(c);badge.setBackground(shape(tonal,16));
-            badge.addView(new Icon(c,"play",primary),new FrameLayout.LayoutParams(dp(18),dp(18),Gravity.CENTER));
-            addView(badge,new LinearLayout.LayoutParams(dp(32),dp(32)));
-            LinearLayout words=column();
-            LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(0,-2,1f);wp.setMarginStart(dp(10));
-            title=text("",13,text,true);
-            words.addView(title);
-            note=text("",11,muted,false);
-            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.topMargin=dp(2);
-            words.addView(note,cp);
-            addView(words,wp);
-            provider=text("",11,text,true);
-            provider.setGravity(Gravity.CENTER);provider.setPadding(dp(9),0,dp(9),0);
-            provider.setBackground(shape(tonal,13));provider.setMinHeight(dp(26));
+            setMinimumHeight(dp(56));setPadding(dp(10),dp(10),dp(14),dp(10));
+            FrameLayout badge=new FrameLayout(c);
+            play=new Icon(c,"play",muted);play.setAlpha(ACTION_ICON_ALPHA);
+            badge.addView(play,new FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER));
+            addView(badge,new LinearLayout.LayoutParams(dp(36),dp(36)));
+            provider=text("",14,text,true);
             provider.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-            LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-2,-2);pp.setMarginStart(dp(8));
+            LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,-2,1f);pp.setMarginStart(dp(12));
             addView(provider,pp);
-            LinearLayout.LayoutParams chevron=new LinearLayout.LayoutParams(dp(14),dp(14));chevron.setMarginStart(dp(5));
-            addView(new Icon(c,"chevron",muted),chevron);
-            clickable(this,Color.TRANSPARENT,16);setFocusable(true);
+            state=text("",12,muted,false);state.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.setMarginStart(dp(12));
+            addView(state,sp);
+            LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(dp(16),dp(16));ep.setMarginStart(dp(12));
+            addView(new Icon(c,"external",muted),ep);
+            clickable(this,tonal,16);setFocusable(true);setTag("watch-control");
         }
         void bind(WatchLinks.Link link,boolean live,Runnable action) {
             if(link==null){setVisibility(GONE);return;}
-            title.setText(link.title);
-            note.setText(link.note);
-            note.setTextColor(live?primary:muted);
-            provider.setText(link.shortProvider);
+            provider.setText(link.provider);
+            state.setText(link.kind.label);
+            state.setTextColor(live&&link.kind!=WatchLinks.Kind.PENDING&&link.kind!=WatchLinks.Kind.REPLAY?primary:muted);
+            play.set(link.kind.icon,muted);
             setContentDescription(link.title+"。"+link.note+"。通过"+link.provider+"在外部应用打开。");
+            setTooltipText(link.title);
             setOnClickListener(v->action.run());
             setVisibility(VISIBLE);
         }
@@ -284,7 +270,7 @@ final class Ui {
             if(appPath!=null){p.setStrokeWidth(1.7f);canvas.drawPath(appPath,p);}
             else if(kind.equals("back")){canvas.drawLine(20,12,4,12,p);canvas.drawLine(4,12,11,5,p);canvas.drawLine(4,12,11,19,p);}
             else if(kind.equals("check")){canvas.drawLine(5,12,10,17,p);canvas.drawLine(10,17,19,7,p);}
-            else if(kind.equals("play")){canvas.drawLine(10,8,10,16,p);canvas.drawLine(10,8,16,12,p);canvas.drawLine(16,12,10,16,p);}
+            else if(kind.equals("play")){canvas.drawLine(8,5,8,19,p);canvas.drawLine(8,5,19,12,p);canvas.drawLine(19,12,8,19,p);}
             else if(kind.equals("chevron")){canvas.drawLine(9,6,15,12,p);canvas.drawLine(15,12,9,18,p);}
             else if(kind.equals("refresh")) {canvas.drawArc(4,4,20,20,35,285,false,p);canvas.drawPath(refreshArrow,p);}
             else if(kind.equals("calendar")) {canvas.drawRoundRect(4,5,20,21,2,2,p);canvas.drawLine(8,3,8,7,p);canvas.drawLine(16,3,16,7,p);canvas.drawLine(4,10,20,10,p);canvas.drawLine(8,14,10,14,p);canvas.drawLine(14,14,16,14,p);canvas.drawLine(8,17,10,17,p);}

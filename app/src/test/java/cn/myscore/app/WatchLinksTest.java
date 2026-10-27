@@ -43,4 +43,19 @@ public class WatchLinksTest {
         assertTrue(video.note.contains("10月27日"));
         assertEquals(BilibiliVods.SPACE,WatchLinks.biliPending().url);
     }
+
+    @Test public void compactControlsDistinguishFallbacksFromPlayableMatches(){
+        assertEquals(WatchLinks.Kind.ZONE,WatchLinks.of(match("nba")).kind);
+        assertEquals(WatchLinks.Kind.ROOM,WatchLinks.of(match("lol")).kind);
+        assertEquals(WatchLinks.Kind.ZONE,WatchLinks.miguMatch("","nba","骑士","森林狼",true).kind);
+        assertEquals(WatchLinks.Kind.LIVE,WatchLinks.miguMatch("123","nba","骑士","森林狼",false).kind);
+        assertEquals(WatchLinks.Kind.REPLAY,WatchLinks.miguMatch("123","nba","骑士","森林狼",true).kind);
+    }
+
+    @Test public void unpublishedRecordingsUseWaitingStateInsteadOfPlay(){
+        assertEquals(WatchLinks.Kind.PENDING,WatchLinks.biliPending().kind);
+        assertEquals("clock",WatchLinks.biliPending().kind.icon);
+        assertEquals(WatchLinks.Kind.REPLAY,WatchLinks.biliVideo("BV123",match("lol")).kind);
+        assertEquals("play",WatchLinks.biliVideo("BV123",match("lol")).kind.icon);
+    }
 }

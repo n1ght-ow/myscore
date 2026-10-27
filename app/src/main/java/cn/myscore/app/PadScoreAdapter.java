@@ -145,7 +145,7 @@ final class PadScoreAdapter extends BaseAdapter {
     }
 
     private final class MatchHolder {
-        final LinearLayout root,card;final FrameLayout selectedMark;
+        final LinearLayout root,card,meta,footer;final FrameLayout selectedMark;
         final TextView time,state,league,home,away,homeScore,awayScore,provenance;
         final Logos.Crest homeCrest,awayCrest;
         final FrameLayout homeSlot,awaySlot,calendar;
@@ -159,7 +159,7 @@ final class PadScoreAdapter extends BaseAdapter {
             ui.clickable(card,ui.surface,16);card.setFocusable(true);
             card.setOnClickListener(v->{if(match==null)return;if(selectedId.equals(match.id))host.openMatch(match);else host.selectMatch(match);});
 
-            LinearLayout meta=ui.row();
+            meta=ui.row();
             LinearLayout clock=ui.column();time=ui.text("",15,ui.text,true);state=ui.text("",10,ui.muted,false);
             clock.addView(time);clock.addView(state);meta.addView(clock,new LinearLayout.LayoutParams(ui.dp(62),-2));
             selectedMark=new FrameLayout(ui.c);selectedMark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -167,14 +167,10 @@ final class PadScoreAdapter extends BaseAdapter {
             selectedMark.setVisibility(View.INVISIBLE);
             meta.addView(selectedMark,new LinearLayout.LayoutParams(ui.dp(18),ui.dp(18)));
             league=ui.text("",11,ui.muted,true);meta.addView(league,new LinearLayout.LayoutParams(0,-2,1));
-            watch=ui.watchPill(40);
-            LinearLayout.LayoutParams watchParams=new LinearLayout.LayoutParams(-2,ui.dp(40));watchParams.setMarginStart(ui.dp(4));
-            meta.addView(watch,watchParams);watch.setVisibility(View.GONE);
             calendar=new FrameLayout(ui.c);
             calendarIcon=new Ui.Icon(ui.c,"calendar-add",ui.muted);
-            calendar.addView(calendarIcon,new FrameLayout.LayoutParams(ui.dp(18),ui.dp(18),Gravity.CENTER));
+            calendar.addView(calendarIcon,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.CENTER));
             ui.clickable(calendar,Color.TRANSPARENT,24);calendar.setFocusable(true);
-            meta.addView(calendar,new LinearLayout.LayoutParams(ui.dp(40),ui.dp(40)));
             card.addView(meta);
 
             LinearLayout homeRow=ui.row();
@@ -197,7 +193,14 @@ final class PadScoreAdapter extends BaseAdapter {
             awayRow.addView(awayScore,new LinearLayout.LayoutParams(-2,-2));
             card.addView(awayRow);
 
-            ui.gap(card,4);provenance=ui.text("",10,ui.muted,false);provenance.setPadding(ui.dp(2),0,ui.dp(2),0);card.addView(provenance);
+            ui.gap(card,4);footer=ui.row();
+            provenance=ui.text("",10,ui.muted,false);provenance.setPadding(ui.dp(2),0,ui.dp(2),0);
+            footer.addView(provenance,new LinearLayout.LayoutParams(0,-2,1));
+            LinearLayout.LayoutParams calendarParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));calendarParams.setMarginStart(ui.dp(8));
+            footer.addView(calendar,calendarParams);
+            watch=ui.watchPill(48);
+            LinearLayout.LayoutParams watchParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));watchParams.setMarginStart(ui.dp(8));
+            footer.addView(watch,watchParams);watch.setVisibility(View.GONE);card.addView(footer);
             root.addView(card);
         }
 
@@ -235,9 +238,9 @@ final class PadScoreAdapter extends BaseAdapter {
         private void bindCalendar(Match m,boolean selected){
             boolean subscribed=host.isSubscribed(m.id);
             boolean canSubscribe=m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis();
-            calendar.setVisibility(subscribed||canSubscribe?View.VISIBLE:View.INVISIBLE);
-            calendarIcon.set(subscribed?"calendar-check":"calendar-add",subscribed?ui.primary:selected?ui.text:ui.muted);
-            calendar.setContentDescription((subscribed?"取消订阅 ":"订阅 ")+m.displayTitle()+"，提前 5 分钟提醒");
+            calendar.setSelected(subscribed);calendar.setAlpha(subscribed?1f:Ui.ACTION_ICON_ALPHA);
+            calendarIcon.set(subscribed?"calendar-check":"calendar-add",subscribed?ui.primary:ui.muted);
+            calendar.setContentDescription(subscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
             calendar.setOnClickListener(v->host.toggleSubscription(m));
         }
     }

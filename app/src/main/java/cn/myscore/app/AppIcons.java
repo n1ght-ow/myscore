@@ -9,6 +9,12 @@ final class AppIcons {
     static Path path(String kind) {
         Path p=new Path();
         switch(kind) {
+            case "external" -> {
+                p.moveTo(14,3);p.lineTo(21,3);p.lineTo(21,10);
+                p.moveTo(21,3);p.lineTo(11,13);
+                p.moveTo(10,4);p.lineTo(5,4);p.quadTo(3,4,3,6);
+                p.lineTo(3,19);p.quadTo(3,21,5,21);p.lineTo(18,21);p.quadTo(20,21,20,19);p.lineTo(20,14);
+            }
             case "calendar-target" -> {
                 calendar(p,21);
                 p.moveTo(12,11);p.lineTo(12,17);

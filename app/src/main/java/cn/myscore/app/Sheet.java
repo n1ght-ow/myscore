@@ -73,7 +73,7 @@ final class Sheet {
     static void date(Activity activity, LocalDate selected, PickDate pick) {
         Ui ui=ui(activity);
         Dialog dialog=base(activity,ui);
-        LinearLayout content=content(activity,ui,dialog,"选择日期","可查看任意一天的赛程与比分。");
+        LinearLayout content=content(activity,ui,dialog,"选择日期",null);
         // Keep seven 48dp date targets on compact phones without shrinking the type.
         int side=Math.max(0,Math.min(ui.dp(24),(activity.getResources().getDisplayMetrics().widthPixels-ui.dp(336))/2));
         content.setPadding(side,content.getPaddingTop(),side,content.getPaddingBottom());

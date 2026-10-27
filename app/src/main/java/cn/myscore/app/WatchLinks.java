@@ -13,33 +13,43 @@ import java.util.Locale;
  * unconfigured.</p>
  */
 final class WatchLinks {
+    enum Kind {
+        ZONE("专区", "play"), ROOM("直播间", "play"), LIVE("直播", "play"),
+        REPLAY("回放", "play"), PENDING("待发布", "clock");
+
+        final String label, icon;
+        Kind(String label, String icon) { this.label = label; this.icon = icon; }
+    }
+
     static final class Link {
         final String provider, shortProvider, title, note, url;
+        final Kind kind;
 
-        Link(String provider, String shortProvider, String title, String note, String url) {
+        Link(String provider, String shortProvider, String title, String note, String url, Kind kind) {
             this.provider = provider;
             this.shortProvider = shortProvider;
             this.title = title;
             this.note = note;
             this.url = url;
+            this.kind = kind;
         }
     }
 
     private static final Link EPL = new Link(
         "咪咕视频", "咪咕", "观看英超直播", "直播、回放与赛程",
-        "https://www.miguvideo.com/p/home/0c40bbc85fa345bbba20f8e5fd11a922");
+        "https://www.miguvideo.com/p/home/0c40bbc85fa345bbba20f8e5fd11a922", Kind.ZONE);
     private static final Link NBA = new Link(
         "咪咕视频", "咪咕", "观看 NBA 直播", "直播、回放与赛程",
-        "https://www.miguvideo.com/p/home/3cd6ba04967742879aaa40bee02a99a6");
+        "https://www.miguvideo.com/p/home/3cd6ba04967742879aaa40bee02a99a6", Kind.ZONE);
     private static final Link CS2 = new Link(
         "斗鱼", "斗鱼", "打开直播间", "CS2 赛事直播",
-        "https://www.douyu.com/6657");
+        "https://www.douyu.com/6657", Kind.ROOM);
     private static final Link LOL = new Link(
         "虎牙", "虎牙", "观看本场直播", "LOL 赛事直播",
-        "https://www.huya.com/149361");
+        "https://www.huya.com/149361", Kind.ROOM);
     private static final Link BILI_PENDING = new Link(
         "哔哩哔哩", "B站", "录像待发布", "2026全球总决赛 · 稍后更新",
-        BilibiliVods.SPACE);
+        BilibiliVods.SPACE, Kind.PENDING);
     private static final DateTimeFormatter BILI_DAY = DateTimeFormatter.ofPattern("M月d日", Locale.CHINA);
 
     private WatchLinks() {}
@@ -63,7 +73,7 @@ final class WatchLinks {
         String day = match == null || match.day() == null ? "" : BILI_DAY.format(match.day());
         return new Link("哔哩哔哩", "B站", "观看全场录像",
             "2026全球总决赛" + (day.isEmpty() ? "" : " · " + day),
-            "https://www.bilibili.com/video/" + bvid);
+            "https://www.bilibili.com/video/" + bvid, Kind.REPLAY);
     }
 
     static Link miguMatch(String pID, String league, String home, String away, boolean finished) {
@@ -72,6 +82,6 @@ final class WatchLinks {
         String title = "观看本场" + (finished ? "回放" : "直播");
         String note = competition + " · " + home + " vs " + away;
         return new Link("咪咕视频", "咪咕", title, note,
-            "https://www.miguvideo.com/p/live/" + pID);
+            "https://www.miguvideo.com/p/live/" + pID, finished ? Kind.REPLAY : Kind.LIVE);
     }
 }

@@ -117,7 +117,7 @@ final class ScoreAdapter extends BaseAdapter {
         boolean isSubscribed=host.isSubscribed(m.id);
         boolean canSubscribe=m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis();
         icon.set(isSubscribed?"calendar-check":"calendar-add",isSubscribed?ui.primary:ui.muted);
-        sub.setSelected(isSubscribed);sub.setAlpha(isSubscribed||canSubscribe?1f:0.45f);
+        sub.setSelected(isSubscribed);sub.setAlpha(isSubscribed?1f:Ui.ACTION_ICON_ALPHA);
         sub.setContentDescription(isSubscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
         sub.setOnClickListener(v->host.toggleSubscription(m));
     }
@@ -176,13 +176,14 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout footRow=ui.row();
             foot=ui.new MatchTime();footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             watch=ui.watchPill(48);
-            LinearLayout.LayoutParams watchParams=new LinearLayout.LayoutParams(-2,ui.dp(48));watchParams.setMarginStart(ui.dp(4));
-            footRow.addView(watch,watchParams);watch.setVisibility(View.GONE);
+            LinearLayout.LayoutParams watchParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));watchParams.setMarginStart(ui.dp(8));
+            watch.setVisibility(View.GONE);
             sub=new FrameLayout(ui.c);
             subIcon=new Ui.Icon(ui.c,"calendar-add",ui.primary);
-            sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
+            sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.CENTER));
             ui.clickable(sub,Color.TRANSPARENT,24);sub.setFocusable(true);
             LinearLayout.LayoutParams subParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));subParams.setMarginStart(ui.dp(8));footRow.addView(sub,subParams);
+            footRow.addView(watch,watchParams);
             card.addView(footRow);
             stale=ui.text("上次记录为进行中，当前状态待刷新",12,ui.error,false);
             stale.setPadding(0,ui.dp(6),0,0);stale.setVisibility(View.GONE);card.addView(stale);

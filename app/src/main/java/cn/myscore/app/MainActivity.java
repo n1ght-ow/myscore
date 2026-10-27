@@ -1924,10 +1924,6 @@ implements ScoreAdapter.Host {
             this.ui.gap(host, 24);
             host.addView((View)right);
         }
-        this.ui.gap(host, 24);
-        TextView provenance = this.ui.text("数据按来源发布 · 未提供的字段保持未知 · " + d.source + " · " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm") + " 获取", 11, this.ui.muted, false);
-        provenance.setLineSpacing((float)this.ui.dp(3.0f), 1.0f);
-        host.addView((View)provenance);
         this.padRelated(host, m);
     }
 
@@ -2036,19 +2032,18 @@ implements ScoreAdapter.Host {
             this.ui.gap(card, 16);
         }
         LinearLayout actions = this.ui.row();
-        TextView open = this.ui.button("打开比赛中心", true, () -> this.matchDetail(m));
+        TextView open = this.ui.button("比赛详情", true, () -> this.matchDetail(m));
         actions.addView((View)open, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.3f));
-        View gap = new View((Context)this);
-        actions.addView(gap, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(10.0f), 1));
         boolean isSubscribed = this.subscribed.contains(m.id);
         boolean bl = canSubscribe = m.scheduled() && m.timeConfirmed && m.start > System.currentTimeMillis();
         if (isSubscribed || canSubscribe) {
-            TextView subscribe = this.ui.button(isSubscribed ? "已订阅 · 取消提醒" : "订阅提醒", false, () -> this.toggleSubscription(m));
-            actions.addView((View)subscribe, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        } else {
-            TextView note = this.ui.text(m.live() ? "进行中" : "赛果已确认", 11, this.ui.muted, false);
-            note.setGravity(17);
-            actions.addView((View)note, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            View gap = new View((Context)this);
+            actions.addView(gap, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(10.0f), 1));
+            FrameLayout subscribe = this.padIconAction(isSubscribed ? "calendar-check" : "calendar-add", isSubscribed ? "取消比赛提醒" : "订阅比赛提醒", () -> this.toggleSubscription(m));
+            subscribe.setSelected(isSubscribed);
+            subscribe.setTooltipText(isSubscribed ? "取消提醒" : "订阅提醒");
+            ((Ui.Icon)subscribe.getChildAt(0)).set(isSubscribed ? "calendar-check" : "calendar-add", isSubscribed ? this.ui.primary : this.ui.text);
+            actions.addView(subscribe, new LinearLayout.LayoutParams(this.ui.dp(48), this.ui.dp(48)));
         }
         View gap2 = new View((Context)this);
         actions.addView(gap2, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(10.0f), 1));
@@ -2175,8 +2170,6 @@ implements ScoreAdapter.Host {
         source.addView((View)this.ui.text(d.source, 13, this.ui.text, true));
         this.ui.gap(source, 4);
         source.addView((View)this.ui.text("获取于 " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm") + (m.updated > 0L ? "\n来源发布 " + MainActivity.formatInstant(m.updated, "M月d日 HH:mm") : ""), 11, this.ui.muted, false));
-        this.ui.gap(source, 12);
-        source.addView((View)this.ui.text("缺失字段保持未知，不以 0 或推算值补齐。", 11, this.ui.muted, false));
         right.addView((View)source);
         if (!m.url.isBlank()) {
             this.ui.gap(right, 10);

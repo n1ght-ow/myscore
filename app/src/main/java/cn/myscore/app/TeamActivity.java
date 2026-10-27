@@ -14,12 +14,9 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import org.json.JSONObject;
-import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -86,7 +83,7 @@ public final class TeamActivity extends Activity {
     }
     @Override public void onResume(){super.onResume();active=true;if(repository==null||isFinishing())return;render();if(result==null||pendingForce||System.currentTimeMillis()-result.fetched>5*60_000)load(false);else schedule();}
     @Override public void onPause(){active=false;handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);super.onPause();}
-    @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdownNow();calendarWorker.shutdown();super.onDestroy();}
+    @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdownNow();calendarWorker.shutdownNow();super.onDestroy();}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putInt("position",list==null?pendingPosition:list.getFirstVisiblePosition());state.putString("filter",filter);}
 
@@ -467,6 +464,6 @@ public final class TeamActivity extends Activity {
         return note;
     }
     private static String format(long value,String pattern) {
-        return value>0?DateTimeFormatter.ofPattern(pattern,Locale.CHINA).withZone(Match.ZONE).format(Instant.ofEpochMilli(value)):"尚未提供";
+        return Formats.instant(value,pattern,"尚未提供");
     }
 }

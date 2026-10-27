@@ -242,6 +242,6 @@ final class PadScoreAdapter extends BaseAdapter {
     }
 
     private static String updated(Match m){
-        return m.updated>0?"更新于 "+java.time.format.DateTimeFormatter.ofPattern("HH:mm",java.util.Locale.CHINA).withZone(Match.ZONE).format(java.time.Instant.ofEpochMilli(m.updated)):"更新时间未知";
+        return Formats.updated(m.updated);
     }
 }

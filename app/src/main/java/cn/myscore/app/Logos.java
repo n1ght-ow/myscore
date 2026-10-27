@@ -150,6 +150,28 @@ final class Logos {
         try{URI u=URI.create(url);String h=u.getHost();return "https".equals(u.getScheme())&&h!=null&&(h.equals("a.espncdn.com")||h.equals("resources.premierleague.com")||h.equals("r2.thesportsdb.com")||h.equals("oss.5eplay.com")||h.equals("img.crawler.qq.com")||h.equals("game.gtimg.cn")||h.equals("img1.gtimg.com")||h.equals("cdn.5eplay.com")||h.equals("img1.5eplay.com")||h.equals("ossweb-img.qq.com"));}catch(RuntimeException e){return false;}
     }
     static void retryFailures(){FAILED.clear();}
+
+    /**
+     * Follow the system's memory pressure instead of holding 16 MiB of crests for the whole
+     * process lifetime. A returning foreground rebinds from the disk cache.
+     */
+    static void trimMemory(int level) {
+        int before = MEMORY.size();
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE
+            || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+            || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            MEMORY.evictAll();
+            FAILED.clear();
+        } else if (level == android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+            MEMORY.trimToSize(MEMORY_BYTES / 4);
+        } else if (level == android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+            || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE) {
+            MEMORY.trimToSize(MEMORY_BYTES / 2);
+        } else {
+            return;
+        }
+        android.util.Log.i("MyScorePerf", "crest memory trimmed level=" + level + " bytes=" + before + "->" + MEMORY.size());
+    }
     static Bitmap load(Context c,String url)throws Exception {return load(c,url,256);}
     static Bitmap load(Context c,String url,int maxPx)throws Exception {
         if(!allowed(url))throw new IOException("Unsupported crest host");
@@ -200,7 +222,19 @@ final class Logos {
     private static boolean lightSurface(int foreground){return (((foreground>>16)&255)+((foreground>>8)&255)+(foreground&255))<384;}
     /** Consumes an owned decode. Keep the source's colours and white details; trim alpha only. */
     static Bitmap prepareCrest(Bitmap source,int targetPx,int foreground)throws IOException {
-        int width=source.getWidth(),height=source.getHeight();int[] pixels=new int[width*height];
+        int edge=Math.max(32,Math.min(512,targetPx));
+        int width=source.getWidth(),height=source.getHeight();
+        // The mark is drawn into an edge-square. A larger source adds a full-size int[] and
+        // bitmap to every bind without visible detail, so bound the scan at 2x the draw size.
+        int workLimit=Math.max(64,edge*2);
+        if(Math.max(width,height)>workLimit){
+            float scale=workLimit/(float)Math.max(width,height);
+            int scaledWidth=Math.max(1,Math.round(width*scale)),scaledHeight=Math.max(1,Math.round(height*scale));
+            Bitmap scaled=Bitmap.createScaledBitmap(source,scaledWidth,scaledHeight,true);
+            if(scaled!=source)source.recycle();
+            source=scaled;width=scaledWidth;height=scaledHeight;
+        }
+        int[] pixels=new int[width*height];
         source.getPixels(pixels,0,width,0,0,width,height);
         int left=width,top=height,right=-1,bottom=-1;double mass=0,dark=0,light=0;
         for(int y=0;y<height;y++)for(int x=0;x<width;x++){
@@ -222,7 +256,7 @@ final class Logos {
         // Dense badges need more breathing room than a fine monogram or an open silhouette.
         float coverage=(float)(mass/(markWidth*(double)markHeight));
         float fill=.86f+.10f*(1-coverage);
-        int edge=Math.max(32,Math.min(512,targetPx));float scale=edge*fill/Math.max(markWidth,markHeight);
+        float scale=edge*fill/Math.max(markWidth,markHeight);
         float drawnWidth=markWidth*scale,drawnHeight=markHeight*scale;
         Bitmap result=Bitmap.createBitmap(edge,edge,Bitmap.Config.ARGB_8888);
         Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);

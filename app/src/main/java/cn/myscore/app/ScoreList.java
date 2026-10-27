@@ -55,13 +55,16 @@ final class ScoreList extends ListView {
         View child=getChildAt(0);
         if(child!=null) {
             int first=getFirstVisiblePosition(),top=child.getTop(),height=child.getHeight();
-            int offset=computeVerticalScrollOffset();
+            // Keep the offset incrementally: computeVerticalScrollOffset() folds every visible
+            // child into an estimate, which is unnecessary work on each scrolling frame.
+            int offset=lastOffset;
+            if(offset==-1)offset=computeVerticalScrollOffset();
             if(lastOffset!=-1&&listener!=null) {
                 int delta;
                 if(first==lastFirst)delta=lastTop-top;
                 else if(first==lastFirst+1)delta=lastTop+lastHeight-top;
-                else delta=offset-lastOffset;
-                if(delta!=0)listener.onScroll(delta);
+                else {offset=computeVerticalScrollOffset();delta=offset-lastOffset;}
+                if(delta!=0){listener.onScroll(delta);offset=lastOffset+delta;}
             }
             lastFirst=first;lastTop=top;lastHeight=height;lastOffset=offset;
         }

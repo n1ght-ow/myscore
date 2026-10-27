@@ -1,3 +1,32 @@
+# MyScore 4.1.1 稳定性、流畅性与运行内存（本地构建）
+
+日期：2026-10-27（北京时间）。版本 `4.1.1` / versionCode `36`，发布标签 `v4.1.1`。发布入口：[MyScore 4.1.1](https://github.com/n1ght-ow/myscore/releases/tag/v4.1.1)。
+
+## 本次变更
+
+- 平板阅读栏不再随每次刷新拆除重建：为选中比赛、比分、状态、订阅状态、详情正文（`MatchDetail.bodySignature()`）、分钟粒度的获取时间与同日比赛计算内容指纹。指纹未变化时保留原视图树、队徽和滚动位置；只有比分、状态、详情或来源时间真正变化才重建。手动刷新实测出现 `pad focus unchanged; skip rebuild`，内容变化时单次重建约 6–27ms。
+- 新增 `Formats` 进程级时间格式缓存。`DateTimeFormatter` 不可变且线程安全；首页比分卡、平板赛程、球队赛程、详情、日期条与 F1 周末表不再在每次行绑定时新建格式器。北京时间、中文日期标签与原输出一致。
+- `ScoreList` 的滚动偏移改为增量维护，不再每帧调用 `computeVerticalScrollOffset()` 汇总可见子视图高度。
+- 队标解码在 `prepareCrest` 的透明边界扫描前，把超过 2 倍绘制尺寸的源图降采样，限制每次绑定的 `int[]` 与中间位图；新增 `MyScoreApp.onTrimMemory`，UI 隐藏或普通内存压力时收缩缓存，`RUNNING_LOW` / `RUNNING_CRITICAL` / 后台 `MODERATE` 以上直接清空 16MiB 上限的队标记忆缓存。实测 `RUNNING_LOW` 将缓存从 2,285,568 字节释放到 0。
+- 日期切换时同时释放旧的设置页来源快照；手动刷新产生全量快照后清理重复的 `padSettingSources`。`TeamActivity` 销毁时中断日历线程，而不是等待任务结束。
+- 未新增第三方依赖，未改变数据来源、刷新频率、日历或应用内更新逻辑。
+
+## 已验证
+
+- `:app:testDebugUnitTest`：**158 项，0 failures / errors**。新增 3 项 `FormatsTest`，覆盖北京时间、中文日期与格式器实例复用。
+- `:app:lintDebug`：**0 errors / 26 warnings**，`abortOnError` 通过；`:app:assembleDebug`、`:app:assembleDebugAndroidTest` 通过。
+- 模拟器 Android 15 / API 35：3048 × 2032 / 320 dpi 平板三栏，以及临时 1080 × 2400 / 420 dpi 手机单列；均实际安装、运行、截图。
+- `SmokeInstrumentation` 在手机尺寸通过 **280 项**运行检查，0 崩溃 / 0 ANR。平板尺寸使用真实窗口截图、`UiAutomator` 节点树与 `MyScorePerf` 日志验收。
+- 平板手工验收：冷启动、选择比赛、手动刷新、返回前台后阅读页内容正确；刷新日志出现 `pad focus unchanged; skip rebuild`，选择另一场比赛后阅读页正常重建并显示新比分。以约 160 ms 间隔连续切换 5 次赛事筛选与前后日期，无崩溃 / ANR，阅读栏单次重建 0–8ms。手机单列、NBA 详情、返回列表正常。
+- 同协议 6 次 650 ms 列表滑动，`dumpsys gfxinfo`（同一模拟器，优化前 / 优化后）：
+  - 优化前：323 帧，卡顿帧 3（0.93%），legacy 12.69%，P50 17ms / P95 21ms / P99 24ms。
+  - 优化后：339 帧，卡顿帧 1（0.29%），legacy 0%，P50 17ms / P95 18ms / P99 19ms。
+  - 这是单次观察，设备使用 SwiftShader 软件 GLES；只作为同设备趋势，不宣称真机帧率或固定百分比提升。
+- 内存：平板前台 PSS 在 54–62 MB 间随 GC 波动，不把单点差值当作降幅。可复现指标是系统 `RUNNING_LOW` 时队标缓存 2,285,568 → 0 字节；手机 1080 × 2400 页面视图数 133。
+- 一次平板启动在 `wm size reset` 后遇到模拟器自身停顿（系统 UI / Launcher 记录 Skipped 768–1003 frames），该次 `am start -W` 报超时；强制停止并重开进程后画面与统计正常，未计入产品性能结论。
+- 边界：未在 Redmi K80 Pro / HyperOS、Xiaomi Pad 6S Pro 真机或真实运营商网络验收；未做 144 Hz、长时间低内存、monkey 压测。`SmokeInstrumentation` 脚本按手机尺寸编写，在平板尺寸直接运行会访问手机 `ScoreList` 而 NPE（本轮之前已存在），因此平板改用真实窗口截图与日志验收。
+- APK：`artifacts/MyScore-4.1.1.apk`，**1,596,261 字节**，SHA-256 `e5930f5a1f12037ff69fcb086d4b7f9a556581effc472828fbfdfb77d17b3448`；`aapt` 确认包名 `cn.myscore.app`、版本 `4.1.1 / 36`、minSdk 28 / targetSdk 35；`apksigner` 验证通过，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646` 与 4.1.0 相同，可直接覆盖安装并保留设置、缓存与日历关联。校验文件 `artifacts/SHA256SUMS-4.1.1.txt`；发布资产为 `MyScore-4.1.1.apk` 与 `SHA256SUMS-4.1.1.txt`。
+
 # MyScore 4.0.0 数据获取重构
 
 日期：2026-10-27（北京时间）。版本 `4.0.0` / versionCode `34`，发布标签 `v4.0.0`。发布入口：[MyScore 4.0.0](https://github.com/n1ght-ow/myscore/releases/tag/v4.0.0)。

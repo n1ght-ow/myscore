@@ -45,15 +45,12 @@ import cn.myscore.app.Team;
 import cn.myscore.app.TeamActivity;
 import cn.myscore.app.TeamPanelsView;
 import cn.myscore.app.Ui;
-import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -1790,6 +1787,6 @@ extends Activity {
     }
 
     private static String time(long value, String pattern) {
-        return value > 0L ? DateTimeFormatter.ofPattern(pattern, Locale.CHINA).withZone(Match.ZONE).format(Instant.ofEpochMilli(value)) : "尚未提供";
+        return Formats.instant(value, pattern, "尚未提供");
     }
 }

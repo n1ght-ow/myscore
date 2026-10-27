@@ -5,10 +5,8 @@ import org.json.JSONObject;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /** Source facts only. Clocks are never advanced locally. */
 public final class Match {
@@ -27,7 +25,7 @@ public final class Match {
     public boolean scheduled() { return "scheduled".equals(state); }
     public boolean hasScore() { return !homeScore.isEmpty() && !awayScore.isEmpty(); }
     public LocalDate day() { return start > 0 ? Instant.ofEpochMilli(start).atZone(ZONE).toLocalDate() : null; }
-    public String time() { return start > 0 ? DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA).withZone(ZONE).format(Instant.ofEpochMilli(start)) : "时间待定"; }
+    public String time() { return Formats.kickoff(start, "时间待定"); }
     public String displayTitle() { return !title.isEmpty() ? title : home + " vs " + away; }
     public String score() { return hasScore() ? homeScore + " : " + awayScore : "—"; }
     public static long parseTime(String value) {

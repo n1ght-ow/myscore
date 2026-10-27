@@ -50,9 +50,7 @@ import cn.myscore.app.Team;
 import cn.myscore.app.TeamActivity;
 import cn.myscore.app.Ui;
 import cn.myscore.app.UpdateActivity;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -61,7 +59,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -113,6 +110,7 @@ implements ScoreAdapter.Host {
     private long lastScoreScroll;
     private String renderedScores = "";
     private String renderedSettings = "";
+    private String renderedPadFocus = "";
     private final Runnable tick = () -> this.load(false);
     private final Runnable renderSoon = () -> {
         if (this.active && !this.isDestroyed()) {
@@ -407,6 +405,10 @@ implements ScoreAdapter.Host {
             this.allSnapshot = null;
             this.allSnapshotDay = null;
         }
+        if (this.padSettingSourcesDay != null && !this.padSettingSourcesDay.equals(day)) {
+            this.padSettingSources = null;
+            this.padSettingSourcesDay = null;
+        }
         Repository.Snapshot local = null;
         if (this.allSnapshot != null && day.equals(this.allSnapshotDay)) {
             local = "全部".equals(selectedGroup) ? this.allSnapshot : MainActivity.subset(this.allSnapshot, selectedGroup);
@@ -482,6 +484,11 @@ implements ScoreAdapter.Host {
         if ("全部".equals(selectedGroup)) {
             this.allSnapshot = value;
             this.allSnapshotDay = day;
+            // the all-group snapshot now covers every source, so the settings-only copy is redundant.
+            if (day.equals(this.padSettingSourcesDay)) {
+                this.padSettingSources = null;
+                this.padSettingSourcesDay = null;
+            }
         } else if (this.allSnapshot != null && day.equals(this.allSnapshotDay)) {
             Repository.Snapshot merged = MainActivity.subset(this.allSnapshot, "全部");
             for (Repository.Batch batch : value.batches) {
@@ -823,15 +830,15 @@ implements ScoreAdapter.Host {
         LinearLayout bar = this.ui.row();
         bar.setPadding(this.ui.dp(20.0f), this.ui.dp(4.0f), this.ui.dp(12.0f), this.ui.dp(4.0f));
         boolean large = this.getResources().getConfiguration().fontScale >= 1.5f;
-        String date = DateTimeFormatter.ofPattern(selected.getYear() == today.getYear() ? "M月d日" : "yyyy/M/d", Locale.CHINA).format(selected);
-        String caption = large ? date + "\n" + (selected.equals(today) ? "今天 · " : "") + DateTimeFormatter.ofPattern("EEE", Locale.CHINA).format(selected) : (selected.equals(today) ? "今天  ·  " : "") + date + " " + DateTimeFormatter.ofPattern("EEE", Locale.CHINA).format(selected);
+        String date = Formats.date(selected, selected.getYear() == today.getYear() ? Formats.MONTH_DAY : Formats.YEAR_MONTH_DAY, "");
+        String caption = large ? date + "\n" + (selected.equals(today) ? "今天 · " : "") + Formats.WEEKDAY.format(selected) : (selected.equals(today) ? "今天  ·  " : "") + date + " " + Formats.WEEKDAY.format(selected);
         TextView label = this.ui.text(caption + "  ▾", 13, this.ui.text, true);
         label.setGravity(16);
         label.setMinHeight(this.ui.dp(48.0f));
         label.setPadding(0, this.ui.dp(8.0f), this.ui.dp(8.0f), this.ui.dp(8.0f));
         this.ui.clickable((View)label, 0, 0);
         label.setFocusable(true);
-        label.setContentDescription((CharSequence)("选择日期，当前" + DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINA).format(selected)));
+        label.setContentDescription((CharSequence)("选择日期，当前" + Formats.MONTH_DAY_FULL_WEEK.format(selected)));
         label.setOnClickListener(v -> Sheet.date(this, this.from(), this::selectDay));
         bar.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         if (!selected.equals(today)) {
@@ -1298,7 +1305,7 @@ implements ScoreAdapter.Host {
     }
 
     private static String formatInstant(long millis, String pattern) {
-        return millis > 0L ? DateTimeFormatter.ofPattern(pattern, Locale.CHINA).withZone(Match.ZONE).format(Instant.ofEpochMilli(millis)) : "未获取";
+        return Formats.instant(millis, pattern, "未获取");
     }
 
     private void buildPadScreen() {
@@ -1313,6 +1320,7 @@ implements ScoreAdapter.Host {
         this.padRail = null;
         this.railCounts.clear();
         this.railDots.clear();
+        this.renderedPadFocus = "";
         this.padDayNumber = null;
         this.padDayMeta = null;
         this.padListStatus = null;
@@ -1425,10 +1433,10 @@ implements ScoreAdapter.Host {
         rail.addView(spacer, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(1, 0, 1.0f));
         rail.addView(this.padRailRule());
         this.ui.gap(rail, 12);
-        TextView day = this.ui.text(DateTimeFormatter.ofPattern("MM.dd", Locale.CHINA).format(this.from()), 15, this.ui.text, true);
+        TextView day = this.ui.text(Formats.MONTH_DAY_DOT.format(this.from()), 15, this.ui.text, true);
         day.setPadding(this.ui.dp(4.0f), 0, 0, 0);
         rail.addView((View)day);
-        TextView zone = this.ui.text(DateTimeFormatter.ofPattern("EEE", Locale.CHINA).format(this.from()) + " · 北京时间", 9, this.ui.muted, false);
+        TextView zone = this.ui.text(Formats.WEEKDAY.format(this.from()) + " · 北京时间", 9, this.ui.muted, false);
         zone.setPadding(this.ui.dp(4.0f), 0, 0, 0);
         rail.addView((View)zone);
         this.ui.gap(rail, 8);
@@ -1704,12 +1712,64 @@ implements ScoreAdapter.Host {
         if (this.padFocusHost == null) {
             return;
         }
+        String key = this.padFocusKey();
+        // A live poll usually carries no visible change. Reusing the existing reading pane keeps
+        // the 96dp crests and the whole detail card tree instead of rebuilding it every ten seconds.
+        if (preserve && key.equals(this.renderedPadFocus)) {
+            if (BuildConfig.DEBUG) {
+                Log.i("MyScorePerf", "pad focus unchanged; skip rebuild");
+            }
+            return;
+        }
+        this.renderedPadFocus = key;
+        long started = SystemClock.uptimeMillis();
         int y = preserve && this.padFocusScroll != null ? this.padFocusScroll.getScrollY() : 0;
         this.padFocusHost.removeAllViews();
         this.padFocusInto(this.padFocusHost);
         if (preserve && this.padFocusScroll != null) {
             this.padFocusScroll.post(() -> this.padFocusScroll.scrollTo(0, y));
         }
+        if (BuildConfig.DEBUG) {
+            Log.i("MyScorePerf", "pad focus rebuilt in " + (SystemClock.uptimeMillis() - started) + "ms");
+        }
+    }
+
+    /**
+     * Everything the reading pane renders, at the granularity it is shown. Fetch times are
+     * included at minute precision because that is what the pane displays; second-by-second
+     * refreshes must not tear down the view tree. Scores, states and detail content stay exact.
+     */
+    private String padFocusKey() {
+        StringBuilder key = new StringBuilder(192);
+        Match m = this.padSelected;
+        key.append(this.group).append('|').append(this.dayOffset).append('|').append(this.ui.c.getResources().getConfiguration().screenWidthDp >= 1280 ? 2 : 1);
+        if (m == null) {
+            return key.append("|none|").append(this.snapshot.matches().isEmpty()).toString();
+        }
+        boolean canSubscribe = m.scheduled() && m.timeConfirmed && m.start > System.currentTimeMillis();
+        key.append('|').append(m.id).append(',').append(m.state).append(',').append(m.homeScore).append(',').append(m.awayScore)
+            .append(',').append(m.status).append(',').append(m.start).append(',').append(m.timeConfirmed)
+            .append(',').append(m.updated / 60000L).append(',').append(m.source)
+            .append(',').append(m.home).append(',').append(m.away).append(',').append(m.title).append(',').append(m.url)
+            .append(',').append(m.homeLogo).append(',').append(m.awayLogo)
+            .append(',').append(this.subscribed.contains(m.id)).append(',').append(canSubscribe);
+        key.append('|').append(this.padError);
+        MatchDetail detail = this.padDetail;
+        if (detail == null) {
+            key.append("|detail:none");
+        } else {
+            key.append('|').append(detail.bodySignature()).append(',').append(detail.fetched / 60000L).append(',').append(detail.source);
+        }
+        List<Match> all = this.snapshot.matches();
+        key.append("|related:").append(all.size());
+        int shown = 0;
+        for (Match other : all) {
+            if (other.id.equals(m.id)) continue;
+            if (shown++ >= 4) break;
+            key.append(';').append(other.id).append(',').append(other.state).append(',').append(other.homeScore)
+                .append(',').append(other.awayScore).append(',').append(other.start);
+        }
+        return key.toString();
     }
 
     private void padFocusInto(LinearLayout host) {
@@ -1735,7 +1795,7 @@ implements ScoreAdapter.Host {
         }
         Competition competition = Competition.find(m.league);
         LinearLayout eyebrow = this.ui.row();
-        TextView kicker = this.ui.text((competition == null ? m.group : competition.name) + "  /  " + DateTimeFormatter.ofPattern("M月d日 EEE", Locale.CHINA).format(m.day() == null ? this.from() : m.day()), 11, this.ui.muted, true);
+        TextView kicker = this.ui.text((competition == null ? m.group : competition.name) + "  /  " + Formats.MONTH_DAY_WEEK.format(m.day() == null ? this.from() : m.day()), 11, this.ui.muted, true);
         kicker.setLetterSpacing(0.06f);
         eyebrow.addView((View)kicker, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         TextView updated = this.ui.text(m.source + (m.updated > 0L ? " · 更新于 " + MainActivity.formatInstant(m.updated, "HH:mm") : ""), 11, this.ui.muted, false);
@@ -1794,7 +1854,7 @@ implements ScoreAdapter.Host {
             host.addView((View)right);
         }
         this.ui.gap(host, 24);
-        TextView provenance = this.ui.text("数据按来源发布 · 未提供的字段保持未知 · " + d.source + " · " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm:ss") + " 获取", 11, this.ui.muted, false);
+        TextView provenance = this.ui.text("数据按来源发布 · 未提供的字段保持未知 · " + d.source + " · " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm") + " 获取", 11, this.ui.muted, false);
         provenance.setLineSpacing((float)this.ui.dp(3.0f), 1.0f);
         host.addView((View)provenance);
         this.padRelated(host, m);
@@ -2034,7 +2094,7 @@ implements ScoreAdapter.Host {
         LinearLayout source = this.padSurface();
         source.addView((View)this.ui.text(d.source, 13, this.ui.text, true));
         this.ui.gap(source, 4);
-        source.addView((View)this.ui.text("获取于 " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm:ss") + (m.updated > 0L ? "\n来源发布 " + MainActivity.formatInstant(m.updated, "M月d日 HH:mm") : ""), 11, this.ui.muted, false));
+        source.addView((View)this.ui.text("获取于 " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm") + (m.updated > 0L ? "\n来源发布 " + MainActivity.formatInstant(m.updated, "M月d日 HH:mm") : ""), 11, this.ui.muted, false));
         this.ui.gap(source, 12);
         source.addView((View)this.ui.text("缺失字段保持未知，不以 0 或推算值补齐。", 11, this.ui.muted, false));
         right.addView((View)source);
@@ -2139,8 +2199,8 @@ implements ScoreAdapter.Host {
         }
         if (this.padDayNumber != null) {
             this.padDayNumber.setText((CharSequence)String.valueOf(this.from().getDayOfMonth()));
-            String month = DateTimeFormatter.ofPattern("yyyy年M月", Locale.CHINA).format(this.from());
-            String week = DateTimeFormatter.ofPattern("EEE", Locale.CHINA).format(this.from());
+            String month = Formats.YEAR_MONTH.format(this.from());
+            String week = Formats.WEEKDAY.format(this.from());
             this.padDayMeta.setText((CharSequence)(month + " · " + week + (this.dayOffset == 0 ? " · 今天" : "")));
         }
         for (String g : GROUPS) {

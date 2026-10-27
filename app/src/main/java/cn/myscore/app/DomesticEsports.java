@@ -4,7 +4,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,7 +17,7 @@ public final class DomesticEsports {
     private static JSONArray arr(JSONObject o,String k){JSONArray v=o.optJSONArray(k);return v==null?new JSONArray():v;}
     private static String score(JSONObject o,String k){return o.isNull(k)?"":o.optString(k);}
     private static long seconds(String s){try{return Long.parseLong(s)*1000;}catch(RuntimeException e){return 0;}}
-    private static long localTime(String s){try{return LocalDateTime.parse(s,DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).atZone(Match.ZONE).toInstant().toEpochMilli();}catch(RuntimeException e){return 0;}}
+    private static long localTime(String s){try{return LocalDateTime.parse(s,Formats.SOURCE_TIMESTAMP).atZone(Match.ZONE).toInstant().toEpochMilli();}catch(RuntimeException e){return 0;}}
     public static List<Match> worlds(JSONObject root,long fetched) throws Exception {
         if(!root.optString("status").equals("0") || root.optJSONArray("msg")==null)throw new Exception("LOL 官方赛程格式发生变化");
         List<Match> all=new ArrayList<>();JSONArray list=arr(root,"msg");long published=localTime(root.optString("lastUpTime"));

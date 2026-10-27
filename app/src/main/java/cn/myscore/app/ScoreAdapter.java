@@ -102,8 +102,7 @@ final class ScoreAdapter extends BaseAdapter {
 
     private TextView teamScore(String text){TextView score=ui.text(text,24,ui.text,true);score.setGravity(Gravity.END);score.setMinWidth(ui.dp(40));return score;}
     private String provenance(Match m){
-        String updated=m.updated>0?"更新于 "+java.time.format.DateTimeFormatter.ofPattern("HH:mm",java.util.Locale.CHINA).withZone(Match.ZONE).format(java.time.Instant.ofEpochMilli(m.updated)):"更新时间未知";
-        return (m.source.isBlank()?"":m.source+" · ")+updated;
+        return (m.source.isBlank()?"":m.source+" · ")+Formats.updated(m.updated);
     }
     private String stateText(Match m){return Rules.stateLabel(m.state);}
     private void text(TextView view,String value){if(!value.contentEquals(view.getText()))view.setText(value);}

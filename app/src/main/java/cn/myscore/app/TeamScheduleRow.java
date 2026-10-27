@@ -1,8 +1,5 @@
 package cn.myscore.app;
 
-import java.time.format.DateTimeFormatter;
-import java.util.Locale;
-
 /** One row of a team schedule. Scores are presented in this team's order, never home-first. */
 final class TeamScheduleRow {
     static final int SECTION=0,MATCH=1,NOTE=2;
@@ -26,7 +23,7 @@ final class TeamScheduleRow {
         boolean home=team.id.equals(m.homeId)||(!team.id.equals(m.awayId)&&team.name.equals(m.home));
         String opponent=home?m.away:m.home;
         if(opponent.isBlank())opponent="对阵待定";
-        String date=m.day()==null?"日期待定":DateTimeFormatter.ofPattern(m.day().getYear()==Match.today(System.currentTimeMillis()).getYear()?"M月d日 EEE":"yyyy年M月d日 EEE",Locale.CHINA).format(m.day());
+        String date=m.day()==null?"日期待定":Formats.date(m.day(),m.day().getYear()==Match.today(System.currentTimeMillis()).getYear()?Formats.MONTH_DAY_WEEK:Formats.YEAR_MONTH_DAY_WEEK,"日期待定");
         String time=m.timeConfirmed?m.time():"待定";
         Competition competition=Competition.find(m.league);
         String detail=m.detail.isBlank()?competition==null?m.group:competition.name:m.detail;

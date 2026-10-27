@@ -1,0 +1,429 @@
+package cn.myscore.app;
+
+import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.AtomicFile;
+import android.util.Log;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * Resolves the watch destination for a match without blocking the list or detail UI.
+ *
+ * <p>Static destinations (Douyu / Huya / Migu league zones) are always available immediately.
+ * This repository upgrades them in the background: Bilibili full-series recordings for finished
+ * Worlds matches, and exact Migu match pages when both Chinese team names and kickoff time agree.
+ * Everything is cached and every network failure falls back to the previous safe destination.</p>
+ */
+final class WatchRepository {
+    private static final String TAG = "MyScoreWatch";
+    private static final long BILI_TTL = 15L * 60_000L;
+    private static final long BILI_FAIL = 5L * 60_000L;
+    private static final long MIGU_FOUND_TTL = 12L * 60 * 60_000L;
+    private static final long MIGU_FAIL = 10L * 60_000L;
+    private static final long PACK_TTL = 24L * 60 * 60_000L;
+    private static final String DEFAULT_PACK = "1002581,1002601,1003861,1003862,1003863,1003864,"
+        + "1003865,1003866,1004041,1004121,1004261,1004262,1004281,1004321,1004262,1004281,"
+        + "1004322,1004261,1004421,1004422,1002781,1004301,1004641,1004761,1005061,1005261,"
+        + "1005301,1005321,1005361,1005362,1005341,1005342,1005521,1005722,1005721,1015749,"
+        + "1015761,1015760,1015762,1015763,1015768,1015786,1015790,1015812,1015813,1015814,"
+        + "1015815,1015816,1015817,1015820,1015819,1015821,1015837,1015836";
+    private static final String UA = "Mozilla/5.0 (Linux; Android 14; 23127PN0CC) "
+        + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
+    private static final String REFERER = "https://space.bilibili.com/" + BilibiliVods.MID;
+    private static volatile WatchRepository instance;
+
+    private record BiliState(long fetched, List<BilibiliVods.Episode> episodes) {}
+
+    private final Context context;
+    private final File dir;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final ExecutorService worker = Executors.newFixedThreadPool(2);
+    private final Map<String, MiguMatches.Hit> miguHits = new ConcurrentHashMap<>();
+    private final Map<String, Long> miguChecked = new ConcurrentHashMap<>();
+    private final Map<String, Long> miguFailed = new ConcurrentHashMap<>();
+    private final Set<String> miguLoading = ConcurrentHashMap.newKeySet();
+
+    private final Object biliLock = new Object();
+    private final List<Runnable> biliWaiters = new ArrayList<>();
+    private volatile BiliState bili;
+    private volatile boolean biliLoading;
+    private volatile long biliFailedUntil;
+
+    private volatile String packId;
+    private volatile long packFetched;
+
+    private WatchRepository(Context context) {
+        this.context = context.getApplicationContext();
+        this.dir = new File(this.context.getCacheDir(), "watch-v1");
+        if (!dir.exists()) dir.mkdirs();
+        loadBili();
+        loadMigu();
+    }
+
+    static WatchRepository get(Context context) {
+        WatchRepository local = instance;
+        if (local == null) {
+            synchronized (WatchRepository.class) {
+                local = instance;
+                if (local == null) instance = local = new WatchRepository(context);
+            }
+        }
+        return local;
+    }
+
+    /** Always safe to call on the UI thread. Returns the best cached destination. */
+    WatchLinks.Link link(Match match) {
+        if (match == null) return null;
+        if ("lol".equals(match.league) && match.finalised()) {
+            BiliState state = bili;
+            BilibiliVods.Episode episode = state == null ? null : BilibiliVods.find(state.episodes, match);
+            return episode == null ? WatchLinks.biliPending() : WatchLinks.biliVideo(episode.bvid(), match);
+        }
+        if ("epl".equals(match.league) || "nba".equals(match.league)) {
+            MiguMatches.Hit hit = miguHits.get(key(match));
+            if (hit == null) return WatchLinks.of(match);
+            String homeCn = MiguTeams.chinese(match.league, match.home);
+            String awayCn = MiguTeams.chinese(match.league, match.away);
+            return WatchLinks.miguMatch(hit.pID(), match.league,
+                homeCn == null ? hit.left() : homeCn,
+                awayCn == null ? hit.right() : awayCn,
+                match.finalised());
+        }
+        return WatchLinks.of(match);
+    }
+
+    /** Stable fingerprint for the tablet reading-pane cache key. */
+    String signature(Match match) {
+        WatchLinks.Link link = link(match);
+        return link == null ? "" : link.url + "|" + link.title + "|" + link.note;
+    }
+
+    /** Fetch the Bilibili series once when the list contains any finished Worlds match. */
+    void prepare(List<Match> matches, Runnable changed) {
+        if (matches == null) return;
+        for (Match match : matches) {
+            if ("lol".equals(match.league) && match.finalised()) {
+                ensureBili(changed);
+                return;
+            }
+        }
+    }
+
+    void resolve(Match match, Runnable changed) {
+        if (match == null) return;
+        if ("lol".equals(match.league) && match.finalised()) {
+            ensureBili(changed);
+        } else if ("epl".equals(match.league) || "nba".equals(match.league)) {
+            resolveMigu(match, changed);
+        }
+    }
+
+    private void ensureBili(Runnable changed) {
+        long now = System.currentTimeMillis();
+        if (bili != null && now - bili.fetched() < BILI_TTL) return;
+        synchronized (biliLock) {
+            if (bili != null && now - bili.fetched() < BILI_TTL) return;
+            if (biliFailedUntil > now) return;
+            if (changed != null) biliWaiters.add(changed);
+            if (biliLoading) return;
+            biliLoading = true;
+        }
+        worker.execute(() -> {
+            List<BilibiliVods.Episode> episodes = null;
+            Log.i(TAG, "Bilibili fetch start");
+            try {
+                Map<String, String> headers = new LinkedHashMap<>();
+                headers.put("Referer", REFERER);
+                headers.put("User-Agent", UA);
+                JSONObject root = new JSONObject(httpGet(BilibiliVods.API, headers));
+                if (root.optInt("code", -1) != 0) throw new IOException("Bilibili code " + root.optInt("code"));
+                episodes = BilibiliVods.parse(root);
+                if (episodes.isEmpty()) throw new IOException("Bilibili series empty");
+                Log.i(TAG, "Bilibili fetch episodes=" + episodes.size());
+            } catch (Exception e) {
+                Log.i(TAG, "Bilibili series unavailable: " + e.getMessage());
+            }
+            List<Runnable> waiters;
+            synchronized (biliLock) {
+                if (episodes != null) {
+                    bili = new BiliState(System.currentTimeMillis(), episodes);
+                    biliFailedUntil = 0;
+                    saveBili();
+                } else {
+                    biliFailedUntil = System.currentTimeMillis() + BILI_FAIL;
+                }
+                biliLoading = false;
+                waiters = new ArrayList<>(biliWaiters);
+                biliWaiters.clear();
+            }
+            if (!waiters.isEmpty()) main.post(() -> {
+                for (Runnable waiter : waiters) {
+                    try { waiter.run(); } catch (RuntimeException ignored) {}
+                }
+            });
+        });
+    }
+
+    private void resolveMigu(Match match, Runnable changed) {
+        String key = key(match);
+        long now = System.currentTimeMillis();
+        Long failed = miguFailed.get(key);
+        if (failed != null && failed > now) return;
+        Long checked = miguChecked.get(key);
+        if (miguHits.containsKey(key) && checked != null && now - checked < MIGU_FOUND_TTL) return;
+        if (!miguLoading.add(key)) return;
+        worker.execute(() -> {
+            MiguMatches.Hit hit = null;
+            Log.i(TAG, "Migu lookup start " + match.league + " " + match.home + " vs " + match.away);
+            try {
+                String home = MiguTeams.chinese(match.league, match.home);
+                String away = MiguTeams.chinese(match.league, match.away);
+                if (home != null && away != null) {
+                    String pack = packId();
+                    if (pack == null || pack.isBlank()) throw new IOException("Migu search pack missing");
+                    JSONObject response = new JSONObject(search(home + " " + away, pack));
+                    hit = MiguMatches.find(response, match, match.league);
+                }
+            } catch (Exception e) {
+                Log.i(TAG, "Migu match lookup unavailable: " + e.getMessage());
+            } finally {
+                miguLoading.remove(key);
+            }
+            boolean found = hit != null;
+            if (found) {
+                Log.i(TAG, "Migu hit " + hit.pID() + " " + hit.left() + " vs " + hit.right());
+                MiguMatches.Hit previous = miguHits.put(key, hit);
+                miguChecked.put(key, System.currentTimeMillis());
+                miguFailed.remove(key);
+                saveMigu();
+                if ((previous == null || !sameHit(previous, hit)) && changed != null) main.post(changed);
+            } else {
+                miguFailed.put(key, System.currentTimeMillis() + MIGU_FAIL);
+                if (miguFailed.size() > 200) miguFailed.clear();
+            }
+        });
+    }
+
+    private static boolean sameHit(MiguMatches.Hit a, MiguMatches.Hit b) {
+        return a.pID().equals(b.pID()) && a.start() == b.start();
+    }
+
+    private String packId() {
+        long now = System.currentTimeMillis();
+        String cached = packId;
+        if (cached != null && !cached.isBlank() && now - packFetched < PACK_TTL) return cached;
+        try {
+            JSONObject root = new JSONObject(httpGet(MiguMatches.SETTINGS_URL, Collections.emptyMap()));
+            JSONObject body = root.optJSONObject("body");
+            String value = body == null ? "" : body.optString("paramValue");
+            if (!value.isBlank()) {
+                packId = value;
+                packFetched = now;
+                saveMigu();
+                return value;
+            }
+        } catch (Exception e) {
+            Log.i(TAG, "Migu search settings unavailable: " + e.getMessage());
+        }
+        String fallback = cached == null || cached.isBlank() ? DEFAULT_PACK : cached;
+        packId = fallback;
+        packFetched = now;
+        return fallback;
+    }
+
+    private String search(String keyword, String pack) throws Exception {
+        String sid = UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT)
+            + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT).substring(0, 16);
+        JSONObject body = new JSONObject()
+            .put("appVersion", "6.1.1.00")
+            .put("ct", 101)
+            .put("isCorrectWord", 1)
+            .put("k", keyword)
+            .put("mediaSource", 9_000_000)
+            .put("packId", pack)
+            .put("pageIdx", 1)
+            .put("pageSize", 50)
+            .put("sid", sid)
+            .put("copyrightTerminal", 3)
+            .put("searchScene", 2)
+            .put("uiVersion", "A3.26.0");
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Content-Type", "application/json");
+        headers.put("appid", "miguvideo");
+        headers.put("terminalid", "www");
+        headers.put("Referer", "https://www.miguvideo.com/");
+        headers.put("User-Agent", UA);
+        return httpPost(MiguMatches.SEARCH_URL, body.toString(), headers);
+    }
+
+    private static String httpGet(String url, Map<String, String> headers) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            connection.setConnectTimeout(6_000);
+            connection.setReadTimeout(10_000);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
+            connection.setRequestProperty("User-Agent", UA);
+            for (Map.Entry<String, String> h : headers.entrySet()) connection.setRequestProperty(h.getKey(), h.getValue());
+            if (connection.getResponseCode() != 200) throw new IOException("HTTP " + connection.getResponseCode());
+            return read(connection.getInputStream());
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private static String httpPost(String url, String body, Map<String, String> headers) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            connection.setConnectTimeout(6_000);
+            connection.setReadTimeout(10_000);
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
+            connection.setRequestProperty("User-Agent", UA);
+            for (Map.Entry<String, String> h : headers.entrySet()) connection.setRequestProperty(h.getKey(), h.getValue());
+            try (OutputStream out = connection.getOutputStream()) {
+                out.write(body.getBytes(StandardCharsets.UTF_8));
+            }
+            if (connection.getResponseCode() != 200) throw new IOException("HTTP " + connection.getResponseCode());
+            return read(connection.getInputStream());
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private static String read(InputStream input) throws Exception {
+        try (InputStream in = input; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int n;
+            while ((n = in.read(buffer)) != -1) {
+                if (out.size() + n > 8_000_000) throw new IOException("response too large");
+                out.write(buffer, 0, n);
+            }
+            return out.toString("UTF-8");
+        }
+    }
+
+    private String key(Match match) {
+        return match.id + "|" + match.start + "|" + match.home + "|" + match.away;
+    }
+
+    private void loadBili() {
+        File file = new File(dir, "bilibili.json");
+        if (!file.exists()) return;
+        try {
+            JSONObject root = new JSONObject(new String(new AtomicFile(file).readFully(), StandardCharsets.UTF_8));
+            JSONArray archives = root.optJSONArray("archives");
+            if (archives == null) return;
+            List<BilibiliVods.Episode> episodes = new ArrayList<>();
+            for (int i = 0; i < archives.length(); i++) {
+                JSONObject a = archives.optJSONObject(i);
+                if (a == null) continue;
+                String bvid = a.optString("bvid");
+                String title = a.optString("title");
+                long duration = a.optLong("duration");
+                if (!bvid.isBlank() && !title.isBlank() && duration >= 900) {
+                    episodes.add(new BilibiliVods.Episode(bvid, title, duration, a.optLong("pubdate")));
+                }
+            }
+            if (!episodes.isEmpty()) bili = new BiliState(root.optLong("fetched"), episodes);
+        } catch (Exception e) {
+            Log.i(TAG, "Ignoring Bilibili watch cache");
+        }
+    }
+
+    private synchronized void saveBili() {
+        BiliState state = bili;
+        if (state == null) return;
+        try {
+            JSONArray archives = new JSONArray();
+            for (BilibiliVods.Episode e : state.episodes()) {
+                archives.put(new JSONObject().put("bvid", e.bvid()).put("title", e.title())
+                    .put("duration", e.duration()).put("pubdate", e.pubdate()));
+            }
+            JSONObject root = new JSONObject().put("fetched", state.fetched()).put("archives", archives);
+            write("bilibili.json", root);
+        } catch (Exception e) {
+            Log.w(TAG, "Cannot persist Bilibili watch cache", e);
+        }
+    }
+
+    private void loadMigu() {
+        File file = new File(dir, "migu.json");
+        if (!file.exists()) return;
+        try {
+            JSONObject root = new JSONObject(new String(new AtomicFile(file).readFully(), StandardCharsets.UTF_8));
+            packId = root.optString("packId", "");
+            packFetched = root.optLong("packFetched");
+            JSONObject hits = root.optJSONObject("hits");
+            if (hits == null) return;
+            for (java.util.Iterator<String> it = hits.keys(); it.hasNext(); ) {
+                String key = it.next();
+                JSONObject h = hits.optJSONObject(key);
+                if (h == null) continue;
+                String pID = h.optString("pID");
+                if (pID.isBlank()) continue;
+                miguHits.put(key, new MiguMatches.Hit(pID, h.optString("left"), h.optString("right"),
+                    h.optLong("start"), h.optString("competition")));
+                miguChecked.put(key, h.optLong("fetched"));
+            }
+        } catch (Exception e) {
+            Log.i(TAG, "Ignoring Migu watch cache");
+        }
+    }
+
+    private synchronized void saveMigu() {
+        try {
+            JSONObject hits = new JSONObject();
+            for (Map.Entry<String, MiguMatches.Hit> entry : miguHits.entrySet()) {
+                MiguMatches.Hit h = entry.getValue();
+                hits.put(entry.getKey(), new JSONObject().put("pID", h.pID())
+                    .put("left", h.left()).put("right", h.right()).put("start", h.start())
+                    .put("competition", h.competition()).put("fetched", miguChecked.getOrDefault(entry.getKey(), 0L)));
+            }
+            JSONObject root = new JSONObject().put("packId", packId == null ? "" : packId)
+                .put("packFetched", packFetched).put("hits", hits);
+            write("migu.json", root);
+        } catch (Exception e) {
+            Log.w(TAG, "Cannot persist Migu watch cache", e);
+        }
+    }
+
+    private void write(String name, JSONObject root) {
+        FileOutputStream out = null;
+        try {
+            AtomicFile file = new AtomicFile(new File(dir, name));
+            out = file.startWrite();
+            out.write(root.toString().getBytes(StandardCharsets.UTF_8));
+            file.finishWrite(out);
+        } catch (Exception e) {
+            if (out != null) {
+                try { out.close(); } catch (Exception ignored) {}
+            }
+            Log.w(TAG, "Cannot write watch cache", e);
+        }
+    }
+}

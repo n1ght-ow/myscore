@@ -130,6 +130,7 @@ implements ScoreAdapter.Host {
     private final Map<String, TextView> railCounts = new LinkedHashMap<String, TextView>();
     private final Map<String, View> railDots = new LinkedHashMap<String, View>();
     private DetailRepository detailRepository;
+    private WatchRepository watches;
     private Match padSelected;
     private String padSelectedId = "";
     private MatchDetail padDetail;
@@ -150,6 +151,7 @@ implements ScoreAdapter.Host {
         this.repository = new Repository((Context)this);
         this.calendarSync = new CalendarSync((Context)this);
         this.detailRepository = new DetailRepository((Context)this);
+        this.watches = WatchRepository.get(this);
         this.pad = Ui.isPad((Context)this);
         if (state != null) {
             this.tab = state.getInt("tab");
@@ -668,6 +670,7 @@ implements ScoreAdapter.Host {
         if (this.pad) {
             if (this.padAdapter != null) {
                 List<Match> all = this.snapshot.matches();
+                this.watches.prepare(all, this::onWatchChanged);
                 this.padAdapter.updateRows(this.buildScoreRows(all));
                 this.ensurePadSelection(all);
                 this.padAdapter.setSelected(this.padSelectedId);
@@ -679,6 +682,7 @@ implements ScoreAdapter.Host {
             return;
         }
         List<Match> all = this.snapshot.matches();
+        this.watches.prepare(all, this::onWatchChanged);
         String signature = this.scoreSignature(all);
         if (signature.equals(this.renderedScores)) {
             return;
@@ -695,6 +699,38 @@ implements ScoreAdapter.Host {
         }
     }
 
+    private void onWatchChanged() {
+        if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
+        this.renderedScores = "";
+        if (this.pad) {
+            if (this.padAdapter != null) {
+                this.padAdapter.updateRows(this.buildScoreRows(this.snapshot.matches()));
+                this.padAdapter.setSelected(this.padSelectedId);
+            }
+            if (this.padSelected != null) {
+                this.watches.resolve(this.padSelected, this::onPadWatchChanged);
+            }
+            this.rebuildPadFocus(true);
+            return;
+        }
+        if (this.scoreAdapter != null) {
+            this.scoreAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void onPadWatchChanged() {
+        if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
+        this.rebuildPadFocus(true);
+        if (this.padAdapter != null) {
+            this.padAdapter.updateRows(this.buildScoreRows(this.snapshot.matches()));
+            this.padAdapter.setSelected(this.padSelectedId);
+        }
+    }
+
     private String scoreSignature(List<Match> all) {
         long now = System.currentTimeMillis();
         StringBuilder key = new StringBuilder(256);
@@ -704,6 +740,8 @@ implements ScoreAdapter.Host {
         }
         for (Match m : all) {
             key.append('|').append(m.id).append(',').append(m.league).append(',').append(m.group).append(',').append(m.home).append(',').append(m.away).append(',').append(m.homeScore).append(',').append(m.awayScore).append(',').append(m.state).append(',').append(m.status).append(',').append(m.start).append(',').append(m.timeConfirmed).append(',').append(m.title).append(',').append(m.homeId).append(',').append(m.awayId).append(',').append(m.homeLogo).append(',').append(m.awayLogo).append(',').append(this.subscribed.contains(m.id)).append(',').append(m.live() && now - m.updated > 120000L).append(',').append(m.source).append(',').append(m.updated / 60000L);
+            WatchLinks.Link watch = this.watches.link(m);
+            key.append(',').append(watch == null ? "" : watch.url).append(',').append(watch == null ? "" : watch.title);
             for (String result : m.results) {
                 key.append(',').append(result);
             }
@@ -872,6 +910,25 @@ implements ScoreAdapter.Host {
     @Override
     public void openMatch(Match match) {
         this.matchDetail(match);
+    }
+
+    @Override
+    public void openWatch(Match match) {
+        WatchLinks.Link link = this.watches.link(match);
+        if (link == null) {
+            return;
+        }
+        try {
+            this.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link.url)));
+        }
+        catch (RuntimeException e) {
+            this.message("无法打开直播", "手机没有可用的浏览器。");
+        }
+    }
+
+    @Override
+    public WatchLinks.Link watchLink(Match match) {
+        return this.watches.link(match);
     }
 
     @Override
@@ -1360,6 +1417,7 @@ implements ScoreAdapter.Host {
             return;
         }
         List<Match> all = this.snapshot.matches();
+        this.watches.prepare(all, this::onWatchChanged);
         this.padAdapter.updateRows(this.buildScoreRows(all));
         this.ensurePadSelection(all);
         this.padAdapter.setSelected(this.padSelectedId);
@@ -1550,6 +1608,16 @@ implements ScoreAdapter.Host {
             }
 
             @Override
+            public void openWatch(Match match) {
+                MainActivity.this.openWatch(match);
+            }
+
+            @Override
+            public WatchLinks.Link watchLink(Match match) {
+                return MainActivity.this.watches.link(match);
+            }
+
+            @Override
             public boolean isSubscribed(String id) {
                 return MainActivity.this.subscribed.contains(id);
             }
@@ -1601,6 +1669,7 @@ implements ScoreAdapter.Host {
         }
         this.rebuildPadFocus(false);
         this.loadPadDetail(match, false);
+        this.watches.resolve(match, this::onPadWatchChanged);
     }
 
     private void ensurePadSelection(List<Match> all) {
@@ -1660,6 +1729,7 @@ implements ScoreAdapter.Host {
         if ((this.padDetail == null || staleLive) && !this.padFocusBusy) {
             this.loadPadDetail(next, false);
         }
+        this.watches.resolve(next, this::onPadWatchChanged);
     }
 
     private void loadPadDetail(Match match, boolean force) {
@@ -1753,6 +1823,7 @@ implements ScoreAdapter.Host {
             .append(',').append(m.home).append(',').append(m.away).append(',').append(m.title).append(',').append(m.url)
             .append(',').append(m.homeLogo).append(',').append(m.awayLogo)
             .append(',').append(this.subscribed.contains(m.id)).append(',').append(canSubscribe);
+        key.append('|').append(this.watches.signature(m));
         key.append('|').append(this.padError);
         MatchDetail detail = this.padDetail;
         if (detail == null) {
@@ -1954,7 +2025,16 @@ implements ScoreAdapter.Host {
         }
         this.ui.gap(card, 20);
         card.addView(this.ui.divider());
-        this.ui.gap(card, 16);
+        WatchLinks.Link watch = this.watches.link(m);
+        if (watch != null) {
+            this.ui.gap(card, 6);
+            Ui.WatchRow row = this.ui.watchRow();
+            row.bind(watch, m.live(), () -> this.openWatch(m));
+            card.addView((View)row);
+            this.ui.gap(card, 10);
+        } else {
+            this.ui.gap(card, 16);
+        }
         LinearLayout actions = this.ui.row();
         TextView open = this.ui.button("打开比赛中心", true, () -> this.matchDetail(m));
         actions.addView((View)open, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.3f));

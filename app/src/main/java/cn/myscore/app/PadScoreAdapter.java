@@ -23,6 +23,8 @@ final class PadScoreAdapter extends BaseAdapter {
         void openMatch(Match match);
         void openTeam(Match match,boolean home);
         void toggleSubscription(Match match);
+        void openWatch(Match match);
+        WatchLinks.Link watchLink(Match match);
         boolean isSubscribed(String id);
     }
     private final Ui ui;
@@ -147,6 +149,7 @@ final class PadScoreAdapter extends BaseAdapter {
         final TextView time,state,league,home,away,homeScore,awayScore,provenance;
         final Logos.Crest homeCrest,awayCrest;
         final FrameLayout homeSlot,awaySlot,calendar;
+        final Ui.WatchPill watch;
         final Ui.Icon calendarIcon;
         Match match;
 
@@ -164,6 +167,9 @@ final class PadScoreAdapter extends BaseAdapter {
             selectedMark.setVisibility(View.INVISIBLE);
             meta.addView(selectedMark,new LinearLayout.LayoutParams(ui.dp(18),ui.dp(18)));
             league=ui.text("",11,ui.muted,true);meta.addView(league,new LinearLayout.LayoutParams(0,-2,1));
+            watch=ui.watchPill(40);
+            LinearLayout.LayoutParams watchParams=new LinearLayout.LayoutParams(-2,ui.dp(40));watchParams.setMarginStart(ui.dp(4));
+            meta.addView(watch,watchParams);watch.setVisibility(View.GONE);
             calendar=new FrameLayout(ui.c);
             calendarIcon=new Ui.Icon(ui.c,"calendar-add",ui.muted);
             calendar.addView(calendarIcon,new FrameLayout.LayoutParams(ui.dp(18),ui.dp(18),Gravity.CENTER));
@@ -210,6 +216,8 @@ final class PadScoreAdapter extends BaseAdapter {
             selected(card,active);
             selectedMark.setVisibility(active?View.VISIBLE:View.INVISIBLE);
             bindTeam(homeSlot,value,true);bindTeam(awaySlot,value,false);
+            WatchLinks.Link link=host.watchLink(value);
+            watch.bind(link,value.live(),()->host.openWatch(value));
             bindCalendar(value,active);
             card.setContentDescription(value.displayTitle()+"，"+state.getText()+"，"+provenance.getText()+(active?"，已选中":""));
         }

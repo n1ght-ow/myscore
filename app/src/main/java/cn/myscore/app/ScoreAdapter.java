@@ -20,6 +20,8 @@ final class ScoreAdapter extends BaseAdapter {
         void openMatch(Match match);
         void openTeam(Match match,boolean home);
         void toggleSubscription(Match match);
+        void openWatch(Match match);
+        WatchLinks.Link watchLink(Match match);
         void retryScores();
         void showSourceStatus();
         boolean isSubscribed(String id);
@@ -139,6 +141,7 @@ final class ScoreAdapter extends BaseAdapter {
         final Ui.MatchTime foot;
         final Logos.Crest homeCrest,awayCrest;
         final FrameLayout homeSlot,awaySlot,sub;
+        final Ui.WatchPill watch;
         final Ui.Icon subIcon;
         Match match;
 
@@ -172,6 +175,9 @@ final class ScoreAdapter extends BaseAdapter {
 
             LinearLayout footRow=ui.row();
             foot=ui.new MatchTime();footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
+            watch=ui.watchPill(48);
+            LinearLayout.LayoutParams watchParams=new LinearLayout.LayoutParams(-2,ui.dp(48));watchParams.setMarginStart(ui.dp(4));
+            footRow.addView(watch,watchParams);watch.setVisibility(View.GONE);
             sub=new FrameLayout(ui.c);
             subIcon=new Ui.Icon(ui.c,"calendar-add",ui.primary);
             sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
@@ -200,6 +206,8 @@ final class ScoreAdapter extends BaseAdapter {
             Logos.bind(awayCrest,m.awayLogo,m.away);
             teamSlot(homeSlot,m.homeId,m.home,true,m);
             teamSlot(awaySlot,m.awayId,m.away,false,m);
+            WatchLinks.Link link=host.watchLink(m);
+            watch.bind(link,m.live(),()->host.openWatch(m));
             subscription(subIcon,m,sub);
         }
     }

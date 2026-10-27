@@ -76,6 +76,8 @@ final class StabilityChecks {
             public void openMatch(Match value){}
             public void openTeam(Match value,boolean home){}
             public void toggleSubscription(Match value){tapped[0]=value;}
+            public void openWatch(Match value){}
+            public WatchLinks.Link watchLink(Match value){return null;}
             public void retryScores(){}
             public void showSourceStatus(){}
             public boolean isSubscribed(String id){return false;}

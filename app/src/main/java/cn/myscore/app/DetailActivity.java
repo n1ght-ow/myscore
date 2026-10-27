@@ -64,6 +64,8 @@ extends Activity {
     private Match match;
     private MatchDetail detail;
     private DetailRepository repository;
+    private WatchRepository watches;
+    private Ui.WatchRow headerWatch;
     private LinearLayout root;
     private LinearLayout body;
     private LinearLayout content;
@@ -148,6 +150,7 @@ extends Activity {
             this.tab = "overview";
         }
         this.repository = new DetailRepository((Context)this);
+        this.watches = WatchRepository.get(this);
         this.getWindow().setStatusBarColor(this.ui.bg);
         this.getWindow().setNavigationBarColor(this.ui.bg);
         this.getWindow().setBackgroundDrawable((Drawable)new ColorDrawable(this.ui.bg));
@@ -177,6 +180,7 @@ extends Activity {
         if (this.repository != null && !this.isFinishing()) {
             this.render(true);
             this.load(false);
+            this.resolveWatch();
         }
     }
 
@@ -272,6 +276,7 @@ extends Activity {
                 }
                 if (this.active) {
                     this.render(true);
+                    this.resolveWatch();
                     if (this.pendingForce) {
                         this.load(true);
                         return;
@@ -601,6 +606,15 @@ extends Activity {
             detail.setLineSpacing((float)this.ui.dp(2.0f), 1.0f);
             card.addView((View)detail);
         }
+        WatchLinks.Link watch = this.watches.link(this.match);
+        if (watch != null) {
+            this.ui.gap(card, 8);
+            card.addView(this.ui.divider());
+            this.ui.gap(card, 2);
+            Ui.WatchRow row = this.ui.watchRow();
+            row.bind(watch, this.match.live(), this::openWatch);
+            card.addView((View)row);
+        }
         return card;
     }
 
@@ -917,6 +931,35 @@ extends Activity {
         }
     }
 
+    private void openWatch() {
+        WatchLinks.Link link = this.watches.link(this.match);
+        if (link == null) {
+            return;
+        }
+        try {
+            this.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link.url)));
+        }
+        catch (RuntimeException e) {
+            Sheet.message(this, "无法打开直播", "手机没有可用的浏览器。");
+        }
+    }
+
+    private void resolveWatch() {
+        if (this.watches == null || this.match == null) {
+            return;
+        }
+        this.watches.resolve(this.match, () -> {
+            if (this.isFinishing() || this.isDestroyed()) {
+                return;
+            }
+            if (this.pad) {
+                this.render(true);
+            } else if (this.headerWatch != null) {
+                this.headerWatch.bind(this.watches.link(this.match), this.match.live(), this::openWatch);
+            }
+        });
+    }
+
     private void headingInto(LinearLayout into, String title) {
         into.addView((View)this.ui.text(title, 15, this.ui.text, true));
         this.ui.gap(into, 10);
@@ -1046,6 +1089,15 @@ extends Activity {
             card.addView((View)row);
             this.headerHome = (TextView)homeSide.getChildAt(2);
             this.headerAway = (TextView)awaySide.getChildAt(2);
+        }
+        WatchLinks.Link watch = this.watches.link(this.match);
+        if (watch != null) {
+            this.ui.gap(card, 10);
+            card.addView(this.ui.divider());
+            this.ui.gap(card, 2);
+            this.headerWatch = this.ui.watchRow();
+            this.headerWatch.bind(watch, this.match.live(), this::openWatch);
+            card.addView((View)this.headerWatch);
         }
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
         cp.setMargins(this.ui.dp(16.0f), this.ui.dp(16.0f), this.ui.dp(16.0f), this.ui.dp(4.0f));

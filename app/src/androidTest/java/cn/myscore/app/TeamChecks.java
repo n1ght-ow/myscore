@@ -137,6 +137,8 @@ final class TeamChecks {
                 public void openMatch(Match m){}
                 public void openTeam(Match m,boolean isHome){opened[0]=m;home[0]=isHome;}
                 public void toggleSubscription(Match m){}
+                public void openWatch(Match m){}
+                public WatchLinks.Link watchLink(Match m){return null;}
                 public void retryScores(){}
                 public void showSourceStatus(){}
                 public boolean isSubscribed(String id){return false;}

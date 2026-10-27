@@ -1,3 +1,62 @@
+# MyScore 4.3.0 动态直播目的地（本地构建）
+
+日期：2026-10-27（北京时间）。版本 `4.3.0` / versionCode `38`。本轮只改本地工作区，未提交、推送或发布。
+
+## 本次变更
+
+- 新增 `WatchRepository`：静态入口立即可用，后台解析哔哩哔哩全场录像和咪咕单场 pID；失败只回到已确认的安全入口。
+- 新增 `BilibiliVods`：读取官方账号 `50329118` 的「2026全球总决赛」系列（series_id `5182712`），按标题中的北京日期和双方队代码无序匹配；短于 15 分钟的视频不参与。已结束 Worlds 比赛不再指向虎牙直播间。
+- 新增 `MiguTeams`、`MiguMatches`：把 ESPN 英文队名映射到咪咕中文短名，调用咪咕公开搜索，只在双方队名和开赛时间（±20 分钟）同时匹配时复制该场 `widgetId`，生成 `https://www.miguvideo.com/p/live/<pID>`。
+- `Ui.WatchRow` 二次设计：由 40dp 大圆 + 两行平台说明 + 单个 chevron，改为 32dp 小圆播放徽标（18dp 三角）、动作标题（观看本场回放 / 观看全场录像）、11sp 比赛上下文、右侧 26dp 平台胶囊（11sp：咪咕 / B站 / 斗鱼 / 虎牙）+ 14dp chevron；整行最低 52dp，与列表胶囊和黑白赛程册的 tonal 语言统一。
+- `Ui.WatchRow` 和 `Ui.WatchPill` 改为可绑定；手机详情原地更新，平板阅读页把 watch signature 加入缓存键，只重绘一次。列表胶囊短名增加「B站」。
+- F1、NFL、欧冠、Carabao Cup、FA Cup 仍不显示入口；CS2 保持斗鱼 6657。
+
+## 已验证
+
+- 哔哩哔哩公开系列接口实测返回 **29 个全场录像**，无需登录 / WBI / Cookie；10 月 27 日四场标题与 App 队代码完全对应：CFO vs T1、BLG vs KC、LOS vs TSW、TLAW vs AL。应用实际启动后，四个已结束 LOL 卡片显示「B站」，详情显示「观看全场录像 / 2026全球总决赛 · 10月27日 / B站」。
+- 咪咕公开搜索实测：骑士 vs 森林狼 → pID `120000588291`，黄蜂 vs 奇才 → `120000588292`，热火 vs 独行侠 → `120000588294`；英超曼联 vs 阿斯顿维拉 → `120000584185`。单场页 `p/live/<pID>` 实际打开后显示对应比赛。App 内 NBA 黄蜂 vs 奇才详情显示「观看本场回放 / NBA · 黄蜂 vs 奇才 / 咪咕」。
+- `:app:testDebugUnitTest`：**170 项，0 failures / 0 errors**；新增 9 项 B 站 / 咪咕匹配、动态入口和别名覆盖测试。
+- `:app:lintDebug`：**0 errors / 26 warnings**，`abortOnError` 通过。
+- `:app:assembleDebug`、`:app:assembleDebugAndroidTest`：通过。
+- 模拟器 Android 15 / API 35：3048 × 2032 / 320 dpi 平板与临时 1080 × 2400 / 420 dpi 手机，实际安装、启动、截图；4.3.0 动态状态在浅色主题实测，深色沿用 4.2.0 同一组件的既有深色配色。
+- 截图：`artifacts/watch-links/phone-home-4.3.png`、`phone-lol-vod-4.3.png`、`phone-nba-migu-4.3.png`、`pad-home-4.3.png`、`pad-nba-migu-4.3.png`。
+
+## 边界
+
+- 哔哩哔哩与咪咕都是公开网页接口，不是签约 API；搜索索引、系列 ID、风控或限流变化时可能回到专区 / 待发布，不影响比分与详情。
+- 咪咕单场只保证“URL 指向对应比赛”；实际直播 / 完整回放权利仍由咪咕会员、版权和地区控制。已结束单场页可能只展示精彩集锦。
+- 英超 / NBA 列表胶囊仍打开稳定的联赛专区；选中平板场次或打开手机详情后才解析并升级到单场页，避免为每张可见卡片发搜索请求。
+- 未在 Redmi K80 Pro / HyperOS、Xiaomi Pad 6S Pro 真机或真实运营商网络验收；未做 B 站 / 咪咕长时间播放、登录态、限流恢复和 144Hz 验证。
+- APK：`app/build/outputs/apk/debug/app-debug.apk`，**1,669,305 字节**，SHA-256 `5ec4677920134599db48715d9ff93b239eee1d45db4d740bab7f184981c6f4fe`；`aapt` 确认包名 `cn.myscore.app`、版本 `4.3.0 / 38`、minSdk 28 / targetSdk 35。
+
+# MyScore 4.2.0 直播入口（本地构建）
+
+日期：2026-10-27（北京时间）。版本 `4.2.0` / versionCode `37`。本轮只改本地工作区，未提交、推送或发布。
+
+## 本次变更
+
+- 新增 `WatchLinks`：英超 → 咪咕视频英超专区，NBA → 咪咕视频 NBA 专区，CS2 → 斗鱼 6657，LOL Worlds → 虎牙 149361；F1、NFL、欧冠、Carabao Cup、FA Cup 不生成入口。
+- 手机与平板赛程卡在时间 / 来源行增加 `Ui.WatchPill`：28dp tonal 胶囊、11sp 两字平台名、原生播放三角，手机 48dp / 平板 40dp 触控区，排在日历订阅之前；无入口的比赛直接隐藏。
+- 手机详情比分牌底部、平板阅读页比分牌与平板详情左栏比分卡底部增加 `Ui.WatchRow`：40dp tonal 圆形播放徽标、13sp 目的地、11sp 说明、16dp chevron，整行 56dp 可点击；进行中说明为绿色，未开赛 / 已结束保持辅助色。
+- 点击交给系统浏览器或已安装客户端，不内嵌播放器，不绕过会员、登录或地区限制。没有新增网络请求、权限或第三方依赖。
+
+## 已验证
+
+- `:app:testDebugUnitTest`：**161 项，0 failures / 0 errors**；新增 3 项 `WatchLinksTest`，覆盖四类入口、未配置赛事和短标签。
+- `:app:lintDebug`：**0 errors / 26 warnings**，`abortOnError` 通过。
+- `:app:assembleDebug`、`:app:assembleDebugAndroidTest`：通过；三个测试中的 `ScoreAdapter.Host` 匿名实现已补 `openWatch`。
+- 模拟器 Android 15 / API 35：3048 × 2032 / 320 dpi 平板，以及临时 1080 × 2400 / 420 dpi 手机。深色与浅色均实际安装、启动、截图。
+- 手机：NBA 列表显示「咪咕」胶囊，比分牌内显示「咪咕视频 · NBA 专区 / 直播、回放与赛程」；NFL 卡片无入口。平板：CS2 列表显示「斗鱼」、LOL 列表显示「虎牙」，阅读页和详情左栏显示完整观看行；NFL 无入口。
+- 点击平板的「斗鱼」胶囊后系统 Chrome 被启动，确认外部 Intent 链路可用；其余入口由单元测试校验固定地址。
+- 截图：`artifacts/watch-links/`（手机深浅色列表 / NBA 详情、平板 CS2 / NBA / NFL）。
+
+## 边界
+
+- 咪咕入口落到对应联赛专区，不保证直接进入某一场直播。单场直链依赖咪咕内部 pID，跨来源队名与开赛时间映射尚未建立，因此没有在客户端硬编码可能失效的单场地址。
+- 未在 Redmi K80 Pro / HyperOS、Xiaomi Pad 6S Pro 真机或真实运营商网络验收；未做 144Hz、长时间播放跳转或直播应用已安装时的深链行为验证。
+- 未运行全量 instrumentation；平板由真实窗口截图与 `UiAutomator` 节点检查验收，手机由同包回退窗口截图验收。
+- APK：`app/build/outputs/apk/debug/app-debug.apk`，**1,610,173 字节**，SHA-256 `350da72ae33ade1431c9882365dbd8296d7ae63879703f41dac70fc8401ad73e`；`aapt` 确认包名 `cn.myscore.app`、版本 `4.2.0 / 37`、minSdk 28 / targetSdk 35。
+
 # MyScore 4.1.1 稳定性、流畅性与运行内存（本地构建）
 
 日期：2026-10-27（北京时间）。版本 `4.1.1` / versionCode `36`，发布标签 `v4.1.1`。发布入口：[MyScore 4.1.1](https://github.com/n1ght-ow/myscore/releases/tag/v4.1.1)。

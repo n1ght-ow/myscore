@@ -837,3 +837,31 @@
 - 已查看最终原生小屏深色 NBA 标签、浅色列表和 2 倍字号截图。NBA 截图在 `artifacts/nba-roster/nba-roster-review/nba-phone375/`、`nba-landscape/`、`nba-largefont/`；最终足球截图在 `artifacts/football-lineup/final-nba-bundle/`。所有截图均为安装后的模拟器界面，没有伪造比赛或替换评分。
 - 合集安装包：`artifacts/MyScore-ui-preview.apk`，1,354,805 字节，SHA-256 `a5af2fea048418d994a4abd70aa29e644dc9a6f62fb9e7bd7bf5751e0dde6127`，校验文件 `artifacts/SHA256SUMS-ui-preview.txt`。仍为 3.1.0 / 27 与既有签名，可手动覆盖安装；不作为正式新版本发布。
 - 边界：本次实际窗口为 API 35 Android 模拟器，未在 Redmi / HyperOS 真机及运营商网络验收，也未做本轮性能基准。Mobile Dev Android 工具可连接、安装、启动和截图，侧栏仍受 Apple Silicon / Xcode 平台限制。
+
+## 4.1.0 平板工作台（Xiaomi Pad 6S Pro 12.4，2026-10-27 发布）
+
+### 屏幕依据
+
+- 小米官网规格：12.4 英寸 3K LCD，3048 × 2032，3:2，294 ppi，144Hz AdaptiveSync，Android U / HyperOS（https://www.mi.com/global/product/xiaomi-pad-6s-pro-124/specs/）。
+- 按 320 dpi 计算：横屏 1524 × 1016 dp，竖屏 1016 × 1524 dp。模拟器 AVD `MyScore_Pad_6SPro` 使用 `pixel_tablet` 硬件档，覆盖 `hw.lcd.width=3048`、`hw.lcd.height=2032`、`hw.lcd.density=320`、横屏启动、4 GB RAM；不使用手机 AVD 的缩放或拉伸模拟平板。
+
+### 实现范围
+
+- 首页改为 128dp 导航轨 + 赛程轨 + 阅读页三栏主从。导航轨再次分层：品牌横排；「比赛 / 设置」为页面导航，只有当前页使用填色胶囊；「赛事筛选」为二级筛选，选中项用 2dp 冷绿竖条 + 正文色加粗，与页面导航明确区分；设置页该组标题变为「跳到赛事」且不显示筛选选中态。切换赛事、页面或日期时重建整条导航轨，绿条与实际列表同步。赛事计数在全部来源已知时才显示数字，单赛事筛选时其他赛事为「—」；阅读页显示 96dp 队徽、64sp 比分、数据速览、最新进程、比赛信息、来源与「同日其他比赛」。
+- 赛程卡选中态从通栏 2dp 绿色下划线改为 tonal 表面 + 13dp 中性勾选图标，勾选表示当前阅读对象，与右侧日历订阅图标分离；深浅主题下均不再出现绿色横条。
+- 设置页的来源状态使用独立的全部来源快照（`repository.cached(day, day, "全部")`），不再随比赛页的 NBA / 足球筛选缩成一项；加载完成前显示「正在读取来源状态…」，不把缺失来源写成 0。
+- 详情页改为 404dp 固定资料栏 + 标签内容页；宽屏总览 / 统计 / 进程双栏，足球阵容球场与替补并排，NBA / CS2 两队选手横栏并排，LOL 总览不再重复比赛信息。
+- 球队页并排「接下来 / 已结束」两列；设置页顶部改为同一张表面内的三段式状态面板（手机日历 / 已订阅比赛 / 数据来源，整段可点），下方双栏；平板弹层改为 680dp 居中对话框；竖屏 1016dp 内容自动堆叠，首页比分牌改为上下两队行式（56dp 队徽 + 队名 + 右对齐比分），避免长队名和三位数比分互相挤压；手机尺寸继续使用原单列布局。
+- 旋转保留选择：在竖屏选中 Charlotte Hornets，再转横屏，阅读页仍为 Charlotte Hornets，不会被默认赛事替换；修复了空列表阶段 `ensurePadSelection` 覆盖已保存 `pad_selected` 的问题。实际验证从竖屏选中 Charlotte 后转横屏仍为 Charlotte。
+- 手机回退实测：将同一模拟器临时改为 1080 × 2400 / 420 dpi（411dp），首页仍为原单列赛程册，未出现平板三栏。
+
+### 构建与检查
+
+- `:app:testDebugUnitTest`：155 项，0 失败。
+- `:app:lintDebug`：0 错误 / 26 警告，`abortOnError` 通过。
+- `:app:assembleDebug`、`:app:assembleDebugAndroidTest`：通过；未新增第三方依赖。
+- 未执行本轮全量 instrumentation 断言；平板结构由真实窗口截图与 `UiAutomator` 节点树检查确认，手机布局由同包回退窗口截图确认。
+- 深浅主题、横屏 1524 × 1016 dp、竖屏 1016 × 1524 dp、平板系统日期弹层与手机 411dp 窗口均已实际截图；截图保存在 `artifacts/pad-redesign/`（最终图见 `final/`）。
+- 已知边界：未在 Pad 6S Pro 真机 / HyperOS 上验收，未做 144Hz 帧率或大屏性能基准；详情页在赛前且来源尚未发布阵容 / 统计时会保留如实空状态，不生成占位比分或推算数据。
+- 已按用户明确要求提交、推送并创建 `v4.1.0` Release。
+- 最终 debug APK：`app/build/outputs/apk/debug/app-debug.apk`，1,588,289 字节，SHA-256 `8A8D3A940161C8CC8497713FED1128D32515DD0445D3152017AFD69678EAF2E5`；版本 `4.1.0` / versionCode `35`，安装到 3048 × 2032 / 320 dpi 模拟器后实际启动并截图。发布资产为 `MyScore-4.1.0.apk` 和 `SHA256SUMS-4.1.0.txt`，发布入口：[MyScore 4.1.0](https://github.com/n1ght-ow/myscore/releases/tag/v4.1.0)。

@@ -1,219 +1,383 @@
+/** NBA players and CS2 players share two team panels, side by side on wide tablets. */
+
 package cn.myscore.app;
 
 import android.app.Activity;
-import android.view.*;
-import android.widget.*;
-import java.util.*;
+import android.graphics.drawable.Drawable;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import cn.myscore.app.DetailFormat;
+import cn.myscore.app.DetailParsers;
+import cn.myscore.app.DetailRows;
+import cn.myscore.app.DetailTableView;
+import cn.myscore.app.Logos;
+import cn.myscore.app.MatchDetail;
+import cn.myscore.app.Sheet;
+import cn.myscore.app.Ui;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
-/**
- * NBA players and CS2 players share one presentation: two stacked team panels, no filters.
- * NBA injury reports stay at the foot of the team they belong to. CS2 keeps per-map tables
- * in the map tab instead of asking the reader to switch the whole page.
- */
 final class TeamPanelsView {
-    record Sort(String column,boolean descending){}
-    private static final String INJURY="伤停";
-    private final Ui ui;private final MatchDetail detail;private final LinearLayout body;
-    TeamPanelsView(Ui ui,MatchDetail detail,LinearLayout body){this.ui=ui;this.detail=detail;this.body=body;}
+    private static final String INJURY = "伤停";
+    private final Ui ui;
+    private final MatchDetail detail;
+    private final LinearLayout body;
 
-    /** Full player page: heading, one hint, then the home and away panels. */
-    void show(String sort,boolean descending,Consumer<Sort> changed,int scrollX,IntConsumer savedScroll){
-        boolean nba=nba();String category=scope(nba);
-        int players=countRows(teamTables(category,detail.match.homeId))+countRows(teamTables(category,detail.match.awayId));boolean anyInjuries=nba&&!injuryTables(null).isEmpty();
-        if(players==0&&!anyInjuries){
-            body.addView(ui.text("本场数据尚未提供",18,ui.text,true));ui.gap(body,10);
-            body.addView(ui.text("来源更新后会显示本场真实数据。",13,ui.muted,false));return;
+    TeamPanelsView(Ui ui, MatchDetail detail, LinearLayout body) {
+        this.ui = ui;
+        this.detail = detail;
+        this.body = body;
+    }
+
+    void show(String sort, boolean descending, Consumer<Sort> changed, int scrollX, IntConsumer savedScroll) {
+        boolean anyInjuries;
+        boolean nba = this.nba();
+        String category = this.scope(nba);
+        int players = this.countRows(this.teamTables(category, this.detail.match.homeId)) + this.countRows(this.teamTables(category, this.detail.match.awayId));
+        boolean bl = anyInjuries = nba && !this.injuryTables(null).isEmpty();
+        if (players == 0 && !anyInjuries) {
+            this.body.addView((View)this.ui.text("本场数据尚未提供", 18, this.ui.text, true));
+            this.ui.gap(this.body, 10);
+            this.body.addView((View)this.ui.text("来源更新后会显示本场真实数据。", 13, this.ui.muted, false));
+            return;
         }
-        String title=nba?"球员数据":category.equals("全场")?"选手总数据":category+" 选手数据";
-        body.addView(ui.text(title,16,ui.text,true));ui.gap(body,4);
-        TextView hint=ui.text(players>0?"点数值列排序 · 点姓名查看详情":"伤停名单按来源发布",11,ui.muted,false);
-        body.addView(hint);ui.gap(body,12);
-        List<HorizontalScrollView> scrollers=teams(category,nba,sort,descending,changed,scrollX,Map.of(),Map.of());
-        bind(scrollers,savedScroll);
-        hint.post(()->{
-            boolean scroll=!scrollers.isEmpty()&&(scrollers.get(0).canScrollHorizontally(1)||scrollers.get(0).canScrollHorizontally(-1));
-            hint.setText(players>0?"点数值列排序 · "+(scroll?"横向滑动同步查看两队 · ":"")+"点姓名查看详情":"伤停名单按来源发布");
+        String title = nba ? "球员数据" : (category.equals("全场") ? "选手总数据" : category + " 选手数据");
+        this.body.addView((View)this.ui.text(title, 16, this.ui.text, true));
+        this.ui.gap(this.body, 4);
+        TextView hint = this.ui.text(players > 0 ? "点数值列排序 · 点姓名查看详情" : "伤停名单按来源发布", 11, this.ui.muted, false);
+        this.body.addView((View)hint);
+        this.ui.gap(this.body, 12);
+        List<HorizontalScrollView> scrollers = this.teams(category, nba, sort, descending, changed, scrollX, Map.of(), Map.of());
+        this.bind(scrollers, savedScroll);
+        hint.post(() -> {
+            boolean scroll;
+            scroll = !scrollers.isEmpty() && (((HorizontalScrollView)scrollers.get(0)).canScrollHorizontally(1) || ((HorizontalScrollView)scrollers.get(0)).canScrollHorizontally(-1));
+            hint.setText((CharSequence)(players > 0 ? "点数值列排序 · " + (scroll ? "横向滑动同步查看两队 · " : "") + "点姓名查看详情" : "伤停名单按来源发布"));
         });
     }
 
-    /** One scope of two team panels, used by the CS2 map tab for each finished map. */
-    void scope(String category,String sort,boolean descending,Consumer<Sort> changed,int scrollX,IntConsumer savedScroll){
-        scope(category,sort,descending,changed,scrollX,savedScroll,Map.of(),Map.of());
+    void scope(String category, String sort, boolean descending, Consumer<Sort> changed, int scrollX, IntConsumer savedScroll) {
+        this.scope(category, sort, descending, changed, scrollX, savedScroll, Map.of(), Map.of());
     }
 
-    /** Map score bands stay inside each team panel; each label is shown once. */
-    void scope(String category,String sort,boolean descending,Consumer<Sort> changed,int scrollX,IntConsumer savedScroll,Map<String,String> homeScore,Map<String,String> awayScore){
-        bind(teams(category,false,sort,descending,changed,scrollX,homeScore,awayScore),savedScroll);
+    void scope(String category, String sort, boolean descending, Consumer<Sort> changed, int scrollX, IntConsumer savedScroll, Map<String, String> homeScore, Map<String, String> awayScore) {
+        this.bind(this.teams(category, false, sort, descending, changed, scrollX, homeScore, awayScore), savedScroll);
     }
 
-    private List<HorizontalScrollView> teams(String category,boolean injuries,String sort,boolean descending,Consumer<Sort> changed,int scrollX,Map<String,String> homeScore,Map<String,String> awayScore){
-        List<MatchDetail.Table> home=teamTables(category,detail.match.homeId),away=teamTables(category,detail.match.awayId);
-        List<String> columns=!home.isEmpty()?home.get(0).columns:!away.isEmpty()?away.get(0).columns:List.of();
-        String effective=effectiveSort(columns,sort);
-        boolean anyInjuries=injuries&&!injuryTables(null).isEmpty();
-        List<HorizontalScrollView> scrollers=new ArrayList<>();
-        scrollers.addAll(team(detail.match.homeId,category,effective,descending,changed,scrollX,anyInjuries,homeScore));
-        ui.gap(body,28);
-        scrollers.addAll(team(detail.match.awayId,category,effective,descending,changed,scrollX,anyInjuries,awayScore));
+    private List<HorizontalScrollView> teams(String category, boolean injuries, String sort, boolean descending, Consumer<Sort> changed, int scrollX, Map<String, String> homeScore, Map<String, String> awayScore) {
+        List<MatchDetail.Table> home = this.teamTables(category, this.detail.match.homeId);
+        List<MatchDetail.Table> away = this.teamTables(category, this.detail.match.awayId);
+        List<String> columns = !home.isEmpty() ? home.get((int)0).columns : (!away.isEmpty() ? away.get((int)0).columns : List.of());
+        String effective = this.effectiveSort(columns, sort);
+        boolean anyInjuries = injuries && !this.injuryTables(null).isEmpty();
+        ArrayList<HorizontalScrollView> scrollers = new ArrayList<HorizontalScrollView>();
+        if (Ui.isPad(this.ui.c) && this.ui.c.getResources().getConfiguration().screenWidthDp >= 1280) {
+            LinearLayout columnsRow = this.ui.row();
+            columnsRow.setGravity(48);
+            LinearLayout left = this.ui.column();
+            LinearLayout right = this.ui.column();
+            columnsRow.addView((View)left, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            View gap = new View(this.ui.c);
+            columnsRow.addView(gap, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(28.0f), 1));
+            columnsRow.addView((View)right, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            this.body.addView((View)columnsRow);
+            scrollers.addAll(this.team(this.detail.match.homeId, category, effective, descending, changed, scrollX, anyInjuries, homeScore, left));
+            scrollers.addAll(this.team(this.detail.match.awayId, category, effective, descending, changed, scrollX, anyInjuries, awayScore, right));
+        } else {
+            scrollers.addAll(this.team(this.detail.match.homeId, category, effective, descending, changed, scrollX, anyInjuries, homeScore, this.body));
+            this.ui.gap(this.body, 28);
+            scrollers.addAll(this.team(this.detail.match.awayId, category, effective, descending, changed, scrollX, anyInjuries, awayScore, this.body));
+        }
         return scrollers;
     }
 
-    private List<HorizontalScrollView> team(String teamId,String category,String sort,boolean descending,Consumer<Sort> changed,int scrollX,boolean anyInjuries,Map<String,String> score){
-        List<MatchDetail.Table> tables=displayTables(teamTables(category,teamId));
-        List<DetailRows.Entry> rows=DetailRows.select(tables,category,teamId,sort,descending);
-        LinearLayout section=ui.column();section.setTag("team-panel");body.addView(section);
-        LinearLayout header=ui.row();header.setTag("team-panel-header");header.setPadding(ui.dp(4),0,ui.dp(4),0);
-        String name=teamName(teamId);
-        header.addView(Logos.view(ui,teamLogo(teamId),name,22),new LinearLayout.LayoutParams(ui.dp(22),ui.dp(22)));
-        TextView title=ui.text(name,14,ui.text,true);title.setPadding(ui.dp(8),0,0,0);
-        header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        header.addView(ui.text(rows.size()+" 人",11,ui.muted,false));
-        header.setContentDescription(name+"，"+rows.size()+" 人");
-        section.addView(header);ui.gap(section,8);
-        if(score!=null&&!score.isEmpty()){
-            LinearLayout band=ui.row();band.setTag("team-map-score");band.setPadding(ui.dp(4),ui.dp(6),ui.dp(4),ui.dp(6));
-            StringBuilder description=new StringBuilder(name);
-            for(Map.Entry<String,String> cell:score.entrySet()){
-                LinearLayout item=ui.column();item.setGravity(Gravity.CENTER_HORIZONTAL);
-                TextView label=ui.text(cell.getKey(),11,ui.muted,false);label.setGravity(Gravity.CENTER);
-                TextView value=ui.text(cell.getValue(),13,ui.text,true);value.setGravity(Gravity.CENTER);
-                if(cell.getKey().equals("总分"))value.setTag("team-map-score-total");
-                item.addView(label);item.addView(value);
-                band.addView(item,new LinearLayout.LayoutParams(0,-2,1));
+    private List<HorizontalScrollView> team(String teamId, String category, String sort, boolean descending, Consumer<Sort> changed, int scrollX, boolean anyInjuries, Map<String, String> score, LinearLayout host) {
+        List<MatchDetail.Table> tables = this.displayTables(this.teamTables(category, teamId));
+        List<DetailRows.Entry> rows = DetailRows.select(tables, category, teamId, sort, descending);
+        LinearLayout section = this.ui.column();
+        section.setTag((Object)"team-panel");
+        host.addView((View)section);
+        LinearLayout header = this.ui.row();
+        header.setTag((Object)"team-panel-header");
+        header.setPadding(this.ui.dp(4.0f), 0, this.ui.dp(4.0f), 0);
+        String name = this.teamName(teamId);
+        header.addView((View)Logos.view(this.ui, this.teamLogo(teamId), name, 22), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(22.0f), this.ui.dp(22.0f)));
+        TextView title = this.ui.text(name, 14, this.ui.text, true);
+        title.setPadding(this.ui.dp(8.0f), 0, 0, 0);
+        header.addView((View)title, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+        header.addView((View)this.ui.text(rows.size() + " 人", 11, this.ui.muted, false));
+        header.setContentDescription((CharSequence)(name + "，" + rows.size() + " 人"));
+        section.addView((View)header);
+        this.ui.gap(section, 8);
+        if (score != null && !score.isEmpty()) {
+            LinearLayout band = this.ui.row();
+            band.setTag((Object)"team-map-score");
+            band.setPadding(this.ui.dp(4.0f), this.ui.dp(6.0f), this.ui.dp(4.0f), this.ui.dp(6.0f));
+            StringBuilder description = new StringBuilder(name);
+            for (Map.Entry<String, String> cell : score.entrySet()) {
+                LinearLayout item = this.ui.column();
+                item.setGravity(1);
+                TextView label2 = this.ui.text(cell.getKey(), 11, this.ui.muted, false);
+                label2.setGravity(17);
+                TextView value = this.ui.text(cell.getValue(), 13, this.ui.text, true);
+                value.setGravity(17);
+                if (cell.getKey().equals("总分")) {
+                    value.setTag((Object)"team-map-score-total");
+                }
+                item.addView((View)label2);
+                item.addView((View)value);
+                band.addView((View)item, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
                 description.append("，").append(cell.getKey()).append(' ').append(cell.getValue());
             }
-            band.setContentDescription(description.toString());
-            section.addView(band);ui.gap(section,6);
+            band.setContentDescription((CharSequence)description.toString());
+            section.addView((View)band);
+            this.ui.gap(section, 6);
         }
-        List<HorizontalScrollView> scrollers=new ArrayList<>();
-        if(rows.isEmpty()){
-            section.addView(ui.text("来源未提供这支球队的数据。",13,ui.muted,false));
-        }else{
-            View table=new DetailTableView(ui,nba(),false,!nba()).build(tables.get(0).columns,rows,sort,descending,
-                changed==null?null:label->changed.accept(new Sort(label,label.equals(sort)?!descending:true)),null,scrollX);
-            table.setContentDescription(name+(nba()?" 球员数据":" 选手数据"));
-            section.addView(table,new LinearLayout.LayoutParams(-1,-2));
-            HorizontalScrollView scroller=table.findViewWithTag("detail-metrics-scroll");
-            if(scroller!=null)scrollers.add(scroller);
+        ArrayList<HorizontalScrollView> scrollers = new ArrayList<HorizontalScrollView>();
+        if (rows.isEmpty()) {
+            section.addView((View)this.ui.text("来源未提供这支球队的数据。", 13, this.ui.muted, false));
+        } else {
+            View table = new DetailTableView(this.ui, this.nba(), false, !this.nba(), this.panelWidthDp()).build(tables.get((int)0).columns, rows, sort, descending, changed == null ? null : label -> changed.accept(new Sort((String)label, label.equals(sort) ? !descending : true)), null, scrollX);
+            table.setContentDescription((CharSequence)(name + (this.nba() ? " 球员数据" : " 选手数据")));
+            section.addView(table, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
+            HorizontalScrollView scroller = (HorizontalScrollView)table.findViewWithTag((Object)"detail-metrics-scroll");
+            if (scroller != null) {
+                scrollers.add(scroller);
+            }
         }
-        if(anyInjuries){ui.gap(section,16);injuries(section,teamId);}
+        if (anyInjuries) {
+            this.ui.gap(section, 16);
+            this.injuries(section, teamId);
+        }
         return scrollers;
     }
 
-    /** The injury block is the last child of its team panel, never a separate filter page. */
-    private void injuries(LinearLayout section,String teamId){
-        List<MatchDetail.Table> tables=injuryTables(teamId);
-        List<DetailRows.Entry> entries=DetailRows.select(tables,INJURY,teamId,"",true);
-        LinearLayout caption=ui.row();caption.setTag("team-panel-injury-header");caption.setPadding(ui.dp(4),0,ui.dp(4),0);
-        caption.addView(ui.text(INJURY,13,ui.text,true),new LinearLayout.LayoutParams(0,-2,1));
-        if(!entries.isEmpty())caption.addView(ui.text(entries.size()+" 人",11,ui.muted,false));
-        caption.setContentDescription(INJURY+"，"+(entries.isEmpty()?"来源未提供伤停名单":entries.size()+" 人"));
-        section.addView(caption);
-        if(entries.isEmpty()){ui.gap(section,6);section.addView(ui.text("来源未提供伤停名单",12,ui.muted,false));return;}
-        for(int i=0;i<entries.size();i++){
-            if(i>0)section.addView(ui.divider());
-            section.addView(injuryRow(entries.get(i),teamId));
+    private void injuries(LinearLayout section, String teamId) {
+        List<MatchDetail.Table> tables = this.injuryTables(teamId);
+        List<DetailRows.Entry> entries = DetailRows.select(tables, INJURY, teamId, "", true);
+        LinearLayout caption = this.ui.row();
+        caption.setTag((Object)"team-panel-injury-header");
+        caption.setPadding(this.ui.dp(4.0f), 0, this.ui.dp(4.0f), 0);
+        caption.addView((View)this.ui.text(INJURY, 13, this.ui.text, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+        if (!entries.isEmpty()) {
+            caption.addView((View)this.ui.text(entries.size() + " 人", 11, this.ui.muted, false));
+        }
+        caption.setContentDescription((CharSequence)("伤停，" + (entries.isEmpty() ? "来源未提供伤停名单" : entries.size() + " 人")));
+        section.addView((View)caption);
+        if (entries.isEmpty()) {
+            this.ui.gap(section, 6);
+            section.addView((View)this.ui.text("来源未提供伤停名单", 12, this.ui.muted, false));
+            return;
+        }
+        for (int i = 0; i < entries.size(); ++i) {
+            if (i > 0) {
+                section.addView(this.ui.divider());
+            }
+            section.addView(this.injuryRow(entries.get(i), teamId));
         }
     }
 
-    private View injuryRow(DetailRows.Entry entry,String teamId){
-        MatchDetail.Person person=entry.person();
-        String name=injuryName(entry),team=teamName(teamId);
-        int statusIndex=entry.table().columns.indexOf("状态"),noteIndex=entry.table().columns.indexOf("说明");
-        String status=DetailParsers.label(DetailRows.cell(entry.values(),statusIndex<0?1:statusIndex)).trim();
-        String rawNote=DetailRows.cell(entry.values(),noteIndex<0?2:noteIndex);
-        String note=rawNote.equals("—")?"":rawNote;
-        LinearLayout row=ui.row();row.setGravity(Gravity.TOP);row.setTag("team-panel-injury");
-        row.setMinimumHeight(ui.dp(48));row.setPadding(ui.dp(4),ui.dp(10),ui.dp(4),ui.dp(10));
-        LinearLayout words=ui.column();
-        words.addView(ui.text(name,13,ui.text,true));
-        if(!note.isBlank()){ui.gap(words,3);words.addView(ui.text(note,12,ui.muted,false));}
-        row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
-        if(!status.isBlank()&&!status.equals("—")){
-            TextView badge=ui.text(status,11,ui.text,true);badge.setTag("team-panel-injury-status");
-            badge.setGravity(Gravity.CENTER);badge.setPadding(ui.dp(6),ui.dp(2),ui.dp(6),ui.dp(2));
-            badge.setBackground(ui.shape(ui.tonal,4));
-            LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);params.setMarginStart(ui.dp(8));
-            row.addView(badge,params);
+    private View injuryRow(DetailRows.Entry entry, String teamId) {
+        MatchDetail.Person person = entry.person();
+        String name = this.injuryName(entry);
+        String team = this.teamName(teamId);
+        int statusIndex = entry.table().columns.indexOf("状态");
+        int noteIndex = entry.table().columns.indexOf("说明");
+        String status = DetailParsers.label(DetailRows.cell(entry.values(), statusIndex < 0 ? 1 : statusIndex)).trim();
+        String rawNote = DetailRows.cell(entry.values(), noteIndex < 0 ? 2 : noteIndex);
+        String note = rawNote.equals("—") ? "" : rawNote;
+        LinearLayout row = this.ui.row();
+        row.setGravity(48);
+        row.setTag((Object)"team-panel-injury");
+        row.setMinimumHeight(this.ui.dp(48.0f));
+        row.setPadding(this.ui.dp(4.0f), this.ui.dp(10.0f), this.ui.dp(4.0f), this.ui.dp(10.0f));
+        LinearLayout words = this.ui.column();
+        words.addView((View)this.ui.text(name, 13, this.ui.text, true));
+        if (!note.isBlank()) {
+            this.ui.gap(words, 3);
+            words.addView((View)this.ui.text(note, 12, this.ui.muted, false));
         }
-        String description=name+"，"+status+(note.isBlank()?"":"，"+note);
-        row.setContentDescription(description);row.setFocusable(true);
-        ui.clickable(row,ui.bg,0);
-        String fullName=person==null||person.name().isBlank()?name:person.name();
-        row.setOnClickListener(v->{if(!(ui.c instanceof Activity))return;StringBuilder text=new StringBuilder("球队  ").append(team);if(!status.isBlank()&&!status.equals("—"))text.append('\n').append("状态  ").append(status);if(!note.isBlank())text.append('\n').append("说明  ").append(note);Sheet.message((Activity)ui.c,fullName,text.toString());});
+        row.addView((View)words, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+        if (!status.isBlank() && !status.equals("—")) {
+            TextView badge = this.ui.text(status, 11, this.ui.text, true);
+            badge.setTag((Object)"team-panel-injury-status");
+            badge.setGravity(17);
+            badge.setPadding(this.ui.dp(6.0f), this.ui.dp(2.0f), this.ui.dp(6.0f), this.ui.dp(2.0f));
+            badge.setBackground((Drawable)this.ui.shape(this.ui.tonal, 4));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
+            params.setMarginStart(this.ui.dp(8.0f));
+            row.addView((View)badge, (ViewGroup.LayoutParams)params);
+        }
+        String description = name + "，" + status + (note.isBlank() ? "" : "，" + note);
+        row.setContentDescription((CharSequence)description);
+        row.setFocusable(true);
+        this.ui.clickable((View)row, this.ui.bg, 0);
+        String fullName = person == null || person.name().isBlank() ? name : person.name();
+        row.setOnClickListener(v -> {
+            if (!(this.ui.c instanceof Activity)) {
+                return;
+            }
+            StringBuilder text = new StringBuilder("球队  ").append(team);
+            if (!status.isBlank() && !status.equals("—")) {
+                text.append('\n').append("状态  ").append(status);
+            }
+            if (!note.isBlank()) {
+                text.append('\n').append("说明  ").append(note);
+            }
+            Sheet.message((Activity)this.ui.c, fullName, text.toString());
+        });
         return row;
     }
 
-    private String injuryName(DetailRows.Entry entry){
-        MatchDetail.Person person=entry.person();
-        if(person==null)return DetailRows.cell(entry.values(),0);
-        String shortName=person.shortName();
-        return shortName==null||shortName.isBlank()?DetailFormat.shortName(person.name()):shortName;
+    private String injuryName(DetailRows.Entry entry) {
+        MatchDetail.Person person = entry.person();
+        if (person == null) {
+            return DetailRows.cell(entry.values(), 0);
+        }
+        String shortName = person.shortName();
+        return shortName == null || shortName.isBlank() ? DetailFormat.shortName(person.name()) : shortName;
     }
 
-    /** CS2 rating leads the numeric rail so the strongest column stays visible first. */
-    private List<MatchDetail.Table> displayTables(List<MatchDetail.Table> source){
-        if(nba())return source;
-        List<MatchDetail.Table> tables=new ArrayList<>(source.size());
-        for(MatchDetail.Table table:source)tables.add(ratingFirst(table));
+    private List<MatchDetail.Table> displayTables(List<MatchDetail.Table> source) {
+        if (this.nba()) {
+            return source;
+        }
+        ArrayList<MatchDetail.Table> tables = new ArrayList<MatchDetail.Table>(source.size());
+        for (MatchDetail.Table table : source) {
+            tables.add(this.ratingFirst(table));
+        }
         return tables;
     }
-    private MatchDetail.Table ratingFirst(MatchDetail.Table source){
-        int rating=source.columns.indexOf("Rating");
-        if(rating<0||source.columns.isEmpty()||!source.columns.get(0).equals("选手"))return source;
-        MatchDetail.Table display=new MatchDetail.Table(source.tab,source.title);
-        display.teamId=source.teamId;display.category=source.category;
-        display.columns.add(source.columns.get(0));display.columns.add("Rating");
-        for(int i=1;i<source.columns.size();i++)if(i!=rating)display.columns.add(source.columns.get(i));
-        for(List<String> row:source.rows){
-            if(row.size()<=rating)return source;
-            List<String> values=new ArrayList<>();values.add(row.get(0));values.add(row.get(rating));
-            for(int i=1;i<row.size();i++)if(i!=rating)values.add(row.get(i));
+
+    private MatchDetail.Table ratingFirst(MatchDetail.Table source) {
+        int rating = source.columns.indexOf("Rating");
+        if (rating < 0 || source.columns.isEmpty() || !source.columns.get(0).equals("选手")) {
+            return source;
+        }
+        MatchDetail.Table display = new MatchDetail.Table(source.tab, source.title, new String[0]);
+        display.teamId = source.teamId;
+        display.category = source.category;
+        display.columns.add(source.columns.get(0));
+        display.columns.add("Rating");
+        for (int i = 1; i < source.columns.size(); ++i) {
+            if (i == rating) continue;
+            display.columns.add(source.columns.get(i));
+        }
+        for (List<String> row : source.rows) {
+            if (row.size() <= rating) {
+                return source;
+            }
+            ArrayList<String> values = new ArrayList<String>();
+            values.add(row.get(0));
+            values.add(row.get(rating));
+            for (int i = 1; i < row.size(); ++i) {
+                if (i == rating) continue;
+                values.add(row.get(i));
+            }
             display.rows.add(values);
         }
-        display.people.addAll(source.people);return display;
+        display.people.addAll(source.people);
+        return display;
     }
 
-    private String effectiveSort(List<String> columns,String sort){
-        String value=sort==null?"":sort;
-        if(!value.isBlank()&&columns.contains(value))return value;
-        return nba()&&columns.contains("得分")?"得分":"";
-    }
-
-    private String scope(boolean nba){
-        String preferred=nba?"球员":"全场",first="";
-        for(MatchDetail.Table table:detail.tables){
-            if(!table.tab.equals("lineup")||table.category.isBlank()||table.category.equals(INJURY))continue;
-            if(table.category.equals(preferred))return preferred;
-            if(first.isEmpty())first=table.category;
+    private String effectiveSort(List<String> columns, String sort) {
+        String value;
+        String string = value = sort == null ? "" : sort;
+        if (!value.isBlank() && columns.contains(value)) {
+            return value;
         }
-        return nba&&!first.isEmpty()?first:preferred;
+        return this.nba() && columns.contains("得分") ? "得分" : "";
     }
 
-    private List<MatchDetail.Table> teamTables(String category,String teamId){
-        List<MatchDetail.Table> tables=new ArrayList<>();
-        for(MatchDetail.Table table:detail.tables)if(table.tab.equals("lineup")&&table.category.equals(category)&&(teamId==null||table.teamId.equals(teamId)))tables.add(table);
-        return tables;
+    private String scope(boolean nba) {
+        String preferred = nba ? "球员" : "全场";
+        String first = "";
+        for (MatchDetail.Table table : this.detail.tables) {
+            if (!table.tab.equals("lineup") || table.category.isBlank() || table.category.equals(INJURY)) continue;
+            if (table.category.equals(preferred)) {
+                return preferred;
+            }
+            if (!first.isEmpty()) continue;
+            first = table.category;
+        }
+        return nba && !first.isEmpty() ? first : preferred;
     }
-    private List<MatchDetail.Table> injuryTables(String teamId){
-        List<MatchDetail.Table> tables=new ArrayList<>();
-        for(MatchDetail.Table table:detail.tables)if(table.tab.equals("lineup")&&table.category.equals(INJURY)&&(teamId==null||table.teamId.equals(teamId)))tables.add(table);
-        return tables;
-    }
-    private int countRows(List<MatchDetail.Table> tables){int count=0;for(MatchDetail.Table table:tables)count+=table.rows.size();return count;}
-    private boolean nba(){return detail.match.group.equals("NBA");}
-    private String teamName(String teamId){return teamId.equals(detail.match.awayId)?detail.match.away:detail.match.home;}
-    private String teamLogo(String teamId){return teamId.equals(detail.match.awayId)?detail.match.awayLogo:detail.match.homeLogo;}
 
-    private void bind(List<HorizontalScrollView> scrollers,IntConsumer savedScroll){
-        if(scrollers.isEmpty())return;boolean[] moving={false};
-        for(HorizontalScrollView scroller:scrollers)scroller.setOnScrollChangeListener((v,x,y,oldX,oldY)->{
-            if(savedScroll!=null)savedScroll.accept(x);
-            if(moving[0])return;moving[0]=true;
-            for(HorizontalScrollView other:scrollers)if(other!=v)other.scrollTo(x,0);
-            moving[0]=false;
-        });
+    private List<MatchDetail.Table> teamTables(String category, String teamId) {
+        ArrayList<MatchDetail.Table> tables = new ArrayList<MatchDetail.Table>();
+        for (MatchDetail.Table table : this.detail.tables) {
+            if (!table.tab.equals("lineup") || !table.category.equals(category) || teamId != null && !table.teamId.equals(teamId)) continue;
+            tables.add(table);
+        }
+        return tables;
+    }
+
+    private List<MatchDetail.Table> injuryTables(String teamId) {
+        ArrayList<MatchDetail.Table> tables = new ArrayList<MatchDetail.Table>();
+        for (MatchDetail.Table table : this.detail.tables) {
+            if (!table.tab.equals("lineup") || !table.category.equals(INJURY) || teamId != null && !table.teamId.equals(teamId)) continue;
+            tables.add(table);
+        }
+        return tables;
+    }
+
+    private int panelWidthDp() {
+        if (!Ui.isPad(this.ui.c)) {
+            return 0;
+        }
+        int screen = this.ui.c.getResources().getConfiguration().screenWidthDp;
+        return Math.max(360, (screen - 500) / 2);
+    }
+
+    private int countRows(List<MatchDetail.Table> tables) {
+        int count = 0;
+        for (MatchDetail.Table table : tables) {
+            count += table.rows.size();
+        }
+        return count;
+    }
+
+    private boolean nba() {
+        return this.detail.match.group.equals("NBA");
+    }
+
+    private String teamName(String teamId) {
+        return teamId.equals(this.detail.match.awayId) ? this.detail.match.away : this.detail.match.home;
+    }
+
+    private String teamLogo(String teamId) {
+        return teamId.equals(this.detail.match.awayId) ? this.detail.match.awayLogo : this.detail.match.homeLogo;
+    }
+
+    private void bind(List<HorizontalScrollView> scrollers, IntConsumer savedScroll) {
+        if (scrollers.isEmpty()) {
+            return;
+        }
+        boolean[] moving = new boolean[]{false};
+        for (HorizontalScrollView scroller : scrollers) {
+            scroller.setOnScrollChangeListener((v, x, y, oldX, oldY) -> {
+                if (savedScroll != null) {
+                    savedScroll.accept(x);
+                }
+                if (moving[0]) {
+                    return;
+                }
+                moving[0] = true;
+                for (HorizontalScrollView other : scrollers) {
+                    if (other == v) continue;
+                    other.scrollTo(x, 0);
+                }
+                moving[0] = false;
+            });
+        }
+    }
+
+    record Sort(String column, boolean descending) {
     }
 }

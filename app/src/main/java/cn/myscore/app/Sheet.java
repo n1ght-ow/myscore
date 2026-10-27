@@ -153,11 +153,11 @@ final class Sheet {
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setGravity(Gravity.BOTTOM);
+            window.setGravity(Ui.isPad(activity) ? Gravity.CENTER : Gravity.BOTTOM);
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             window.setDimAmount(0.64f);
             window.setNavigationBarColor(ui.surface);
-            window.setWindowAnimations(R.style.SheetAnimation);
+            window.setWindowAnimations(Ui.isPad(activity)?android.R.style.Animation_Dialog:R.style.SheetAnimation);
         }
         return dialog;
     }
@@ -166,15 +166,17 @@ final class Sheet {
         GradientDrawable background = new GradientDrawable();
         background.setColor(ui.surface);
         float r = ui.dp(Ui.SHEET_RADIUS);
-        background.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+        boolean pad = Ui.isPad(activity);
+        background.setCornerRadii(pad ? new float[]{r, r, r, r, r, r, r, r} : new float[]{r, r, r, r, 0, 0, 0, 0});
         root.setBackground(background);
-        root.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), ui.dp(24));
+        root.setPadding(ui.dp(pad ? 32 : 24), ui.dp(pad ? 20 : 8), ui.dp(pad ? 32 : 24), ui.dp(24));
         View handle = new View(activity);
         handle.setBackground(ui.shape(ui.line, 2));
         handle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(ui.dp(38), ui.dp(4));
         handleParams.gravity = Gravity.CENTER_HORIZONTAL;
         handleParams.topMargin = ui.dp(6);
+        handle.setVisibility(pad ? View.GONE : View.VISIBLE);
         root.addView(handle, handleParams);
         if (title != null && !title.isEmpty()) {
             TextView heading = ui.text(title, 22, ui.text, true);
@@ -213,7 +215,8 @@ final class Sheet {
         try{dialog.show();}catch(RuntimeException e){android.util.Log.w("MyScore","Sheet skipped because the activity left");return;}
         Window window = dialog.getWindow();
         if (window != null) {
-            window.setLayout(Math.min(activity.getResources().getDisplayMetrics().widthPixels, ui(activity).dp(640)), WindowManager.LayoutParams.WRAP_CONTENT);
+            int wide=ui(activity).dp(Ui.isPad(activity)?680:640);
+            window.setLayout(Math.min(activity.getResources().getDisplayMetrics().widthPixels, wide), WindowManager.LayoutParams.WRAP_CONTENT);
             window.getDecorView().setPadding(0, 0, 0, 0);
             Ui.highRefresh(window);
         }

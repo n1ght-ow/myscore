@@ -52,11 +52,15 @@ public final class TeamActivity extends Activity {
     private final Runnable renderSoon=()->{if(active&&!isDestroyed())render();};
     private int pendingPosition=-1;
     private final Runnable tick=()->load(true);
+    private boolean pad;
+    private ScoreList padUpcomingList,padFinishedList;
+    private TeamScheduleAdapter padUpcomingAdapter,padFinishedAdapter;
+    private TextView padStatus,padError,padUpcomingCount,padFinishedCount;
 
     @Override public void onCreate(Bundle saved) {
         boolean dark=Ui.isDark(this);
         setTheme(dark?R.style.AppThemeDark:R.style.AppTheme);
-        super.onCreate(saved);ui=new Ui(this,dark);
+        super.onCreate(saved);ui=new Ui(this,dark);pad=Ui.isPad(this);
         try {
             String raw=getIntent().getStringExtra("team");
             team=Team.fromJson(new JSONObject(raw==null?"{}":raw));
@@ -71,8 +75,9 @@ public final class TeamActivity extends Activity {
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         root=ui.column();setContentView(root);
         root.setOnApplyWindowInsetsListener((v,insets)-> {
-            if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left+ui.pageInset(),i.top,i.right+ui.pageInset(),i.bottom);}
-            else v.setPadding(insets.getSystemWindowInsetLeft()+ui.pageInset(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight()+ui.pageInset(),insets.getSystemWindowInsetBottom());
+            int inset=pad?0:ui.pageInset();
+            if(Build.VERSION.SDK_INT>=30){android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left+inset,i.top,i.right+inset,i.bottom);}
+            else v.setPadding(insets.getSystemWindowInsetLeft()+inset,insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight()+inset,insets.getSystemWindowInsetBottom());
             return insets;
         });
         root.requestApplyInsets();
@@ -86,6 +91,7 @@ public final class TeamActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putInt("position",list==null?pendingPosition:list.getFirstVisiblePosition());state.putString("filter",filter);}
 
     private void build() {
+        if(pad){buildPad();return;}
         LinearLayout appbar=ui.row();
         appbar.setPadding(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(2));
         appbar.addView(iconButton("back","返回",this::finish));
@@ -135,6 +141,128 @@ public final class TeamActivity extends Activity {
         });
         adapter.attach(list);list.setAdapter(adapter);
         root.addView(list,new LinearLayout.LayoutParams(-1,0,1));
+    }
+
+    private void buildPad(){
+        LinearLayout bar=ui.row();bar.setPadding(ui.dp(12),ui.dp(10),ui.dp(16),ui.dp(10));
+        bar.addView(iconButton("back","返回比赛列表",this::finish));
+        TextView title=ui.text("球队赛程",17,ui.text,true);LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,-2,1);tp.setMarginStart(ui.dp(6));bar.addView(title,tp);
+        bar.addView(iconButton("refresh","刷新球队赛程",()->load(true)));
+        root.addView(bar);root.addView(ui.divider());
+
+        LinearLayout hero=ui.row();hero.setPadding(ui.dp(36),ui.dp(24),ui.dp(36),ui.dp(22));
+        headerCrest=Logos.crest(ui,88,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
+        hero.addView(headerCrest.box,new LinearLayout.LayoutParams(ui.dp(88),ui.dp(88)));
+        LinearLayout names=ui.column();LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(0,-2,1);np.setMarginStart(ui.dp(22));
+        TextView name=ui.text(team.name,38,ui.text,true);name.setLetterSpacing(-0.04f);names.addView(name);
+        ui.gap(names,6);
+        String competition=team.league.equals("cs2")?"CS2":team.competitionName();
+        names.addView(ui.text(competition+" · 北京时间",12,ui.muted,false));
+        ui.gap(names,8);
+        padStatus=ui.text("正在读取球队赛程…",11,ui.muted,false);names.addView(padStatus);
+        padError=ui.text("",12,ui.error,false);padError.setLineSpacing(ui.dp(3),1);padError.setVisibility(View.GONE);ui.gap(names,6);names.addView(padError);
+        hero.addView(names,np);
+        LinearLayout summary=ui.row();hero.addView(summary,new LinearLayout.LayoutParams(-2,-2));
+        teamSummaryCounts=new TextView[3];
+        String[] summaryLabels={"接下来","已结束","总场次"};
+        for(int i=0;i<3;i++){LinearLayout metric=padMetric(summaryLabels[i],"");summary.addView(metric,new LinearLayout.LayoutParams(ui.dp(96),-2));teamSummaryCounts[i]=(TextView)metric.getTag();}
+        root.addView(hero);root.addView(ui.divider());
+
+        LinearLayout columns=ui.row();
+        LinearLayout left=padColumn("接下来","进行中与即将开始的比赛",true);
+        columns.addView(left,new LinearLayout.LayoutParams(0,-1,1));
+        View rule=new View(this);rule.setBackgroundColor(ui.line);columns.addView(rule,new LinearLayout.LayoutParams(ui.dp(1),-1));
+        LinearLayout right=padColumn("已结束","按时间倒序，仅显示来源确认的赛果",false);
+        columns.addView(right,new LinearLayout.LayoutParams(0,-1,1));
+        root.addView(columns,new LinearLayout.LayoutParams(-1,0,1));
+        padUpcomingList.setAdapter(padUpcomingAdapter);
+        padFinishedList.setAdapter(padFinishedAdapter);
+        renderPad();
+    }
+
+    private LinearLayout padColumn(String title,String subtitle,boolean upcoming){
+        LinearLayout column=ui.column();
+        LinearLayout head=ui.row();head.setPadding(ui.dp(28),ui.dp(20),ui.dp(24),ui.dp(8));
+        LinearLayout words=ui.column();
+        words.addView(ui.text(title,24,ui.text,true));
+        ui.gap(words,3);words.addView(ui.text(subtitle,11,ui.muted,false));
+        head.addView(words,new LinearLayout.LayoutParams(0,-2,1));
+        TextView count=ui.text("",12,ui.muted,true);count.setGravity(Gravity.END);
+        if(upcoming)padUpcomingCount=count;else padFinishedCount=count;
+        head.addView(count);
+        column.addView(head);
+        ScoreList list=new ScoreList(this);
+        list.setPadding(ui.dp(22),ui.dp(4),ui.dp(22),ui.dp(28));list.setClipToPadding(false);list.setVerticalScrollBarEnabled(false);
+        if(upcoming){padUpcomingList=list;padUpcomingAdapter=padScheduleAdapter();}
+        else{padFinishedList=list;padFinishedAdapter=padScheduleAdapter();}
+        column.addView(list,new LinearLayout.LayoutParams(-1,0,1));
+        return column;
+    }
+    private TeamScheduleAdapter padScheduleAdapter(){
+        return new TeamScheduleAdapter(ui,new TeamScheduleAdapter.Host(){
+            public void openMatch(Match match){startActivity(new Intent(TeamActivity.this,DetailActivity.class).putExtra("match",match.json().toString()));}
+            public boolean isSubscribed(String id){return calendarSync.isSubscribed(id);}
+            public boolean isBusy(){return calendarBusy;}
+            public void toggleSubscription(Match match){toggleCalendar(match);}
+        });
+    }
+    private LinearLayout padMetric(String label,String value){
+        LinearLayout block=ui.column();block.setPadding(ui.dp(10),0,ui.dp(10),0);
+        TextView number=ui.text(value,22,ui.text,true);block.addView(number);
+        block.addView(ui.text(label,10,ui.muted,false));
+        block.setTag(number);
+        return block;
+    }
+
+    private void renderPad(){
+        if(headerLogo.isBlank()&&result!=null){
+            for(Match m:result.matches){
+                String logo=team.id.equals(m.homeId)?m.homeLogo:team.id.equals(m.awayId)?m.awayLogo:"";
+                if(!logo.isBlank()){headerLogo=logo;Logos.bind(headerCrest,logo,team.name);break;}
+            }
+        }
+        if(padStatus!=null){
+            if(result==null)padStatus.setText(busy?"正在读取球队赛程…":"尚未获取球队赛程");
+            else{
+                String fetched=result.fetched>0?format(result.fetched,"M月d日 HH:mm")+" 获取":"尚未成功获取";
+                padStatus.setText(result.source+" · 共 "+result.matches.size()+" 场 · "+fetched+(busy?" · 更新中":""));
+                padStatus.setTextColor(result.error.isEmpty()?ui.muted:ui.error);
+            }
+        }
+        if(padError!=null){
+            boolean failed=result!=null&&!result.error.isEmpty();
+            padError.setVisibility(failed?View.VISIBLE:View.GONE);
+            if(failed)padError.setText((result.fetched>0?"球队赛程未更新 · ":"无法获取球队赛程 · ")+result.error+(result.fetched>0?"\n下方保留上次成功获取的赛程。":""));
+        }
+        List<TeamScheduleRow> upcoming=padRows(false),finished=padRows(true);
+        if(padUpcomingAdapter!=null)padUpcomingAdapter.updateRows(upcoming);
+        if(padFinishedAdapter!=null)padFinishedAdapter.updateRows(finished);
+        if(result!=null){
+            int up=0,fin=0;
+            for(Match m:result.matches){if(m.finalised())fin++;else if(m.live()||m.scheduled()||m.state.equals("delayed"))up++;}
+            if(padUpcomingCount!=null)padUpcomingCount.setText(up+" 场");
+            if(padFinishedCount!=null)padFinishedCount.setText(fin+" 场");
+            if(teamSummaryCounts!=null){teamSummaryCounts[0].setText(String.valueOf(up));teamSummaryCounts[1].setText(String.valueOf(fin));teamSummaryCounts[2].setText(String.valueOf(result.matches.size()));}
+        }
+    }
+    private TextView[] teamSummaryCounts;
+    private List<TeamScheduleRow> padRows(boolean finished){
+        List<TeamScheduleRow> rows=new ArrayList<>();
+        if(result==null){rows.add(TeamScheduleRow.note(busy?"正在读取球队赛程":"尚未获取球队赛程",busy?"正在连接球队的数据来源。":"点右上角刷新重试。"));return rows;}
+        if(result.matches.isEmpty()){rows.add(TeamScheduleRow.note("该队暂未提供赛程",emptyMessage()));return rows;}
+        List<Match> live=new ArrayList<>(),upcoming=new ArrayList<>(),done=new ArrayList<>(),other=new ArrayList<>();
+        for(Match m:result.matches){if(m.live())live.add(m);else if(m.scheduled()||m.state.equals("delayed"))upcoming.add(m);else if(m.finalised())done.add(m);else other.add(m);}
+        Comparator<Match> byStart=Comparator.comparingLong((Match m)->m.start==0?Long.MAX_VALUE:m.start).thenComparing(m->m.id);
+        live.sort(byStart);upcoming.sort(byStart);done.sort(byStart.reversed());
+        if(finished){
+            for(Match m:done)rows.add(TeamScheduleRow.match(m,team));
+            if(rows.isEmpty())rows.add(TeamScheduleRow.note("没有已结束的比赛","来源尚未返回这支球队的赛果。"));
+        }else{
+            if(!live.isEmpty()){rows.add(TeamScheduleRow.section("进行中 · "+live.size()));for(Match m:live)rows.add(TeamScheduleRow.match(m,team));}
+            for(Match m:upcoming)rows.add(TeamScheduleRow.match(m,team));
+            if(rows.isEmpty())rows.add(TeamScheduleRow.note("没有接下来的比赛","来源尚未返回这支球队的后续赛程。"));
+        }
+        return rows;
     }
 
     private FrameLayout iconButton(String kind,String description,Runnable click) {
@@ -223,6 +351,7 @@ public final class TeamActivity extends Activity {
 
     private void render() {
         if(!active||isFinishing()||isDestroyed())return;
+        if(pad){renderPad();return;}
         if(list!=null&&list.isInteracting()){handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,200);return;}
         handler.removeCallbacks(renderSoon);
         if(headerLogo.isBlank()&&result!=null) {

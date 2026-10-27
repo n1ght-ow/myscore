@@ -60,8 +60,15 @@ final class Ui {
         action=text;onAction=bg;
     }
     int dp(float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
-    int contentWidthDp(){return Math.min(640,c.getResources().getConfiguration().screenWidthDp);}
-    int pageInset(){return Math.max(0,(c.getResources().getDisplayMetrics().widthPixels-dp(640))/2);}
+    /** A 12.4" tablet reports a smallest width far above any phone; this is the layout split. */
+    static boolean isPad(Context context){
+        return context.getResources().getConfiguration().smallestScreenWidthDp>=720;
+    }
+    int contentWidthDp(){
+        int width=c.getResources().getConfiguration().screenWidthDp;
+        return isPad(c)?Math.min(1120,width):Math.min(640,width);
+    }
+    int pageInset(){return isPad(c)?0:Math.max(0,(c.getResources().getDisplayMetrics().widthPixels-dp(640))/2);}
     LinearLayout column(){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.VERTICAL);return v;}
     LinearLayout row(){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.HORIZONTAL);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
     TextView text(String s,int sp,int color,boolean bold) {

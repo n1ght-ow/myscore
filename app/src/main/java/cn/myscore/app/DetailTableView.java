@@ -10,14 +10,16 @@ import java.util.function.Consumer;
 final class DetailTableView {
     private final Ui ui;
     private final boolean nba,showTeam,narrow;
-    DetailTableView(Ui ui){this(ui,false,true,false);}
-    DetailTableView(Ui ui,boolean nba){this(ui,nba,true,false);}
-    DetailTableView(Ui ui,boolean nba,boolean showTeam){this(ui,nba,showTeam,false);}
-    DetailTableView(Ui ui,boolean nba,boolean showTeam,boolean narrow){this.ui=ui;this.nba=nba;this.showTeam=showTeam;this.narrow=narrow;}
+    private final int widthDp;
+    DetailTableView(Ui ui){this(ui,false,true,false,0);}
+    DetailTableView(Ui ui,boolean nba){this(ui,nba,true,false,0);}
+    DetailTableView(Ui ui,boolean nba,boolean showTeam){this(ui,nba,showTeam,false,0);}
+    DetailTableView(Ui ui,boolean nba,boolean showTeam,boolean narrow){this(ui,nba,showTeam,narrow,0);}
+    DetailTableView(Ui ui,boolean nba,boolean showTeam,boolean narrow,int widthDp){this.ui=ui;this.nba=nba;this.showTeam=showTeam;this.narrow=narrow;this.widthDp=widthDp;}
     View build(List<String> columns,List<DetailRows.Entry> entries,String sorted,boolean descending,Consumer<String> sort,java.util.function.IntConsumer savedScroll,int scrollX){
         LinearLayout shell=ui.row();shell.setGravity(Gravity.TOP);shell.setBackground(ui.panel());shell.setClipToOutline(true);shell.setTag("detail-data-table");
         float scale=Math.max(1,ui.c.getResources().getConfiguration().fontScale);int rowHeight=ui.dp(56*scale),headerHeight=ui.dp(48*scale);
-        int available=ui.dp(ui.contentWidthDp()-32);String identity=columns.isEmpty()?"":columns.get(0);int rail=identity.equals("选手")?Math.min(ui.dp((narrow?96:132)*scale),(int)(available*(narrow?.30f:.34f))):identity.equals("球队")?ui.dp(130):identity.equals("场次")||identity.equals("地图")?ui.dp(100):Math.min(ui.dp(164),Math.max(ui.dp(120),(int)(available*.38f)));int cell=ui.dp(48*scale);
+        int available=ui.dp((widthDp>0?widthDp:ui.contentWidthDp())-32);String identity=columns.isEmpty()?"":columns.get(0);int rail=identity.equals("选手")?Math.min(ui.dp((narrow?96:132)*scale),(int)(available*(narrow?.30f:.34f))):identity.equals("球队")?ui.dp(130):identity.equals("场次")||identity.equals("地图")?ui.dp(100):Math.min(ui.dp(164),Math.max(ui.dp(120),(int)(available*.38f)));int cell=ui.dp(48*scale);
         LinearLayout names=ui.column(),numbers=ui.column();names.addView(header(columns.isEmpty()?"球员":columns.get(0),false,false,null),new LinearLayout.LayoutParams(-1,headerHeight));
         LinearLayout labels=ui.row();labels.setGravity(Gravity.TOP);
         int[] widths=new int[Math.max(0,columns.size()-1)];

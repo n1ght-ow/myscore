@@ -249,6 +249,10 @@ public final class Repository {
     }
     private static String download(String url,Map<String,String> headers) throws Exception {
         HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection();
+        // Keep the socket in the shared pool after a successful read: the scoreboard asks the
+        // same host for several dates in a row, and a fresh TLS handshake per request is the
+        // slowest part on a mobile network. Failed reads still drop the connection.
+        boolean complete=false;
         try {
             if(!headers.isEmpty())connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout(6_000);connection.setReadTimeout(8_000);
@@ -260,9 +264,11 @@ public final class Repository {
                 byte[] buffer=new byte[8192];int n;
                 long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
                 while((n=in.read(buffer))!=-1) {if(Thread.currentThread().isInterrupted())throw new InterruptedException();if(System.nanoTime()>deadline)throw new java.net.SocketTimeoutException("来源响应超时");if(out.size()+n>8_000_000)throw new Exception("来源响应过大");out.write(buffer,0,n);}
-                return out.toString("UTF-8");
+                String body=out.toString("UTF-8");
+                complete=true;
+                return body;
             }
-        } finally {connection.disconnect();}
+        } finally {if(!complete)connection.disconnect();}
     }
     private File cacheFile(Competition c,LocalDate from,LocalDate to) {return cacheFile(c,from,to,"view_");}
     private File cacheFile(Competition c,LocalDate from,LocalDate to,String prefix) {

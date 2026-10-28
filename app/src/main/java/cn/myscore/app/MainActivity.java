@@ -55,6 +55,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -71,12 +72,19 @@ implements ScoreAdapter.Host {
     private Ui ui;
     private SharedPreferences prefs;
     private Repository repository;
+    private Repository prefetchRepository;
     private Repository.Snapshot snapshot = new Repository.Snapshot();
     private Repository.Snapshot allSnapshot;
     private LocalDate allSnapshotDay;
+    // A day the user already opened is answered from memory, even after switching away.
+    private final LinkedHashMap<String,Repository.Snapshot> daySnapshots = new LinkedHashMap<String,Repository.Snapshot>(8,.75f,true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String,Repository.Snapshot> eldest) {return size() > 8;}
+    };
+    private final Map<String,Long> prefetchedAt = new HashMap<String,Long>();
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService executor = Executors.newFixedThreadPool(2);
+    private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final ExecutorService cacheWorker = Executors.newSingleThreadExecutor();
+    private final ExecutorService prefetchWorker = Executors.newSingleThreadExecutor();
     private final ExecutorService calendarWorker = Executors.newSingleThreadExecutor();
     private final ExecutorService focusWorker = Executors.newSingleThreadExecutor();
     private LinearLayout root;
@@ -112,6 +120,14 @@ implements ScoreAdapter.Host {
     private String renderedSettings = "";
     private String renderedPadFocus = "";
     private final Runnable tick = () -> this.load(false);
+    private final Runnable settleLoad = () -> {
+        if (this.active && !this.isDestroyed()) {
+            this.load(false);
+        }
+    };
+    private Runnable prefetchTask;
+    private String prefetchTaskKey;
+    private Future<?> prefetchRequest;
     private final Runnable renderSoon = () -> {
         if (this.active && !this.isDestroyed()) {
             this.render(true);
@@ -127,6 +143,8 @@ implements ScoreAdapter.Host {
     private TextView padDayNumber;
     private TextView padDayMeta;
     private TextView padListStatus;
+    private TextView padRailDay;
+    private TextView padRailWeek;
     private final Map<String, TextView> railCounts = new LinkedHashMap<String, TextView>();
     private final Map<String, View> railDots = new LinkedHashMap<String, View>();
     private DetailRepository detailRepository;
@@ -150,6 +168,9 @@ implements ScoreAdapter.Host {
         super.onCreate(state);
         this.ui = new Ui((Context)this, dark);
         this.repository = new Repository((Context)this);
+        // Prefetch owns a separate failure map so a quiet background miss never shows up as a
+        // source error on the day the user later opens.
+        this.prefetchRepository = new Repository((Context)this);
         this.calendarSync = new CalendarSync((Context)this);
         this.detailRepository = new DetailRepository((Context)this);
         this.watches = WatchRepository.get(this);
@@ -257,6 +278,8 @@ implements ScoreAdapter.Host {
         this.active = false;
         this.handler.removeCallbacks(this.tick);
         this.handler.removeCallbacks(this.renderSoon);
+        this.handler.removeCallbacks(this.settleLoad);
+        this.cancelPrefetch();
         super.onPause();
     }
 
@@ -264,6 +287,7 @@ implements ScoreAdapter.Host {
         this.handler.removeCallbacksAndMessages(null);
         this.executor.shutdownNow();
         this.cacheWorker.shutdownNow();
+        this.prefetchWorker.shutdownNow();
         this.calendarWorker.shutdownNow();
         this.focusWorker.shutdownNow();
         super.onDestroy();
@@ -282,6 +306,7 @@ implements ScoreAdapter.Host {
     }
 
     private void load(boolean force) {
+        this.handler.removeCallbacks(this.settleLoad);
         if (force) {
             Logos.retryFailures();
             this.renderedScores = "";
@@ -310,12 +335,16 @@ implements ScoreAdapter.Host {
         LocalDate t = this.to();
         String g = this.group;
         long started = System.currentTimeMillis();
+        java.util.concurrent.atomic.AtomicBoolean firstBatch = new java.util.concurrent.atomic.AtomicBoolean(true);
         this.scoreRequest = this.executor.submit(() -> {
             Repository.Snapshot result;
             try {
                 result = this.repository.fetch(f, t, g, forced, batch -> this.handler.post(() -> {
                     if (this.isDestroyed() || !this.active || !tag.equals(this.queryTag())) {
                         return;
+                    }
+                    if (BuildConfig.DEBUG && firstBatch.compareAndSet(true, false)) {
+                        Log.i("MyScorePerf", "first source batch in " + (System.currentTimeMillis() - started) + "ms");
                     }
                     this.snapshot.merge((Repository.Batch)batch);
                     this.handler.removeCallbacks(this.renderSoon);
@@ -358,6 +387,7 @@ implements ScoreAdapter.Host {
                     long delay = RefreshPolicy.pollDelay(next.batches, f, Match.today(now), now);
                     long midnight = RefreshPolicy.untilNextDay(now);
                     this.handler.postDelayed(this.tick, delay > 0L ? Math.min(delay, midnight) : midnight);
+                    this.schedulePrefetch(f, g);
                 }
             });
         });
@@ -373,6 +403,7 @@ implements ScoreAdapter.Host {
         }
         this.handler.removeCallbacks(this.tick);
         this.handler.removeCallbacks(this.renderSoon);
+        this.handler.removeCallbacks(this.settleLoad);
         ++this.selectionVersion;
         if (this.scoreRequest != null) {
             this.scoreRequest.cancel(true);
@@ -385,6 +416,8 @@ implements ScoreAdapter.Host {
             this.selectionCacheRequest = null;
         }
         boolean inPlace = !this.pad && nextTab == 0 && this.tab == 0 && this.scoreList != null;
+        boolean padInPlace = this.pad && nextTab == 0 && this.tab == 0 && this.padList != null && this.padAdapter != null;
+        boolean wasToday = this.dayOffset == 0;
         this.tab = nextTab;
         this.group = nextGroup;
         this.dayOffset = offset;
@@ -413,10 +446,7 @@ implements ScoreAdapter.Host {
             this.padSettingSources = null;
             this.padSettingSourcesDay = null;
         }
-        Repository.Snapshot local = null;
-        if (this.allSnapshot != null && day.equals(this.allSnapshotDay)) {
-            local = "全部".equals(selectedGroup) ? this.allSnapshot : MainActivity.subset(this.allSnapshot, selectedGroup);
-        }
+        Repository.Snapshot local = this.snapshotFor(day, selectedGroup);
         this.snapshot = local != null ? local : new Repository.Snapshot();
         this.renderedScores = "";
         if (this.pad) {
@@ -426,7 +456,13 @@ implements ScoreAdapter.Host {
             ++this.padFocusVersion;
         }
         if (this.pad) {
-            this.buildPadScreen();
+            // A day/filter change only replaces the list and reading pane. Rebuilding the rail
+            // and the whole three-column shell made every arrow tap tear down the workspace.
+            if (padInPlace && wasToday == (offset == 0)) {
+                this.renderPad(false);
+            } else {
+                this.buildPadScreen();
+            }
         } else if (inPlace) {
             this.rebuildHeader();
         } else {
@@ -439,7 +475,9 @@ implements ScoreAdapter.Host {
             this.scoreList.setSelection(0);
             this.lastScoreScroll = 0L;
         }
-        boolean keepLocal = local != null;
+        if (padInPlace && this.padList != null) {
+            this.padList.setSelection(0);
+        }
         this.selectionCacheRequest = this.cacheWorker.submit(() -> {
             if (Thread.currentThread().isInterrupted()) {
                 return;
@@ -453,16 +491,18 @@ implements ScoreAdapter.Host {
                     return;
                 }
                 this.selectionLoading = false;
-                if (keepLocal) {
-                    for (Repository.Batch batch : this.snapshot.batches) {
-                        Repository.Batch disk = cached.batches.stream().filter(b -> b.competition.id.equals(batch.competition.id)).findFirst().orElse(null);
-                        if (disk != null && disk.fetched > batch.fetched) continue;
-                        cached.merge(batch);
-                    }
+                // Keep the in-memory day (and any batch that arrived while the disk read ran)
+                // when it is at least as fresh as the same source on disk.
+                for (Repository.Batch batch : this.snapshot.batches) {
+                    Repository.Batch disk = cached.batches.stream().filter(b -> b.competition.id.equals(batch.competition.id)).findFirst().orElse(null);
+                    if (disk != null && disk.fetched > batch.fetched) continue;
+                    cached.merge(batch);
                 }
                 this.snapshot = cached;
                 this.rememberAll(selectedGroup, day, cached);
-                this.load(false);
+                // Let a quick run of arrow taps settle first; only the final day pays for a
+                // network round instead of every intermediate selection.
+                this.scheduleLoad(150L);
                 if (!tag.equals(this.queryTag())) {
                     return;
                 }
@@ -485,6 +525,7 @@ implements ScoreAdapter.Host {
     }
 
     private void rememberAll(String selectedGroup, LocalDate day, Repository.Snapshot value) {
+        this.rememberDay(day, selectedGroup, value);
         if ("全部".equals(selectedGroup)) {
             this.allSnapshot = value;
             this.allSnapshotDay = day;
@@ -499,7 +540,144 @@ implements ScoreAdapter.Host {
                 merged.merge(batch);
             }
             this.allSnapshot = merged;
+            this.rememberDay(day, "全部", merged);
         }
+    }
+
+    private static String dayKey(LocalDate day, String group) {
+        return day + "|" + group;
+    }
+
+    /** Bounded per-day memory: switching away and back must not re-read or re-request. */
+    private void rememberDay(LocalDate day, String group, Repository.Snapshot value) {
+        if (value == null) {
+            return;
+        }
+        this.daySnapshots.put(MainActivity.dayKey(day, group), value);
+    }
+
+    private Repository.Snapshot snapshotFor(LocalDate day, String group) {
+        Repository.Snapshot exact = this.daySnapshots.get(MainActivity.dayKey(day, group));
+        if (exact != null) {
+            return exact;
+        }
+        Repository.Snapshot everything = this.daySnapshots.get(MainActivity.dayKey(day, "全部"));
+        if (everything != null && !"全部".equals(group)) {
+            return MainActivity.subset(everything, group);
+        }
+        if (this.allSnapshot != null && day.equals(this.allSnapshotDay)) {
+            return "全部".equals(group) ? this.allSnapshot : MainActivity.subset(this.allSnapshot, group);
+        }
+        return null;
+    }
+
+    private void scheduleLoad(long delay) {
+        this.handler.removeCallbacks(this.settleLoad);
+        this.handler.postDelayed(this.settleLoad, delay);
+    }
+
+    /**
+     * Warm the next day once the current one has settled. The user browses forward day by day,
+     * so the first tap on tomorrow should paint from memory instead of waiting for nine sources.
+     */
+    private void schedulePrefetch(LocalDate day, String group) {
+        if (!this.active || this.isDestroyed() || this.tab != 0) {
+            return;
+        }
+        if (this.snapshot.failed() || this.busy || this.selectionLoading) {
+            return;
+        }
+        LocalDate next = day.plusDays(1L);
+        String key = MainActivity.dayKey(next, group);
+        if (this.daySnapshots.containsKey(key)) {
+            return;
+        }
+        Long at = this.prefetchedAt.get(key);
+        if (at != null && System.currentTimeMillis() - at < 10L * 60_000L) {
+            return;
+        }
+        // A live score tick must not keep deferring the same prefetch forever.
+        if (this.prefetchTask != null && key.equals(this.prefetchTaskKey)) {
+            return;
+        }
+        if (this.prefetchTask != null) {
+            this.handler.removeCallbacks(this.prefetchTask);
+        }
+        this.prefetchTaskKey = key;
+        this.prefetchTask = () -> this.prefetch(next, group);
+        this.handler.postDelayed(this.prefetchTask, 1_200L);
+    }
+
+    private void prefetch(LocalDate day, String group) {
+        this.prefetchTask = null;
+        this.prefetchTaskKey = null;
+        if (!this.active || this.isDestroyed() || this.tab != 0) {
+            return;
+        }
+        if (!group.equals(this.group) || !day.equals(this.from().plusDays(1L))) {
+            return;
+        }
+        String key = MainActivity.dayKey(day, group);
+        if (this.daySnapshots.containsKey(key)) {
+            return;
+        }
+        this.prefetchedAt.put(key, System.currentTimeMillis());
+        Repository source = this.prefetchRepository == null ? this.repository : this.prefetchRepository;
+        this.prefetchRequest = this.prefetchWorker.submit(() -> {
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
+            Repository.Snapshot result = source.fetch(day, day, group, false);
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
+            this.handler.post(() -> {
+                if (this.isDestroyed()) {
+                    return;
+                }
+                // A failed quiet read never becomes the day's memory cache; opening it retries.
+                if (!result.failed() && !this.daySnapshots.containsKey(key)) {
+                    this.rememberDay(day, group, result);
+                }
+                if (!result.failed()) {
+                    this.warmCrests(result.matches());
+                }
+                if (BuildConfig.DEBUG) {
+                    Log.i("MyScorePerf", "prefetch " + key + " items=" + result.matches().size() + " failed=" + result.failed());
+                }
+            });
+        });
+    }
+
+    private void cancelPrefetch() {
+        if (this.prefetchTask != null) {
+            this.handler.removeCallbacks(this.prefetchTask);
+            this.prefetchTask = null;
+        }
+        this.prefetchTaskKey = null;
+        if (this.prefetchRequest != null) {
+            this.prefetchRequest.cancel(true);
+            this.prefetchRequest = null;
+        }
+    }
+
+    /** Warm list-size crests for a prefetched day so its first paint already has them. */
+    private void warmCrests(List<Match> matches) {
+        if (matches == null || matches.isEmpty()) {
+            return;
+        }
+        LinkedHashSet<String> urls = new LinkedHashSet<String>();
+        int limit = Math.min(matches.size(), 16);
+        for (int i = 0; i < limit; i++) {
+            Match match = matches.get(i);
+            if (match.homeLogo != null && !match.homeLogo.isBlank()) {
+                urls.add(match.homeLogo);
+            }
+            if (match.awayLogo != null && !match.awayLogo.isBlank()) {
+                urls.add(match.awayLogo);
+            }
+        }
+        Logos.warm(this.ui, urls, this.pad ? 24 : 28);
     }
 
     private void rebuildHeader() {
@@ -1374,6 +1552,8 @@ implements ScoreAdapter.Host {
         this.padDayNumber = null;
         this.padDayMeta = null;
         this.padListStatus = null;
+        this.padRailDay = null;
+        this.padRailWeek = null;
         LinearLayout shell = this.ui.row();
         shell.setBackgroundColor(this.ui.bg);
         this.root.addView((View)shell, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, 0, 1.0f));
@@ -1486,9 +1666,11 @@ implements ScoreAdapter.Host {
         this.ui.gap(rail, 12);
         TextView day = this.ui.text(Formats.MONTH_DAY_DOT.format(this.from()), 15, this.ui.text, true);
         day.setPadding(this.ui.dp(4.0f), 0, 0, 0);
+        this.padRailDay = day;
         rail.addView((View)day);
         TextView zone = this.ui.text(Formats.WEEKDAY.format(this.from()) + " · 北京时间", 9, this.ui.muted, false);
         zone.setPadding(this.ui.dp(4.0f), 0, 0, 0);
+        this.padRailWeek = zone;
         rail.addView((View)zone);
         this.ui.gap(rail, 8);
         TextView version = this.ui.text("MyScore " + BuildConfig.VERSION_NAME, 9, this.ui.muted, false);
@@ -2242,9 +2424,12 @@ implements ScoreAdapter.Host {
     private void updatePadChrome() {
         String updated;
         List<Match> all = this.snapshot.matches();
-        boolean allSnapshotReady = this.allSnapshot != null && this.allSnapshotDay != null && this.allSnapshotDay.equals(this.from());
+        Repository.Snapshot rememberedAll = this.daySnapshots.get(MainActivity.dayKey(this.from(), "全部"));
+        boolean allSnapshotReady = (this.allSnapshot != null && this.allSnapshotDay != null && this.allSnapshotDay.equals(this.from())) || rememberedAll != null;
         boolean cachedAllReady = this.padSettingSources != null && this.padSettingSourcesDay != null && this.padSettingSourcesDay.equals(this.from());
-        Repository.Snapshot countSource = allSnapshotReady ? this.allSnapshot : (cachedAllReady ? this.padSettingSources : null);
+        Repository.Snapshot countSource = allSnapshotReady
+            ? (this.allSnapshot != null && this.from().equals(this.allSnapshotDay) ? this.allSnapshot : rememberedAll)
+            : (cachedAllReady ? this.padSettingSources : null);
         boolean complete = this.group.equals("全部") || countSource != null;
         Repository.Snapshot countSnapshot = countSource != null ? countSource : this.snapshot;
         if (!complete && !this.padSettingSourcesLoading) {
@@ -2268,6 +2453,12 @@ implements ScoreAdapter.Host {
             String month = Formats.YEAR_MONTH.format(this.from());
             String week = Formats.WEEKDAY.format(this.from());
             this.padDayMeta.setText((CharSequence)(month + " · " + week + (this.dayOffset == 0 ? " · 今天" : "")));
+        }
+        if (this.padRailDay != null) {
+            this.padRailDay.setText((CharSequence)Formats.MONTH_DAY_DOT.format(this.from()));
+        }
+        if (this.padRailWeek != null) {
+            this.padRailWeek.setText((CharSequence)(Formats.WEEKDAY.format(this.from()) + " · 北京时间"));
         }
         for (String g : GROUPS) {
             int c;
@@ -2490,6 +2681,10 @@ implements ScoreAdapter.Host {
 
     /** The settings page reports every source, independent of the score-list filter. */
     private Repository.Snapshot padSourceSnapshot() {        LocalDate day = this.from();
+        Repository.Snapshot remembered = this.daySnapshots.get(MainActivity.dayKey(day, "全部"));
+        if (remembered != null) {
+            return remembered;
+        }
         if (this.allSnapshot != null && day.equals(this.allSnapshotDay)) {
             return this.allSnapshot;
         }

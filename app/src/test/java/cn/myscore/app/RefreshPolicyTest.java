@@ -47,9 +47,13 @@ public class RefreshPolicyTest {
         assertEquals(0,RefreshPolicy.pollDelay(List.of(batch(match("delayed"))),TODAY.minusDays(1),TODAY,NOW));
     }
 
-    @Test public void futureDatesUseTheIdleCadence(){
-        assertEquals(RefreshPolicy.IDLE_CACHE,RefreshPolicy.cacheTtl(List.of(match("scheduled",NOW+86_400_000L)),TODAY.plusDays(1),TODAY,NOW));
+    @Test public void futureDatesReuseTheLastRead(){
+        assertEquals(RefreshPolicy.FUTURE_CACHE,RefreshPolicy.cacheTtl(List.of(match("scheduled",NOW+86_400_000L)),TODAY.plusDays(1),TODAY,NOW));
         assertEquals(RefreshPolicy.IDLE_POLL,RefreshPolicy.pollDelay(List.of(batch(match("scheduled",NOW+86_400_000L))),TODAY.plusDays(1),TODAY,NOW));
+    }
+
+    @Test public void aMatchStartingSoonStaysFreshOnTomorrowsDate(){
+        assertEquals(RefreshPolicy.NEAR_CACHE,RefreshPolicy.cacheTtl(List.of(match("scheduled",NOW+60*60_000L)),TODAY.plusDays(1),TODAY,NOW));
     }
 
     @Test public void todayUsesStateAwareTtls(){

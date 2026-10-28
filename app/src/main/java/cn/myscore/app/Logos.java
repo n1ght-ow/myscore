@@ -25,13 +25,14 @@ import java.util.concurrent.atomic.AtomicLong;
  * Rows are recycled, so images are rebound into existing views instead of allocating a new tree.
  */
 final class Logos {
-    private static final ExecutorService POOL=Executors.newFixedThreadPool(6);
+    private static final ExecutorService POOL=Executors.newFixedThreadPool(8);
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private static final int MEMORY_BYTES=16*1024*1024;
     private static final LruCache<String,Bitmap> MEMORY=new LruCache<String,Bitmap>(MEMORY_BYTES){@Override protected int sizeOf(String k,Bitmap b){return b.getByteCount();}};
     private static final ConcurrentHashMap<String,CompletableFuture<Bitmap>> IN_FLIGHT=new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String,Long> FAILED=new ConcurrentHashMap<>();
     private static final AtomicLong DECODES=new AtomicLong();
+    private static final AtomicLong CRAFTED=new AtomicLong();
 
     /** A recyclable image slot: create once, then call {@link #bind} for every row. */
     static final class Crest {
@@ -122,10 +123,7 @@ final class Logos {
             boolean artwork=crest.artwork;int foreground=crest.foreground;java.util.function.Supplier<String> backup=crest.backup;
             POOL.submit(()-> {
                 try {
-                    Bitmap bitmap;
-                    try{bitmap=load(app,url,artwork?target:Math.min(512,target*2));}
-                    catch(Exception primary){String alternate=backup==null?"":backup.get();if(!allowed(alternate)||alternate.equals(url))throw primary;bitmap=load(app,alternate,target);}
-                    if(!artwork)bitmap=prepareCrest(selectCrestVariant(bitmap,url,foreground),target,foreground);
+                    Bitmap bitmap=artwork?artworkBitmap(app,url,target,backup):crestBitmap(app,url,target,foreground,backup);
                     MEMORY.put(key,bitmap);
                     request.complete(bitmap);
                 } catch(Throwable e) {
@@ -148,6 +146,52 @@ final class Logos {
 
     static boolean allowed(String url) {
         try{URI u=URI.create(url);String h=u.getHost();return "https".equals(u.getScheme())&&h!=null&&(h.equals("a.espncdn.com")||h.equals("resources.premierleague.com")||h.equals("r2.thesportsdb.com")||h.equals("oss.5eplay.com")||h.equals("img.crawler.qq.com")||h.equals("game.gtimg.cn")||h.equals("img1.gtimg.com")||h.equals("cdn.5eplay.com")||h.equals("img1.5eplay.com")||h.equals("ossweb-img.qq.com"));}catch(RuntimeException e){return false;}
+    }
+    private static Bitmap artworkBitmap(Context app,String url,int target,java.util.function.Supplier<String> backup)throws Exception {
+        try{return load(app,url,target);}
+        catch(Exception first){String alternate=backup==null?"":backup.get();if(!allowed(alternate)||alternate.equals(url))throw first;return load(app,alternate,target);}
+    }
+    /** The trimmed, themed square that is actually drawn; reused from the prepared cache when possible. */
+    private static Bitmap crestBitmap(Context app,String url,int target,int foreground,java.util.function.Supplier<String> backup)throws Exception {
+        int edge=Math.max(32,Math.min(512,target));
+        // A prepared square is a tiny PNG of the exact draw size. Decoding it is far cheaper
+        // than the full source image plus the alpha trim on every launch.
+        Bitmap cached=prepared(app,url,edge,foreground);
+        if(cached!=null)return cached;
+        boolean primary=true;
+        Bitmap bitmap;
+        try{bitmap=load(app,url,Math.min(512,target*2));}
+        catch(Exception first){primary=false;String alternate=backup==null?"":backup.get();if(!allowed(alternate)||alternate.equals(url))throw first;bitmap=load(app,alternate,target);}
+        bitmap=prepareCrest(selectCrestVariant(bitmap,url,foreground),target,foreground);
+        // A fallback image is not stored as the primary crest; a later refresh may pick the real asset.
+        if(primary)savePrepared(app,url,edge,foreground,bitmap);
+        return bitmap;
+    }
+    /**
+     * Warm the crests of a day that was prefetched but not shown yet. The list then binds
+     * images from memory instead of starting a download on every first visit.
+     */
+    static void warm(Ui ui,java.util.Collection<String> urls,int size) {
+        if(urls==null||urls.isEmpty())return;
+        Context app=ui.c.getApplicationContext();
+        int target=targetPixels(ui,size),foreground=ui.text;
+        for(String url:urls) {
+            if(!allowed(url))continue;
+            String key=url+"@"+target+":crest:"+foreground;
+            if(MEMORY.get(key)!=null)continue;
+            CompletableFuture<Bitmap> created=new CompletableFuture<>(),running=IN_FLIGHT.putIfAbsent(key,created);
+            if(running!=null)continue;
+            POOL.submit(()-> {
+                try {
+                    Bitmap bitmap=crestBitmap(app,url,target,foreground,null);
+                    MEMORY.put(key,bitmap);
+                    created.complete(bitmap);
+                } catch(Throwable e) {
+                    // A quiet warm must not block the visible bind from trying again.
+                    created.completeExceptionally(e instanceof Exception?(Exception)e:new IOException("Image unavailable"));
+                } finally {IN_FLIGHT.remove(key,created);}
+            });
+        }
     }
     static void retryFailures(){FAILED.clear();}
 
@@ -178,7 +222,19 @@ final class Logos {
         File dir=new File(c.getCacheDir(),"crests-v1");if(!dir.exists()&&!dir.mkdirs())throw new IOException("Cannot create image cache");
         byte[] digest=MessageDigest.getInstance("SHA-256").digest(url.getBytes(java.nio.charset.StandardCharsets.UTF_8));StringBuilder key=new StringBuilder();for(byte b:digest)key.append(String.format(java.util.Locale.ROOT,"%02x",b));File file=new File(dir,key.toString());
         byte[] bytes=null;if(file.exists())try(InputStream in=new FileInputStream(file)){bytes=bounded(in);}
-        if(bytes==null){HttpURLConnection con=(HttpURLConnection)new URL(url).openConnection();try{con.setConnectTimeout(6000);con.setReadTimeout(8000);con.setRequestProperty("User-Agent","MyScore-Personal/"+BuildConfig.VERSION_NAME+" Android");con.setRequestProperty("Accept","image/*");con.setInstanceFollowRedirects(false);if(con.getResponseCode()!=200)throw new IOException("Image HTTP "+con.getResponseCode());try(InputStream in=con.getInputStream()){bytes=bounded(in);}}finally{con.disconnect();}}
+        if(bytes==null){
+            HttpURLConnection con=(HttpURLConnection)new URL(url).openConnection();
+            // A list binds a whole screen of crests from the same CDN at once. Keeping each
+            // socket in the shared pool after a complete read avoids one TLS handshake per
+            // badge; a failed read still drops the connection.
+            boolean complete=false;
+            try{
+                con.setConnectTimeout(6000);con.setReadTimeout(8000);con.setRequestProperty("User-Agent","MyScore-Personal/"+BuildConfig.VERSION_NAME+" Android");con.setRequestProperty("Accept","image/*");con.setInstanceFollowRedirects(false);
+                if(con.getResponseCode()!=200)throw new IOException("Image HTTP "+con.getResponseCode());
+                try(InputStream in=con.getInputStream()){bytes=bounded(in);}
+                complete=true;
+            }finally{if(!complete)con.disconnect();}
+        }
         int limit=Math.max(32,Math.min(512,maxPx));
         BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(bytes,0,bytes.length,bounds);
         if(bounds.outWidth<1||bounds.outHeight<1||bounds.outWidth>4096||bounds.outHeight>4096)throw new IOException("Invalid image bounds");
@@ -209,6 +265,38 @@ final class Logos {
         File[] old=dir.listFiles();if(old==null)return;
         long now=System.currentTimeMillis();
         for(File f:old)if(now-f.lastModified()>14L*86400_000&&!f.delete())android.util.Log.d("MyScore","Image cache cleanup deferred");
+    }
+    /** The trimmed, colour-corrected square that is actually drawn, cached per draw size. */
+    private static File preparedFile(Context c,String url,int edge,int foreground)throws Exception {
+        File dir=new File(c.getCacheDir(),"crests-prepared-v1");
+        if(!dir.exists()&&!dir.mkdirs())throw new IOException("Cannot create prepared crest cache");
+        byte[] digest=MessageDigest.getInstance("SHA-256").digest((url+"@"+edge+"@"+foreground).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        StringBuilder key=new StringBuilder();for(byte b:digest)key.append(String.format(java.util.Locale.ROOT,"%02x",b));
+        return new File(dir,key.append(".png").toString());
+    }
+    private static Bitmap prepared(Context c,String url,int edge,int foreground) {
+        try {
+            File file=preparedFile(c,url,edge,foreground);if(!file.exists())return null;
+            BitmapFactory.Options options=new BitmapFactory.Options();options.inPreferredConfig=Bitmap.Config.ARGB_8888;
+            Bitmap bitmap=BitmapFactory.decodeFile(file.getAbsolutePath(),options);
+            if(bitmap==null)return null;
+            if(bitmap.getWidth()!=edge||bitmap.getHeight()!=edge){bitmap.recycle();return null;}
+            return bitmap;
+        } catch(Exception|OutOfMemoryError e) {return null;}
+    }
+    private static void savePrepared(Context c,String url,int edge,int foreground,Bitmap bitmap) {
+        try {
+            File file=preparedFile(c,url,edge,foreground),tmp=new File(file.getPath()+".tmp");
+            try(OutputStream out=new FileOutputStream(tmp)){if(!bitmap.compress(Bitmap.CompressFormat.PNG,100,out))throw new IOException("Cannot encode prepared crest");}
+            if(file.exists()&&!file.delete())throw new IOException("Cannot replace prepared crest");
+            if(!tmp.renameTo(file)){tmp.delete();throw new IOException("Cannot store prepared crest");}
+            if(CRAFTED.incrementAndGet()%64==0)cleanupPrepared(file.getParentFile());
+        } catch(Exception|OutOfMemoryError e) {android.util.Log.d("MyScore","Prepared crest cache skipped");}
+    }
+    private static void cleanupPrepared(File dir) {
+        File[] files=dir==null?null:dir.listFiles();if(files==null)return;
+        long cutoff=System.currentTimeMillis()-21L*86400_000;
+        for(File f:files)if(f.lastModified()<cutoff&&!f.delete())android.util.Log.d("MyScore","Prepared crest cleanup deferred");
     }
     private static String key(String url,Crest crest){return url+"@"+crest.targetPx+(crest.artwork?":art":":crest:"+crest.foreground);}
     /** 5EPlay's merge_ team assets contain equal light/dark variants, not a wide team mark. */

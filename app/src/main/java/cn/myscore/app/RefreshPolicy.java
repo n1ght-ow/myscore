@@ -20,6 +20,9 @@ final class RefreshPolicy {
     static final long SLOW_POLL=60_000;
     static final long IDLE_CACHE=25*60_000L;
     static final long IDLE_POLL=30*60_000L;
+    // A fixture days away rarely changes; a revisit should reuse the last read instead of
+    // starting another round of requests. Close-to-start matches still use NEAR_CACHE.
+    static final long FUTURE_CACHE=2*60*60_000L;
     static final long PAST_CACHE=6*60*60_000L;
     static final long DETAIL_IDLE=10*60_000L;
     static final long FINAL_DETAIL=6*60*60_000L;
@@ -68,11 +71,14 @@ final class RefreshPolicy {
      */
     static long cacheTtl(List<Match> matches,LocalDate day,LocalDate today,long now) {
         if(hasLive(matches)) return SCORE_CACHE;
+        // A match starting soon must stay fresh even when it falls on tomorrow's date.
+        if(!day.isBefore(today)) {
+            long next=nextConfirmedStart(matches);
+            if(next>0 && next-now<=NEAR_WINDOW) return NEAR_CACHE;
+        }
         if(day.isBefore(today)) return PAST_CACHE;
-        if(day.isAfter(today)) return IDLE_CACHE;
+        if(day.isAfter(today)) return FUTURE_CACHE;
         if(hasSlow(matches)) return SLOW_CACHE;
-        long next=nextConfirmedStart(matches);
-        if(next>0 && next-now<=NEAR_WINDOW) return NEAR_CACHE;
         return IDLE_CACHE;
     }
 

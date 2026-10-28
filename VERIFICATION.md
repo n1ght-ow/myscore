@@ -1,3 +1,17 @@
+# MyScore 4.2.2 · 日期切换与队标加载提速（2026-10-28）
+
+- 列表切日期先显示内存中该日结果（最近 8 个日期／筛选组合），再读本地缓存并在后台刷新；150 毫秒内的连续切换只为最后一天发起网络请求，中间日期不再各自打一轮请求。
+- 停留某天且读取成功后预取后一天的赛程，并预热列表尺寸的队标；预取使用独立 `Repository` 的失败表，后台失败不会写成该日来源错误，打开时仍会重试。
+- 平板切日期改为原地更新列表、阅读栏与导航轨计数，不再拆除整条导航轨和三栏工作台；导航轨日期同步更新，只有跨越「今天」边界时才整屏重建。
+- 远期日期成功读取后 2 小时内复用，临近开赛仍按 25 秒检查；过去日期 6 小时。网络读取成功时不再主动断开连接，同一来源连续请求复用已有 TLS 连接；队标按绘制尺寸裁切后写入 `crests-prepared-v1` 本地小图缓存，重开应用直接解码小图，不再每次做全图解码和透明边界扫描。
+- `:app:testDebugUnitTest`：173 项、0 failures / 0 errors（新增「远期日期复用上次读取」与「明日临近开赛仍按 25 秒检查」2 项）；`:app:lintDebug`：0 errors / 26 warnings；`:app:assembleDebug` 与 `:app:assembleDebugAndroidTest` 通过。
+- Android 15 / API 35 平板模拟器 3048 × 2032 / 320dpi：冷启动首屏 227ms 出现第一条来源、556ms 全部来源（命中缓存）；连续切换 5 天只有最后一天发起请求，19 / 7 / 20 / 14 场均在 4–7ms 内从内存或缓存返回；预取的次日 17 场在 350ms 内显示比赛与队标；快速点两次后的 10 月 30 日 400ms 内 7 场与队标齐全。手机 1080 × 2400 / 420dpi 切日期 300ms 内显示 19 场与队标。
+- 从未缓存的日期首次读取仍受来源延迟限制：本轮代理环境首条 1.5s、全部 6.7s；改用连接复用后复测一条冷日期为首条 246ms、全部 1.8s。模拟器 DNS 间歇不可用，联网读取经主机 7897 代理完成，不代表真机运营商网络；未在 Redmi K80 Pro / HyperOS 真机验证，未做 FPS / 内存基准。
+- 截图：`artifacts/day-next-350ms.png`、`artifacts/day-prefetched-500ms.png`、`artifacts/prefetch-warm-350ms.png`、`artifacts/rail-fix.png`、`artifacts/phone-launch.png`、`artifacts/phone-next-300ms.png`、`artifacts/final-smoke.png`。验收后恢复 3048 × 2032 / 320dpi 平板尺寸与浅色主题。
+- 发布版本为 4.2.2 / 41：clean 构建后重新运行 173 项单元测试（0 failures / 0 errors）、`:app:lintDebug`（0 errors / 26 warnings）、`:app:assembleDebug` 与 `:app:assembleDebugAndroidTest`，全部通过；`aapt` 确认包名 `cn.myscore.app`、版本 4.2.2 / 41、minSdk 28 / targetSdk 35；`apksigner` 证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646` 与 4.2.1 相同。
+- 模拟器先安装 4.2.1 / 40，再覆盖安装 4.2.2 / 41，包管理器版本变为 4.2.2 / 41，启动无 FATAL / ANR；覆盖安装保留已有设置与缓存。
+- 发布附件：`artifacts/MyScore-4.2.2.apk`，1,106,053 字节，SHA-256 `7e334d5d9826952239eb952ce5c3adc0c9a72b366601c645e3cf17d76880786d`；校验文件 `artifacts/SHA256SUMS-4.2.2.txt`。发布入口：[v4.2.2](https://github.com/n1ght-ow/myscore/releases/tag/v4.2.2)。
+
 # MyScore 4.2.1 · 咪咕播放点击等待单场查找（2026-10-28）
 
 - 手机列表、平板列表/阅读页与详情页统一使用 `WatchLauncher`。首次点击等待单场查找，加入已经进行中的请求；重复点击不重复打开。无匹配结果或网络失败时提示「暂无本场播放链接」，只有主动选择备用入口才打开联赛专区。手动点击可以重试，后台失败退避保持生效。

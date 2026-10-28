@@ -38,7 +38,14 @@ public final class DetailParsers {
         for(int i=events.length()-1;i>=0;i--){JSONObject e=events.optJSONObject(i);if(e==null)continue;String clock=obj(e,"clock").optString("displayValue");int period=obj(e,"period").optInt("number");String time=(c.group.equals("足球")?"":period>0?"Q"+period+" ":"")+clock;String type=obj(e,"type").optString("text");String text=e.optString("text");if(text.isEmpty())continue;d.events.add(new MatchDetail.Event(time,label(type),text));}
         JSONArray injuries=arr(root,"injuries");for(int i=0;i<injuries.length();i++){JSONObject team=objAt(injuries,i);MatchDetail.Table t=new MatchDetail.Table("lineup",obj(team,"team").optString("displayName")+" · 伤停","球员","状态","说明");t.teamId=obj(team,"team").optString("id");t.category="伤停";JSONArray list=arr(team,"injuries");for(int j=0;j<list.length();j++){JSONObject r=objAt(list,j);t.row(obj(r,"athlete").optString("displayName"),label(r.optString("status")),r.optString("shortComment"));t.people.add(person(r,obj(team,"team"),d.match));}d.table(t);}
         if(c.group.equals("NBA"))for(MatchDetail.Table table:d.tables)if(table.category.equals("球员"))orderColumns(table,List.of("球员","时间","得分","篮板","助攻","抢断","盖帽","失误","投篮","三分","罚球","前场板","后场板","犯规","正负值"));
+        restrictPregame(d);
         return d;
+    }
+    /** ESPN summary supplies season totals before tip-off; those are not this match's stats. */
+    static void restrictPregame(MatchDetail detail) {
+        if(!detail.match.id.startsWith("espn:")||!detail.match.scheduled()||detail.match.group.equals("F1"))return;
+        detail.stats.clear();detail.events.clear();
+        detail.tables.removeIf(table->table.tab.equals("overview")||(!detail.match.group.equals("足球")&&table.tab.equals("lineup")&&!table.category.equals("伤停")));
     }
     private static void orderColumns(MatchDetail.Table table,List<String> preferred){List<String> columns=new ArrayList<>(table.columns);List<Integer> order=new ArrayList<>();for(String label:preferred){int index=columns.indexOf(label);if(index>=0&&!order.contains(index))order.add(index);}for(int i=0;i<columns.size();i++)if(!order.contains(i))order.add(i);table.columns.clear();for(int index:order)table.columns.add(columns.get(index));for(int i=0;i<table.rows.size();i++){List<String> before=table.rows.get(i),row=new ArrayList<>();for(int index:order)row.add(index<before.size()?before.get(index):"—");table.rows.set(i,row);}}
     private static void lineScores(MatchDetail d,JSONObject co){

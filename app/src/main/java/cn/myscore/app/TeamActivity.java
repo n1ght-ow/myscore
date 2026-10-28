@@ -58,7 +58,7 @@ public final class TeamActivity extends Activity {
     @Override public void onCreate(Bundle saved) {
         boolean dark=Ui.isDark(this);
         setTheme(dark?R.style.AppThemeDark:R.style.AppTheme);
-        super.onCreate(saved);ui=new Ui(this,dark);pad=Ui.isPad(this);
+        super.onCreate(saved);ui=new Ui(this,dark);pad=Ui.isPad(this)&&getResources().getConfiguration().screenWidthDp>=1000;
         try {
             String raw=getIntent().getStringExtra("team");
             team=Team.fromJson(new JSONObject(raw==null?"{}":raw));
@@ -352,6 +352,7 @@ public final class TeamActivity extends Activity {
 
     private void render() {
         if(!active||isFinishing()||isDestroyed())return;
+        if(pad&&((padUpcomingList!=null&&padUpcomingList.isInteracting())||(padFinishedList!=null&&padFinishedList.isInteracting()))){handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,200);return;}
         if(pad){renderPad();return;}
         if(list!=null&&list.isInteracting()){handler.removeCallbacks(renderSoon);handler.postDelayed(renderSoon,200);return;}
         handler.removeCallbacks(renderSoon);

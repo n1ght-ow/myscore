@@ -74,9 +74,24 @@ final class Ui {
         int width=c.getResources().getConfiguration().screenWidthDp;
         return isPad(c)?Math.min(1120,width):Math.min(640,width);
     }
-    int pageInset(){return isPad(c)?0:Math.max(0,(c.getResources().getDisplayMetrics().widthPixels-dp(640))/2);}
+    int pageInset(){return isPad(c)?0:dp(Math.max(0,(c.getResources().getConfiguration().screenWidthDp-640)/2f));}
     LinearLayout column(){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.VERTICAL);return v;}
     LinearLayout row(){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.HORIZONTAL);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
+    /** Keep asynchronous reading-pane replacements out of a touch or an unfinished fling. */
+    static final class ReadingScroll extends android.widget.ScrollView {
+        private boolean fingerDown;
+        private long lastScroll;
+        ReadingScroll(Context context){super(context);}
+        boolean isInteracting(){return fingerDown||android.os.SystemClock.uptimeMillis()-lastScroll<250;}
+        @Override public boolean dispatchTouchEvent(android.view.MotionEvent event){
+            int action=event.getActionMasked();
+            if(action==android.view.MotionEvent.ACTION_DOWN)fingerDown=true;
+            else if(action==android.view.MotionEvent.ACTION_UP||action==android.view.MotionEvent.ACTION_CANCEL)fingerDown=false;
+            return super.dispatchTouchEvent(event);
+        }
+        @Override protected void onScrollChanged(int x,int y,int oldX,int oldY){super.onScrollChanged(x,y,oldX,oldY);lastScroll=android.os.SystemClock.uptimeMillis();}
+        @Override protected void onDetachedFromWindow(){fingerDown=false;super.onDetachedFromWindow();}
+    }
     TextView text(String s,int sp,int color,boolean bold) {
         // AOSP JSONObject.optString turns explicit JSON null into "null"; keep that sentinel
         // out of the rendered UI even if a parser missed it.

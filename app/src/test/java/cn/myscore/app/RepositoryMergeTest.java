@@ -5,6 +5,21 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class RepositoryMergeTest {
+    @Test public void newerDetailUpdatesListWithoutMutatingSharedBatch(){
+        Match old=match("same","1",10),fresh=match("same","2",20);old.league=fresh.league="nba";
+        Repository.Batch shared=batch("source warning",old);shared.fetched=7;shared.retryAt=30;
+        Repository.Snapshot snapshot=new Repository.Snapshot();snapshot.batches.add(shared);snapshot.matches();
+        assertTrue(snapshot.updateMatch(fresh));assertSame(fresh,snapshot.matches().get(0));
+        assertSame(old,shared.matches.get(0));assertEquals(7,snapshot.batches.get(0).fetched);
+        assertEquals(30,snapshot.batches.get(0).retryAt);assertEquals("source warning",snapshot.batches.get(0).error);
+    }
+    @Test public void oldOrUnrelatedDetailCannotReplaceCurrentList(){
+        Match current=match("same","2",20),old=match("same","1",10),other=match("other","3",30);
+        current.league=old.league=other.league="nba";
+        Repository.Snapshot snapshot=new Repository.Snapshot();snapshot.batches.add(batch("",current));
+        assertFalse(snapshot.updateMatch(old));assertFalse(snapshot.updateMatch(other));assertSame(current,snapshot.matches().get(0));
+        Match wrong=match("same","4",40);wrong.league="epl";assertFalse(snapshot.updateMatch(wrong));
+    }
     private Repository.Batch batch(String error,Match... matches){Repository.Batch b=new Repository.Batch(Competition.find("nba"));b.error=error;b.matches.addAll(List.of(matches));return b;}
     private Match match(String id,String score,long updated){Match m=new Match();m.id=id;m.homeScore=score;m.updated=updated;return m;}
     @Test public void failedDayKeepsCacheWhileSuccessfulDayUpdates()throws Exception{

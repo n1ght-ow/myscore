@@ -13,7 +13,7 @@ final class LolMatchView {
     private final int positionWidth,kdaWidth,csWidth,goldWidth,spellWidth;
     private String selectedTeam="";
     private java.util.function.Consumer<String> selectTeam;
-    LolMatchView(Ui ui,MatchDetail detail,LinearLayout body,IntConsumer select){this.ui=ui;this.detail=detail;this.body=body;this.select=select;positionWidth=ui.dp(30);kdaWidth=ui.dp(64);csWidth=ui.dp(32);goldWidth=ui.dp(44);spellWidth=ui.dp(40);}
+    LolMatchView(Ui ui,MatchDetail detail,LinearLayout body,IntConsumer select){this.ui=ui;this.detail=detail;this.body=body;this.select=select;float scale=Math.max(1,ui.c.getResources().getConfiguration().fontScale);positionWidth=ui.dp(30*scale);kdaWidth=ui.dp(76*scale);csWidth=ui.dp(36*scale);goldWidth=ui.dp(48*scale);spellWidth=ui.dp(40*scale);}
     LolGame game(int selected){for(LolGame g:detail.lolGames)if(g.number==selected)return g;for(LolGame g:detail.lolGames)if(g.live)return g;return detail.lolGames.isEmpty()?null:detail.lolGames.get(detail.lolGames.size()-1);}
     void games(int selected,boolean stats){
         LolGame game=game(selected);
@@ -61,9 +61,16 @@ final class LolMatchView {
     }
     private static String compactGold(String value){try{return String.format(Locale.ROOT,"%.1fk",Double.parseDouble(value)/1000);}catch(NumberFormatException e){return value;}}
     private void players(LolGame game){
-        LinearLayout panel=ui.column();panel.setTag("lol-lineup");panel.setPadding(ui.dp(12),0,ui.dp(12),0);panel.setBackground(ui.panel());Set<String> roles=new LinkedHashSet<>(List.of("TOP","JUNGLE","MID","BOT","SUPPORT"));for(LolGame.Player p:game.home.players)roles.add(p.role());for(LolGame.Player p:game.away.players)roles.add(p.role());
+        LinearLayout panel=ui.column();panel.setPadding(ui.dp(12),0,ui.dp(12),0);panel.setBackground(ui.panel());Set<String> roles=new LinkedHashSet<>(List.of("TOP","JUNGLE","MID","BOT","SUPPORT"));for(LolGame.Player p:game.home.players)roles.add(p.role());for(LolGame.Player p:game.away.players)roles.add(p.role());
+        panel.setTag("lol-lineup-table");
+        int minimum=positionWidth+kdaWidth+csWidth+goldWidth+spellWidth+ui.dp(180*Math.max(1,ui.c.getResources().getConfiguration().fontScale));
+        HorizontalScrollView horizontal=new HorizontalScrollView(ui.c){
+            @Override protected void onMeasure(int width,int height){panel.setMinimumWidth(Math.max(minimum,MeasureSpec.getSize(width)));super.onMeasure(width,height);}
+        };
+        horizontal.setTag("lol-lineup");horizontal.setFillViewport(true);horizontal.setHorizontalScrollBarEnabled(true);
         panel.addView(header());
-        int index=0;for(String role:roles){if(index++>0)panel.addView(ui.divider());panel.addView(row(game,role,game.home.atRole(role),true));panel.addView(row(game,role,game.away.atRole(role),false));}body.addView(panel,new LinearLayout.LayoutParams(-1,-2));
+        int index=0;for(String role:roles){if(index++>0)panel.addView(ui.divider());panel.addView(row(game,role,game.home.atRole(role),true));panel.addView(row(game,role,game.away.atRole(role),false));}
+        horizontal.addView(panel);body.addView(horizontal,new LinearLayout.LayoutParams(-1,-2));
     }
     /** A single header labels the columns once; each role contributes a home/away row pair. */
     private View header(){

@@ -41,6 +41,24 @@ public final class Repository {
             sorted=all;return sorted;
         }
         public boolean failed() {for(Batch b:batches)if(!b.error.isEmpty())return true;return false;}
+        /** A newer exact-match detail can arrive before the next scoreboard poll. */
+        boolean updateMatch(Match next) {
+            for(int b=0;b<batches.size();b++) {
+                Batch current=batches.get(b);
+                if(!current.competition.id.equals(next.league))continue;
+                for(int i=0;i<current.matches.size();i++) {
+                    Match previous=current.matches.get(i);
+                    if(!previous.id.equals(next.id))continue;
+                    if(next.updated<=previous.updated)return false;
+                    // Day memories may share the old batch. Replace it rather than mutating it.
+                    Batch replacement=new Batch(current.competition);
+                    replacement.fetched=current.fetched;replacement.retryAt=current.retryAt;replacement.error=current.error;
+                    replacement.matches.addAll(current.matches);replacement.matches.set(i,next);
+                    batches.set(b,replacement);sorted=null;return true;
+                }
+            }
+            return false;
+        }
         public void merge(Batch batch) {
             for(int i=0;i<batches.size();i++)if(batches.get(i).competition.id.equals(batch.competition.id)) {batches.set(i,batch);sorted=null;return;}
             batches.add(batch);sorted=null;
@@ -204,7 +222,7 @@ public final class Repository {
             Batch fresh=new Batch(c);fresh.matches.addAll(merged);fresh.fetched=System.currentTimeMillis();save(fresh,day,day,"day_");
             return fresh;
         }catch(InterruptedException e){Thread.currentThread().interrupt();throw e;}
-        catch(Exception e){cached.error=day+" 赛程未更新";return cached;}
+        catch(Exception e){android.util.Log.w("MyScore","Score date "+c.id+" "+day+" failed: "+e.getClass().getSimpleName()+": "+e.getMessage());cached.error=day+" 赛程未更新";return cached;}
     }
     static List<Match> mergeDays(Batch view,List<Batch> days)throws java.io.IOException {
         List<String> errors=new ArrayList<>();for(Batch day:days)if(!day.error.isEmpty())errors.add(day.error);

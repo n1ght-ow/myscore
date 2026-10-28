@@ -7,6 +7,23 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class DetailParsersTest {
+    @Test public void pregameSeasonTotalsNeverBecomeMatchStats()throws Exception {
+        for(String league:List.of("epl","nba","nfl")){
+            JSONObject root=fixture(league);Match match=espnMatch(league);
+            JSONObject status=new JSONObject().put("type",new JSONObject().put("name","STATUS_SCHEDULED").put("state","pre"));
+            root.getJSONObject("header").put("status",status).getJSONArray("competitions").getJSONObject(0).put("status",status);
+            MatchDetail detail=DetailParsers.espn(root,match,100);
+            assertTrue(detail.match.scheduled());assertTrue(detail.stats.isEmpty());assertTrue(detail.events.isEmpty());
+            assertTrue(detail.tables.stream().noneMatch(t->t.tab.equals("overview")));
+            if(league.equals("epl"))assertTrue(detail.tables.stream().anyMatch(t->t.title.contains("首发")));
+            else assertTrue(detail.tables.stream().noneMatch(t->t.tab.equals("lineup")&&!t.category.equals("伤停")));
+        }
+    }
+    @Test public void oldPregameCacheIsSanitizedWithoutDroppingInjuries()throws Exception {
+        MatchDetail detail=DetailParsers.espn(fixture("nba"),espnMatch("nba"),100);detail.match.state="scheduled";
+        MatchDetail.Table injury=new MatchDetail.Table("lineup","伤停","球员","状态");injury.category="伤停";injury.row("Player","伤停");detail.table(injury);
+        DetailParsers.restrictPregame(detail);assertTrue(detail.stats.isEmpty());assertTrue(detail.tables.contains(injury));
+    }
     private JSONObject fixture(String name)throws Exception {try(java.io.InputStream in=getClass().getResourceAsStream("/details/"+name+".json")){assertNotNull(in);return new JSONObject(new String(in.readAllBytes(),StandardCharsets.UTF_8));}}
     private Match espnMatch(String league)throws Exception {return Parsers.espn(new JSONObject().put("events",new JSONArray().put(fixture(league).getJSONObject("header"))),Competition.find(league),1).get(0);}
     @Test public void footballDetailsContainRealStartersBenchStatsAndEvents()throws Exception {for(String id:new String[]{"epl","ucl"}){Match m=espnMatch(id);MatchDetail d=DetailParsers.espn(fixture(id),m,100);assertTrue(d.tables.stream().anyMatch(t->t.title.contains("首发")&&t.rows.size()==11));assertTrue(d.tables.stream().anyMatch(t->t.title.contains("替补")));assertTrue(d.stats.size()>10);assertFalse(d.events.isEmpty());assertTrue(d.match.homeLogo.startsWith("https://a.espncdn.com/"));}}

@@ -131,7 +131,7 @@ extends Activity {
         this.setTheme(dark ? R.style.AppThemeDark : R.style.AppTheme);
         super.onCreate(saved);
         this.ui = new Ui((Context)this, dark);
-        this.pad = Ui.isPad((Context)this);
+        this.pad = Ui.isPad((Context)this) && getResources().getConfiguration().screenWidthDp >= 1000;
         try {
             this.match = Match.fromJson(new JSONObject(this.getIntent().getStringExtra("match")));
             if (this.match.id.isBlank()) {

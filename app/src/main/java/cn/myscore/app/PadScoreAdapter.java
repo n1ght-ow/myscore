@@ -50,7 +50,9 @@ final class PadScoreAdapter extends BaseAdapter {
         if(id==null)id="";
         if(id.equals(selectedId))return;
         selectedId=id;
-        if(list==null){notifyDataSetChanged();return;}
+        // Attached children still have the old view types until ListView consumes a structural
+        // update. Rebinding them here can cast a match card to a section TextView.
+        if(list==null||list.isLayoutRequested()){notifyDataSetChanged();return;}
         int first=list.getFirstVisiblePosition();
         for(int i=0;i<list.getChildCount();i++){int position=first+i;if(position>=0&&position<rows.size())getView(position,list.getChildAt(i),list);}
     }

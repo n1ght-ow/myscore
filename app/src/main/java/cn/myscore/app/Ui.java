@@ -64,7 +64,11 @@ final class Ui {
     int dp(float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
     /** A 12.4" tablet reports a smallest width far above any phone; this is the layout split. */
     static boolean isPad(Context context){
-        return context.getResources().getConfiguration().smallestScreenWidthDp>=720;
+        android.content.res.Configuration cfg=context.getResources().getConfiguration();
+        // smallestScreenWidthDp is device-wide; screenWidthDp follows the current window, so a
+        // tablet in split-screen/freeform falls back to the phone layout instead of squeezing
+        // the 128dp rail + 360dp list into a 400dp window.
+        return cfg.smallestScreenWidthDp>=720&&cfg.screenWidthDp>=720;
     }
     int contentWidthDp(){
         int width=c.getResources().getConfiguration().screenWidthDp;
@@ -74,6 +78,9 @@ final class Ui {
     LinearLayout column(){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.VERTICAL);return v;}
     LinearLayout row(){LinearLayout v=new LinearLayout(c);v.setOrientation(LinearLayout.HORIZONTAL);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
     TextView text(String s,int sp,int color,boolean bold) {
+        // AOSP JSONObject.optString turns explicit JSON null into "null"; keep that sentinel
+        // out of the rendered UI even if a parser missed it.
+        if ("null".equals(s)) s = "";
         TextView v=new TextView(c);v.setText(s);v.setTextSize(sp);v.setTextColor(color);
         v.setFontFeatureSettings("tnum");v.setIncludeFontPadding(true);v.setFallbackLineSpacing(true);
         v.setTypeface(bold?medium:regular);

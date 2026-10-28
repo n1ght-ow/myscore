@@ -3,7 +3,6 @@ package cn.myscore.app;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
-import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -17,11 +16,14 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.WeakHashMap;
 
 /** One in-app sheet language for every secondary menu. No platform AlertDialog. */
 final class Sheet {
+    private static final WeakHashMap<Activity,List<Dialog>> OPEN=new WeakHashMap<>();
     interface Pick { void onPick(int index); }
     interface PickDate { void onDate(LocalDate date); }
     interface Action { void run(); }
@@ -215,10 +217,32 @@ final class Sheet {
         try{dialog.show();}catch(RuntimeException e){android.util.Log.w("MyScore","Sheet skipped because the activity left");return;}
         Window window = dialog.getWindow();
         if (window != null) {
+            int widthPixels=activity.getResources().getDisplayMetrics().widthPixels;
+            if (android.os.Build.VERSION.SDK_INT>=30) {
+                try{widthPixels=activity.getWindowManager().getCurrentWindowMetrics().getBounds().width();}
+                catch(RuntimeException ignored){}
+            }
             int wide=ui(activity).dp(Ui.isPad(activity)?680:640);
-            window.setLayout(Math.min(activity.getResources().getDisplayMetrics().widthPixels, wide), WindowManager.LayoutParams.WRAP_CONTENT);
+            window.setLayout(Math.min(widthPixels, wide), WindowManager.LayoutParams.WRAP_CONTENT);
             window.getDecorView().setPadding(0, 0, 0, 0);
             Ui.highRefresh(window);
+        }
+        List<Dialog> open=OPEN.get(activity);
+        if(open==null){open=new ArrayList<>();OPEN.put(activity,open);}
+        open.add(dialog);
+        dialog.setOnDismissListener(d -> {
+            List<Dialog> dialogs=OPEN.get(activity);
+            if(dialogs==null)return;
+            dialogs.remove(dialog);
+            if(dialogs.isEmpty())OPEN.remove(activity);
+        });
+    }
+    /** Close sheets before their Activity/thread pools are torn down. */
+    static void dismissAll(Activity activity) {
+        List<Dialog> dialogs=OPEN.remove(activity);
+        if(dialogs==null)return;
+        for(Dialog dialog:new ArrayList<>(dialogs)) {
+            try{if(dialog.isShowing())dialog.dismiss();}catch(RuntimeException ignored){}
         }
     }
     private static final class MaxScroll extends ScrollView {

@@ -20,11 +20,12 @@ public class UpdateTransferTest {
     private static final String HASH="2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
     private UpdateRelease release()throws Exception{return UpdateRelease.restore(new JSONObject().put("version","9.9.9").put("url",UpdateRelease.REPOSITORY+"/releases/download/v9.9.9/MyScore-9.9.9.apk").put("digest","sha256:"+HASH).put("size",5).toString());}
     private static final class Response extends HttpURLConnection {
-        final int code;final String location,body;final long length;boolean disconnected;
+        final int code;final String location,body;final long length;boolean disconnected;String range;
         Response(int code,String location,String body,long length)throws Exception{super(new URL("https://github.com"));this.code=code;this.location=location;this.body=body;this.length=length;}
         @Override public void connect(){}
         @Override public void disconnect(){disconnected=true;}
         @Override public boolean usingProxy(){return false;}
+        @Override public void setRequestProperty(String key,String value){if("Range".equalsIgnoreCase(key))range=value;}
         @Override public int getResponseCode(){return code;}
         @Override public String getHeaderField(String name){return "Location".equals(name)?location:null;}
         @Override public long getContentLengthLong(){return length;}
@@ -54,5 +55,15 @@ public class UpdateTransferTest {
     @Test public void refusesUnexpectedDeclaredLength()throws Exception{Response response=new Response(200,null,"hello",6);rejected(file->UpdateTransfer.download(release(),file,bytes->{},()->false,url->response));}
     @Test public void refusesOversizedUnknownLengthBody()throws Exception{Response response=new Response(200,null,"hello!",-1);rejected(file->UpdateTransfer.download(release(),file,bytes->{},()->false,url->response));}
     @Test public void refusesTruncatedAndTamperedBodies()throws Exception{for(String value:List.of("hell","HELLO")){Response response=new Response(200,null,value,-1);rejected(file->UpdateTransfer.download(release(),file,bytes->{},()->false,url->response));}}
+    @Test public void resumesFromAnExistingPartFile()throws Exception{
+        File file=File.createTempFile("myscore-transfer-",".part");
+        try {
+            Files.write(file.toPath(),"he".getBytes(StandardCharsets.UTF_8));
+            Response body=new Response(206,null,"llo",3);
+            UpdateTransfer.download(release(),file,bytes->{},()->false,url->body,false,true);
+            assertEquals("bytes=2-",body.range);
+            assertEquals("hello",new String(Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8));
+        } finally {Files.deleteIfExists(file.toPath());}
+    }
     @Test public void cancellationDoesNotExposeAnInstallablePartialFile()throws Exception{Response response=new Response(200,null,"hello",5);AtomicBoolean cancelled=new AtomicBoolean();rejected(file->UpdateTransfer.download(release(),file,bytes->{if(bytes>0)cancelled.set(true);},cancelled::get,url->response));}
 }

@@ -28,13 +28,5 @@ public class ParsersTest {
         List<Match> list=Parsers.espn(root,Competition.find("f1"),1);
         assertEquals(2,list.size());assertEquals("2026-10-25",list.get(0).day().toString());assertEquals("第 12 圈",list.get(1).status);assertEquals("1. First",list.get(1).results.get(0));
     }
-    @Test public void esportsRetainsSeriesScoreWithoutInventingMapWinner() throws Exception {
-        JSONObject root=new JSONObject("{\"results\":[{\"id\":7,\"discipline_id\":1,\"team1_id\":654,\"team2_id\":2,\"status\":\"current\",\"team1_score\":1,\"team2_score\":0,\"team1\":{\"name\":\"Spirit\"},\"team2\":{\"name\":\"Other\"},\"games\":[{\"number\":1,\"status\":\"finished\",\"map_name\":\"de_anubis\",\"winner_clan_score\":null,\"loser_clan_score\":null}]}]}");
-        Match m=Parsers.bo3(root,Competition.find("cs2"),1).get(0);assertEquals("1 : 0",m.score());assertEquals("第 1 图 · anubis · 已结束",m.results.get(0));
-    }
-    @Test public void lolFiltersWorldsEvenWhenSourceReturnsOtherLeagues() throws Exception {
-        JSONObject root=new JSONObject("{\"results\":[{\"id\":1,\"discipline_id\":3,\"tournament\":{\"name\":\"Worlds 2026\"}},{\"id\":2,\"discipline_id\":3,\"tournament\":{\"name\":\"LPL 2026\"}}]}");
-        assertEquals(1,Parsers.bo3(root,Competition.find("lol"),1).size());
-    }
     @Test(expected=Exception.class) public void malformedSourceIsAnErrorNotAnEmptySchedule() throws Exception {Parsers.espn(new JSONObject("{\"error\":\"blocked\"}"),Competition.find("epl"),1);}
 }

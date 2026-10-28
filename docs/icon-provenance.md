@@ -7,7 +7,7 @@
 - 3.0.1 按用户选定的 S 造型重建平滑贝塞尔曲线母版 `docs/assets/brand-s.svg`，240 × 224 画布、两条填充路径、透明斜缝。此前直接使用的分割 PNG 含不透明黑色斜缝与不规则透明边缘，统一着色后会填上斜缝，已移出生产资源。
 - `drawable/brand_s.xml` 使用同一组曲线路径，首页标题和更新页使用原生 VectorDrawable 着色、等比缩放，不再缩放 PNG。
 - `drawable/ic_launcher_foreground.xml` 为完整的 108 × 108dp VectorDrawable，而非固定 52 × 49dp 的 LayerDrawable。S 母版统一缩放为 49.5 × 46.2dp 并居中，其可见轮廓位于中央 66dp 安全圆内；纯黑背景由独立图层提供，系统负责外形裁切。Android 13 单色图标共用此前景。
-- 五个密度的 `mipmap-*/ic_launcher.png` 从同一 SVG 路径导出，72 单位图标画布内变换为 `translate(11.25 12.9) scale(.20625)`，黑底圆角；以 CairoSVG 按目标密度的四倍光栅化，再以 Lanczos 缩小。CairoSVG 仅用于本地资源导出，不是应用依赖。
+- 原五个密度的 `mipmap-*/ic_launcher.png` 曾从同一 SVG 路径导出；2026-10-28 清理时移除。最低 Android 9 已覆盖自适应图标，生产入口统一为 `mipmap-anydpi/ic_launcher.xml`，继续使用原有黑底和矢量前景，未改变图案。
 - 自适应画布和安全区依据 [Android 官方规范](https://developer.android.google.cn/develop/ui/compose/system/icon_design_adaptive?hl=en)。原生渲染回归检查覆盖前景内在尺寸、108 / 216 / 432px 下的等比留白与安全圆，以及斜缝透明度和 20 / 24 / 48px 标志边缘。
 - 2026-10-26 用户另行要求重设计设置页与底栏的 10 个功能图标；这些图标采用 `AppIcons.java` 中原创的 Android Path 矢量轮廓，不再使用显示器、人物、星标切片。
 - 10 个图标共用 24 单位画布、1.7 单位圆角描边和主题着色：接收日历（日历向内箭头）、已订阅比赛（书签勾选）、检查订阅（双向同步与勾选）、系统日历（日历向外箭头）、外观（调色盘）、更新（圆圈向上箭头）、数据连接（服务器与连接线）、帮助（问号圆圈）、比赛（奖杯）、设置（齿轮）。

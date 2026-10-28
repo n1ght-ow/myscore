@@ -80,6 +80,10 @@ extends Activity {
     private TextView headerHomeScore;
     private TextView headerAwayScore;
     private Ui.ScoreText headerScore;
+    private Logos.Crest headerHomeCrest;
+    private Logos.Crest headerAwayCrest;
+    private FrameLayout headerHomeSlot;
+    private FrameLayout headerAwaySlot;
     private TextView[] tabLabels;
     private View[] tabRules;
     private String[] tabKeys;
@@ -106,6 +110,9 @@ extends Activity {
     private int metricsX;
     private int eventsLimit = 50;
     private int playerLimit = 16;
+    private int pendingScrollY = -1;
+    private final Map<String,Integer> tableScroll = new LinkedHashMap<>();
+    private String renderedPadLeft = "";
     private final Runnable update = () -> {
         if (this.active && !this.isDestroyed()) {
             this.render(true);
@@ -146,6 +153,14 @@ extends Activity {
             this.metricsX = saved.getInt("metricsX");
             this.eventsLimit = saved.getInt("eventsLimit", 50);
             this.playerLimit = saved.getInt("playerLimit", 16);
+            this.pendingScrollY = saved.getInt("scrollY", -1);
+            ArrayList<String> tableKeys = saved.getStringArrayList("table_keys");
+            ArrayList<Integer> tableValues = saved.getIntegerArrayList("table_scroll");
+            if (tableKeys != null && tableValues != null) {
+                for (int i = 0; i < Math.min(tableKeys.size(), tableValues.size()); i++) {
+                    this.tableScroll.put(tableKeys.get(i), tableValues.get(i));
+                }
+            }
         }
         if ((this.match.group.equals("F1") || this.match.group.equals("LOL")) && this.tab.equals("events")) {
             this.tab = "overview";
@@ -162,8 +177,7 @@ extends Activity {
         this.root = this.ui.column();
         this.setContentView((View)this.root);
         this.root.setOnApplyWindowInsetsListener((v, insets) -> {
-            int inset;
-            int n = inset = this.pad ? 0 : this.ui.pageInset();
+            int inset = this.pad ? 0 : this.ui.pageInset();
             if (Build.VERSION.SDK_INT >= 30) {
                 Insets i = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                 v.setPadding(i.left + inset, i.top, i.right + inset, i.bottom);
@@ -202,6 +216,8 @@ extends Activity {
     }
 
     public void onDestroy() {
+        this.active = false;
+        Sheet.dismissAll(this);
         this.handler.removeCallbacksAndMessages(null);
         this.worker.shutdownNow();
         super.onDestroy();
@@ -219,6 +235,12 @@ extends Activity {
         state.putInt("metricsX", this.metricsX);
         state.putInt("eventsLimit", this.eventsLimit);
         state.putInt("playerLimit", this.playerLimit);
+        state.putInt("scrollY", this.scroll == null ? this.pendingScrollY : this.scroll.getScrollY());
+        ArrayList<String> tableKeys = new ArrayList<>(this.tableScroll.keySet());
+        ArrayList<Integer> tableValues = new ArrayList<>();
+        for (String key : tableKeys) tableValues.add(this.tableScroll.get(key));
+        state.putStringArrayList("table_keys", tableKeys);
+        state.putIntegerArrayList("table_scroll", tableValues);
     }
 
     private void load(boolean force) {
@@ -253,6 +275,7 @@ extends Activity {
                     if (this.active) {
                         this.render(true);
                     }
+                    this.enrichProfiles(cached);
                 });
             }
             MatchDetail next = null;
@@ -274,11 +297,16 @@ extends Activity {
                 int n = this.failures = failure.isEmpty() ? 0 : this.failures + 1;
                 if (result != null) {
                     this.detail = result;
-                    this.match = result.match;
+                    // The repository may answer from a shared/older cache; never roll the header
+                    // back to an older match snapshot.
+                    if (result.match.updated >= this.match.updated) {
+                        this.match = result.match;
+                    }
                 }
                 if (this.active) {
                     this.render(true);
                     this.resolveWatch();
+                    this.enrichProfiles(result != null ? result : this.detail);
                     if (this.pendingForce) {
                         this.load(true);
                         return;
@@ -287,14 +315,34 @@ extends Activity {
                         long interval = RefreshPolicy.detail(this.match, System.currentTimeMillis());
                         long elapsed = result == null ? 0L : Math.max(0L, System.currentTimeMillis() - result.fetched);
                         this.handler.postDelayed(this.tick, RefreshPolicy.remaining(RefreshPolicy.retry(interval, this.failures), elapsed));
+                    } else {
+                        // A finished detail is normally frozen, but re-read it once after the
+                        // long settled interval so a source correction is not lost forever.
+                        long age = result == null ? 0L : Math.max(0L, System.currentTimeMillis() - result.fetched);
+                        this.handler.postDelayed(this.tick, Math.max(60_000L, RefreshPolicy.SETTLED_RECHECK - age));
                     }
                 }
             });
         });
     }
 
-    private FrameLayout iconButton(String kind, String description, Runnable click) {
-        FrameLayout b = new FrameLayout((Context)this);
+    private void enrichProfiles(MatchDetail target) {
+        if (target == null) return;
+        this.repository.enrichProfiles(target, enriched -> this.handler.post(() -> {
+            if (!this.active || this.isFinishing() || this.isDestroyed()) return;
+            if (enriched == target) return;
+            // A cached preview and the network result can be different objects with the same
+            // identity/fetch stamp; the enriched result must still replace either one.
+            if (this.detail != target && (this.detail == null
+                || !enriched.match.id.equals(this.detail.match.id)
+                || enriched.fetched != this.detail.fetched)) return;
+            this.detail = enriched;
+            if (enriched.match.updated >= this.match.updated) this.match = enriched.match;
+            this.render(true);
+        }));
+    }
+
+    private FrameLayout iconButton(String kind, String description, Runnable click) {        FrameLayout b = new FrameLayout((Context)this);
         b.addView((View)new Ui.Icon((Context)this, kind, this.ui.text), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(22.0f), this.ui.dp(22.0f), 17));
         this.ui.clickable((View)b, 0, 24);
         b.setContentDescription((CharSequence)description);
@@ -310,16 +358,16 @@ extends Activity {
         if (this.isFinishing() || this.isDestroyed()) {
             return;
         }
-        if (this.pad) {
-            this.renderPad(preserve);
-            return;
-        }
         if (preserve && (this.fingerDown || SystemClock.uptimeMillis() - this.lastScroll < 200L)) {
             this.handler.removeCallbacks(this.update);
             this.handler.postDelayed(this.update, 200L);
             return;
         }
-        boolean bl = first = !this.chromeBuilt;
+        if (this.pad) {
+            this.renderPad(preserve);
+            return;
+        }
+        first = !this.chromeBuilt;
         if (first) {
             this.buildChrome();
         } else {
@@ -327,7 +375,7 @@ extends Activity {
         }
         String key = this.bodyKey();
         long started = SystemClock.uptimeMillis();
-        boolean bl2 = changed = first || !key.equals(this.rendered);
+        changed = first || !key.equals(this.rendered);
         if (changed) {
             this.rendered = key;
             if (BuildConfig.DEBUG) {
@@ -345,13 +393,13 @@ extends Activity {
     private void renderPad(boolean preserve) {
         boolean changed;
         boolean first;
-        boolean bl = first = !this.chromeBuilt;
+        first = !this.chromeBuilt;
         if (first) {
             this.buildPadChrome();
         }
         this.updatePadChrome();
         String key = this.bodyKey();
-        boolean bl2 = changed = first || !key.equals(this.rendered);
+        changed = first || !key.equals(this.rendered);
         if (changed) {
             this.rendered = key;
             this.rebuildPadBody(preserve);
@@ -360,6 +408,7 @@ extends Activity {
     }
 
     private void buildPadChrome() {
+        this.renderedPadLeft = "";
         this.root.removeAllViews();
         LinearLayout bar = this.ui.row();
         bar.setPadding(this.ui.dp(12.0f), this.ui.dp(10.0f), this.ui.dp(16.0f), this.ui.dp(10.0f));
@@ -390,6 +439,7 @@ extends Activity {
         this.padLeftHost = this.ui.column();
         this.padLeftHost.setPadding(this.ui.dp(26.0f), this.ui.dp(24.0f), this.ui.dp(26.0f), this.ui.dp(32.0f));
         this.padLeftScroll.addView((View)this.padLeftHost);
+        this.trackTouch(this.padLeftScroll);
         work.addView((View)this.padLeftScroll, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(404.0f), -1));
         work.addView(this.padRule());
         LinearLayout reading = this.ui.column();
@@ -406,12 +456,27 @@ extends Activity {
         this.scroll.setOnScrollChangeListener((v, x, sy, ox, oy) -> {
             this.lastScroll = SystemClock.uptimeMillis();
         });
+        this.trackTouch(this.scroll);
         this.body = this.ui.column();
         this.scroll.addView((View)this.body);
         reading.addView((View)this.scroll, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, 0, 1.0f));
         this.root.addView((View)work, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, 0, 1.0f));
         this.buildPadTabs();
         this.chromeBuilt = true;
+    }
+
+    @SuppressLint(value={"ClickableViewAccessibility"})
+    private void trackTouch(View view) {
+        view.setOnTouchListener((v, event) -> {
+            int action = event.getActionMasked();
+            if (action == android.view.MotionEvent.ACTION_DOWN) {
+                this.fingerDown = true;
+            } else if (action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL) {
+                this.fingerDown = false;
+                this.lastScroll = SystemClock.uptimeMillis();
+            }
+            return false;
+        });
     }
 
     private void buildPadTabs() {
@@ -518,7 +583,23 @@ extends Activity {
             this.padTopState.setTextColor(this.match.live() ? this.ui.primary : (this.match.cancelled() ? this.ui.error : this.ui.muted));
         }
         this.updateTabs();
-        this.rebuildPadLeft();
+        // The 404dp dossier is expensive to build. A live score tick usually changes only the
+        // reading pane, so rebuild the left pane only when something it renders has changed.
+        String leftKey = this.padLeftKey();
+        if (!leftKey.equals(this.renderedPadLeft)) {
+            this.renderedPadLeft = leftKey;
+            this.rebuildPadLeft();
+        }
+    }
+
+    private String padLeftKey() {
+        StringBuilder key = new StringBuilder(256);
+        key.append(this.match.json()).append('|').append(this.busy)
+            .append('|').append(this.watches.signature(this.match));
+        MatchDetail d = this.detail;
+        key.append('|').append(d == null ? "none"
+            : d.source + ":" + d.warning + ":" + d.bodySignature());
+        return key.toString();
     }
 
     private void rebuildPadLeft() {
@@ -703,6 +784,7 @@ extends Activity {
         LinkedHashMap<String, List> facts = new LinkedHashMap<String, List>();
         for (MatchDetail.Fact f : this.detail.facts) {
             String label = DetailParsers.label(DetailParsers.plain(f.label()));
+            if (label.equals("阵容资料版本")) continue;
             String value = DetailParsers.plain(f.value());
             if (value.isBlank()) continue;
             facts.computeIfAbsent(label.isBlank() ? "信息" : label, k -> new ArrayList()).add(value);
@@ -774,10 +856,14 @@ extends Activity {
             this.roster("lineup");
         }
         this.scroll.post(() -> this.scroll.scrollTo(0, y));
+        if (this.pendingScrollY >= 0 && this.detail != null) {
+            int restored = this.pendingScrollY;
+            this.pendingScrollY = -1;
+            this.scroll.post(() -> this.scroll.scrollTo(0, restored));
+        }
     }
 
     private void padOverview() {
-        int panelWidth;
         int width = this.ui.c.getResources().getConfiguration().screenWidthDp;
         boolean two = width >= 1280;
         LinearLayout columns = this.ui.row();
@@ -800,7 +886,7 @@ extends Activity {
             emptyCard.addView((View)this.ui.text("本场暂无更多概览数据，比赛信息见左侧。", 12, this.ui.muted, false));
             left.addView((View)emptyCard);
         }
-        if (this.tablesInto(right, "overview", panelWidth = Math.max(440, (this.ui.c.getResources().getConfiguration().screenWidthDp - 404 - 72 - 26) / 2))) {
+        if (this.tablesInto(right, "overview", Math.max(440, (this.ui.c.getResources().getConfiguration().screenWidthDp - 404 - 72 - 26) / 2))) {
             this.ui.gap(right, 22);
         }
         if (!this.detail.events.isEmpty()) {
@@ -833,18 +919,27 @@ extends Activity {
             return;
         }
         if (hasStats && hasTables) {
-            LinearLayout columns = this.ui.row();
-            columns.setGravity(48);
-            LinearLayout left = this.ui.column();
-            LinearLayout right = this.ui.column();
-            columns.addView((View)left, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 0.9f));
-            columns.addView(this.hspace(26));
-            columns.addView((View)right, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.1f));
-            this.body.addView((View)columns);
-            this.headingInto(left, "球队对比");
-            left.addView((View)this.padStatsCard(this.detail.stats, this.detail.stats.size()));
-            this.headingInto(right, "球员与分段数据");
-            this.tablesInto(right, "stats", Math.max(420, (this.ui.c.getResources().getConfiguration().screenWidthDp - 404 - 72 - 26) / 2));
+            int width = this.ui.c.getResources().getConfiguration().screenWidthDp;
+            if (width >= 1280) {
+                LinearLayout columns = this.ui.row();
+                columns.setGravity(48);
+                LinearLayout left = this.ui.column();
+                LinearLayout right = this.ui.column();
+                columns.addView((View)left, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 0.9f));
+                columns.addView(this.hspace(26));
+                columns.addView((View)right, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.1f));
+                this.body.addView((View)columns);
+                this.headingInto(left, "球队对比");
+                left.addView((View)this.padStatsCard(this.detail.stats, this.detail.stats.size()));
+                this.headingInto(right, "球员与分段数据");
+                this.tablesInto(right, "stats", Math.max(420, (width - 404 - 72 - 26) / 2));
+            } else {
+                // A 720-1279dp reading pane is too narrow for two table columns.
+                this.heading("球队对比");
+                this.body.addView((View)this.padStatsCard(this.detail.stats, this.detail.stats.size()));
+                this.heading("球员与分段数据");
+                this.tablesInto(this.body, "stats");
+            }
         } else if (hasStats) {
             this.heading("球队对比");
             this.body.addView((View)this.padStatsCard(this.detail.stats, this.detail.stats.size()));
@@ -865,7 +960,7 @@ extends Activity {
         if (!this.detail.events.isEmpty()) {
             boolean two;
             int width = this.ui.c.getResources().getConfiguration().screenWidthDp;
-            boolean bl = two = width >= 1280 && this.detail.events.size() > 6;
+            two = width >= 1280 && this.detail.events.size() > 6;
             this.heading(this.match.group.equals("足球") ? "关键事件" : (this.match.group.equals("NFL") ? "得分进程" : "比赛进程"));
             if (two) {
                 LinearLayout columns = this.ui.row();
@@ -907,17 +1002,6 @@ extends Activity {
         }
     }
 
-    private void padSourceCard(LinearLayout into) {
-        this.headingInto(into, "来源与更新时间");
-        LinearLayout card = this.panel();
-        card.addView((View)this.ui.text(this.detail.source, 13, this.ui.text, true));
-        this.ui.gap(card, 6);
-        card.addView((View)this.ui.text("获取于 " + DetailActivity.time(this.detail.fetched, "M月d日 HH:mm:ss") + (this.match.group.equals("LOL") ? "\n赛程发布 " + DetailActivity.time(this.match.updated, "M月d日 HH:mm:ss") : ""), 11, this.ui.muted, false));
-        this.ui.gap(card, 12);
-        card.addView((View)this.ui.button("打开来源页面", false, this::openUrl), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
-        into.addView((View)card);
-    }
-
     private void openUrl() {
         if (this.match.url.isBlank()) {
             Sheet.message(this, "来源页面", "来源尚未提供可直接打开的页面。");
@@ -939,8 +1023,13 @@ extends Activity {
         if (this.watches == null || this.match == null) {
             return;
         }
+        // A result that arrived while paused was intentionally ignored; rebind the cached
+        // destination before asking for another upgrade so the header cannot stay stale.
+        if (!this.pad && this.headerWatch != null) {
+            this.headerWatch.bind(this.watches.link(this.match), this.match.live(), this::openWatch);
+        }
         this.watches.resolve(this.match, () -> {
-            if (this.isFinishing() || this.isDestroyed()) {
+            if (!this.active || this.isFinishing() || this.isDestroyed()) {
                 return;
             }
             if (this.pad) {
@@ -966,7 +1055,13 @@ extends Activity {
             if (!t.tab.equals(key)) continue;
             this.headingInto(into, t.title);
             int width = widthDp > 0 ? widthDp : Math.max(420, this.ui.c.getResources().getConfiguration().screenWidthDp - 404 - 72);
-            into.addView(new DetailTableView(this.ui, false, true, false, width).simple(t), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
+            String scrollKey = key + "|" + t.title;
+            int scrollX = this.tableScroll.getOrDefault(scrollKey, 0);
+            into.addView(new DetailTableView(this.ui, false, true, false, width)
+                .simple(t, x -> {
+                    this.tableScroll.put(scrollKey, x);
+                    this.lastScroll = SystemClock.uptimeMillis();
+                }, scrollX), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(into, 18);
             found = true;
         }
@@ -976,12 +1071,6 @@ extends Activity {
     private View hspace(int dp) {
         View v = new View((Context)this);
         v.setLayoutParams((ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(dp), 1));
-        return v;
-    }
-
-    private View vspace(int dp) {
-        View v = new View((Context)this);
-        v.setLayoutParams((ViewGroup.LayoutParams)new LinearLayout.LayoutParams(1, this.ui.dp(dp)));
         return v;
     }
 
@@ -1138,9 +1227,26 @@ extends Activity {
             this.headerState.setText((CharSequence)this.match.status);
             this.headerState.setTextColor(this.match.live() ? this.ui.primary : this.ui.muted);
             this.headerStart.setText((CharSequence)(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "时间待定"));
+            this.bindHeaderTeam(true);
+            this.bindHeaderTeam(false);
         }
         this.updateTabs();
         this.updateStatus();
+    }
+
+    private void bindHeaderTeam(boolean home) {
+        Logos.Crest crest = home ? this.headerHomeCrest : this.headerAwayCrest;
+        FrameLayout slot = home ? this.headerHomeSlot : this.headerAwaySlot;
+        if (crest == null || slot == null) return;
+        String name = home ? this.match.home : this.match.away;
+        String logo = home ? this.match.homeLogo : this.match.awayLogo;
+        String id = home ? this.match.homeId : this.match.awayId;
+        Logos.bind(crest, logo, name);
+        boolean available = id != null && !id.isBlank();
+        slot.setClickable(available);
+        slot.setFocusable(available);
+        slot.setContentDescription(available ? "查看 " + name + " 的赛程" : null);
+        slot.setOnClickListener(available ? v -> this.openTeam(home) : null);
     }
 
     private void updateStatus() {
@@ -1206,6 +1312,11 @@ extends Activity {
         }
         if (this.scroll != null) {
             this.scroll.post(() -> this.scroll.scrollTo(0, preserve ? y : 0));
+            if (this.pendingScrollY >= 0 && this.detail != null) {
+                int restored = this.pendingScrollY;
+                this.pendingScrollY = -1;
+                this.scroll.post(() -> this.scroll.scrollTo(0, restored));
+            }
         }
     }
 
@@ -1226,7 +1337,16 @@ extends Activity {
         LinearLayout side = this.ui.column();
         side.setGravity(17);
         FrameLayout slot = new FrameLayout((Context)this);
-        slot.addView((View)Logos.view(this.ui, logo, name, 44), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(44.0f), this.ui.dp(44.0f), 17));
+        Logos.Crest crest = Logos.crest(this.ui, 44, false);
+        Logos.bind(crest, logo, name);
+        if (home) {
+            this.headerHomeCrest = crest;
+            this.headerHomeSlot = slot;
+        } else {
+            this.headerAwayCrest = crest;
+            this.headerAwaySlot = slot;
+        }
+        slot.addView((View)crest.box, (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(44.0f), this.ui.dp(44.0f), 17));
         this.ui.clickable((View)slot, 0, 28);
         boolean available = id != null && !id.isBlank();
         slot.setClickable(available);
@@ -1414,6 +1534,7 @@ extends Activity {
         LinkedHashMap<String, List<String>> facts = new LinkedHashMap<String, List<String>>();
         for (MatchDetail.Fact f : this.detail.facts) {
             String label = DetailParsers.label(DetailParsers.plain(f.label()));
+            if (label.equals("阵容资料版本")) continue;
             String value = DetailParsers.plain(f.value());
             if (value.isBlank()) continue;
             facts.computeIfAbsent(label.isBlank() ? "信息" : label, k -> new ArrayList()).add(value);
@@ -1459,7 +1580,6 @@ extends Activity {
     }
 
     private void statistics() {
-        boolean has;
         if (this.match.group.equals("F1")) {
             this.roster("stats");
             return;
@@ -1473,7 +1593,7 @@ extends Activity {
             }
             this.body.addView((View)card);
         }
-        if (!(has = this.tables("stats")) && this.detail.stats.isEmpty()) {
+        if (!this.tables("stats") && this.detail.stats.isEmpty()) {
             if (this.match.group.equals("CS2")) {
                 this.empty("选手数据按全场与地图分类", "在选手页比较 K/D/A、ADR、KAST 与来源 Rating。");
                 this.body.addView((View)this.ui.button("查看选手数据", false, () -> {
@@ -1577,7 +1697,13 @@ extends Activity {
         for (MatchDetail.Table t : this.detail.tables) {
             if (!t.tab.equals(key)) continue;
             this.heading(t.title);
-            this.body.addView(new DetailTableView(this.ui).simple(t), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
+            String scrollKey = key + "|" + t.title;
+            int scrollX = this.tableScroll.getOrDefault(scrollKey, 0);
+            this.body.addView(new DetailTableView(this.ui)
+                .simple(t, x -> {
+                    this.tableScroll.put(scrollKey, x);
+                    this.lastScroll = SystemClock.uptimeMillis();
+                }, scrollX), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             found = true;
         }
         return found;
@@ -1684,11 +1810,16 @@ extends Activity {
             if (!table.tab.equals("events") || !table.title.startsWith(selected + " · ")) continue;
             halves = table;
         }
+        String scrollKey = "cs2|" + selected;
+        int scrollX = this.tableScroll.getOrDefault(scrollKey, 0);
         new TeamPanelsView(this.ui, this.detail, this.body).scope(selected, this.sortColumn, this.descending, sort -> {
             this.sortColumn = sort.column();
             this.descending = sort.descending();
             this.render(true);
-        }, 0, null, this.scoreCells(halves, this.match.home), this.scoreCells(halves, this.match.away));
+        }, scrollX, x -> {
+            this.tableScroll.put(scrollKey, x);
+            this.lastScroll = SystemClock.uptimeMillis();
+        }, this.scoreCells(halves, this.match.home), this.scoreCells(halves, this.match.away));
         List<String> missing = this.missingMaps(maps);
         if (!missing.isEmpty()) {
             this.ui.gap(this.body, 16);

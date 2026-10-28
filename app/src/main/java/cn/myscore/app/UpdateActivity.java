@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.ClipData;
 import android.content.Intent;
-import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -42,7 +41,7 @@ public final class UpdateActivity extends Activity {
     }
     @Override public void onResume(){super.onResume();active=true;if(state==State.DOWNLOADING)poll();}
     @Override public void onPause(){active=false;handler.removeCallbacks(pollAgain);super.onPause();}
-    @Override public void onDestroy(){operation++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();super.onDestroy();}
+    @Override public void onDestroy(){active=false;Sheet.dismissAll(this);operation++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();super.onDestroy();}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     private void build(){
         LinearLayout root=ui.column();setContentView(root);

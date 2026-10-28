@@ -7,8 +7,12 @@ import java.util.concurrent.FutureTask;
 
 /** Shares overlapping reads only; completed and failed reads never become an implicit cache. */
 final class SingleFlight<K,V> {
+    private static final int MAX_CANCEL_RETRIES=2;
     private final ConcurrentHashMap<K,FutureTask<V>> requests=new ConcurrentHashMap<>();
     V execute(K key,Callable<V> read)throws Exception {
+        return execute(key,read,0);
+    }
+    private V execute(K key,Callable<V> read,int retries)throws Exception {
         if(Thread.currentThread().isInterrupted())throw new InterruptedException();
         FutureTask<V> created=new FutureTask<>(read),running=requests.putIfAbsent(key,created);
         boolean owner=running==null;
@@ -21,7 +25,9 @@ final class SingleFlight<K,V> {
             // A superseded screen may own the shared read. Its cancellation must not cancel
             // another screen that still needs the same URL.
             if(!owner&&cause instanceof InterruptedException&&!Thread.currentThread().isInterrupted()){
-                requests.remove(key,running);return execute(key,read);
+                requests.remove(key,running);
+                if(retries>=MAX_CANCEL_RETRIES)throw new InterruptedException("Shared request cancelled repeatedly");
+                return execute(key,read,retries+1);
             }
             if(cause instanceof Exception)throw (Exception)cause;
             if(cause instanceof Error)throw (Error)cause;

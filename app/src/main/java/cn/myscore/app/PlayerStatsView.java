@@ -28,6 +28,6 @@ final class PlayerStatsView {
         TextView hint=ui.text("点姓名查看详情",11,ui.muted,false);body.addView(hint);ui.gap(body,8);
         View table=new DetailTableView(ui).build(schema.columns,rows,sorted,selected.descending,label->changed.accept(new Selection(team,category,label,sorted.equals(label)?!selected.descending:true)),savedScroll,scrollX);body.addView(table,new LinearLayout.LayoutParams(-1,-2));
         if(truncated){ui.gap(body,10);body.addView(ui.button("显示更多 · 剩余 "+(total-shown)+" 人",false,more));}
-        HorizontalScrollView metrics=table.findViewWithTag("detail-metrics-scroll");boolean sortable=false;for(DetailRows.Entry row:rows)for(int i=1;i<row.values().size();i++)if(!Double.isNaN(DetailRows.number(row.values().get(i))))sortable=true;boolean hasSort=sortable;metrics.post(()->hint.setText((hasSort?"点数值列排序 · ":"")+(metrics.canScrollHorizontally(1)||metrics.canScrollHorizontally(-1)?"横向滑动查看更多 · ":"")+"点姓名查看详情"));
+        HorizontalScrollView metrics=table.findViewWithTag("detail-metrics-scroll");metrics.post(()->hint.setText((metrics.canScrollHorizontally(1)||metrics.canScrollHorizontally(-1)?"横向滑动查看更多 · ":"")+"点姓名查看详情"));
     }
 }

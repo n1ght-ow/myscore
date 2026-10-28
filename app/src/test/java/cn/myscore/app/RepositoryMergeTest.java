@@ -23,6 +23,12 @@ public class RepositoryMergeTest {
         List<Match> merged=Repository.mergeTerminal(List.of(cached),List.of(fresh));
         assertEquals(1,merged.size());assertSame(cached,merged.get(0));assertEquals("1",merged.get(0).homeScore);
     }
+    @Test public void longRecheckAllowsASourceCorrectedFinalScore(){
+        Match cached=match("same","1",100);cached.state="final";
+        Match fresh=match("same","2",200);fresh.state="final";
+        List<Match> merged=Repository.mergeTerminal(List.of(cached),List.of(fresh),true);
+        assertEquals(1,merged.size());assertSame(fresh,merged.get(0));assertEquals("2",merged.get(0).homeScore);
+    }
     @Test public void liveCacheIsReplacedByANewFinalEntry(){
         Match cached=match("same","1",100);cached.state="live";
         Match fresh=match("same","2",200);fresh.state="final";

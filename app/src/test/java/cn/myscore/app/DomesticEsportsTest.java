@@ -20,8 +20,9 @@ public class DomesticEsportsTest {
         Match m=DomesticEsports.history(root,1).get(0);assertEquals("Spirit",m.home);assertEquals("0 : 2",m.score());
     }
     @Test public void discoveryShowsOnlyCompletedMapsAndFiltersExactSpiritId() throws Exception {
-        JSONObject row=new JSONObject("{\"mc_info\":{\"id\":\"csgo_mc_1\",\"t1_info\":{\"id\":\"csgo_tm_7020\",\"disp_name\":\"Spirit\"},\"t2_info\":{\"id\":\"other\",\"disp_name\":\"BB\"}},\"state\":{\"status\":\"1\",\"t1_score\":\"1\",\"t2_score\":\"0\",\"bout_states\":[{\"status\":\"2\",\"bout_num\":\"1\",\"map_name\":\"Anubis\",\"t1_score\":\"13\",\"t2_score\":\"10\",\"result\":\"t1\"},{\"status\":\"1\",\"bout_num\":\"2\",\"map_name\":\"Ancient\",\"t1_score\":\"2\",\"t2_score\":\"7\"}]}}");
+        JSONObject row=new JSONObject("{\"mc_info\":{\"id\":\"csgo_mc_1\",\"ts\":\"1791652200\",\"t1_info\":{\"id\":\"csgo_tm_7020\",\"disp_name\":\"Spirit\",\"logo\":\"//oss.5eplay.com/sport/csgo/team/a.png\"},\"t2_info\":{\"id\":\"other\",\"disp_name\":\"BB\"}},\"state\":{\"status\":\"1\",\"t1_score\":\"1\",\"t2_score\":\"0\",\"bout_states\":[{\"status\":\"2\",\"bout_num\":\"1\",\"map_name\":\"Anubis\",\"t1_score\":\"13\",\"t2_score\":\"10\",\"result\":\"t1\"},{\"status\":\"1\",\"bout_num\":\"2\",\"map_name\":\"Ancient\",\"t1_score\":\"2\",\"t2_score\":\"7\"}]}}");
         Match m=DomesticEsports.fiveMatch(row,1,false);assertEquals("1 : 0",m.score());assertEquals(1,m.results.size());assertTrue(m.results.get(0).contains("13 : 10"));
+        assertTrue(m.timeConfirmed);assertEquals(1_791_652_200_000L,m.start);assertEquals("https://oss.5eplay.com/sport/csgo/team/a.png",m.homeLogo);
         assertFalse(DomesticEsports.spirit(new JSONObject("{\"id\":\"csgo_tm_7020_academy\"}"),new JSONObject()));
     }
 }

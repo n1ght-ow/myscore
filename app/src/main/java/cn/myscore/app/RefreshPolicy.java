@@ -28,15 +28,17 @@ final class RefreshPolicy {
     static final long FINAL_DETAIL=6*60*60_000L;
     // A refresh may finish a little late, but a hung source must not stop the foreground loop.
     static final long REFRESH_DEADLINE=30_000L;
+    // A settled day is re-read this often so a later reschedule/correction can still appear.
+    static final long SETTLED_RECHECK=6*60*60_000L;
 
     private RefreshPolicy() {}
 
     static boolean terminal(Match match) {
         return match != null && (match.finalised() || match.cancelled());
     }
-    /** A successful list of finished matches that never needs an automatic source read again. */
+    /** A successful list of finished matches (or a confirmed empty day) needs no fast polling. */
     static boolean settled(List<Match> matches) {
-        if(matches == null || matches.isEmpty()) return false;
+        if(matches == null) return false;
         for(Match match:matches) if(!terminal(match)) return false;
         return true;
     }
@@ -90,9 +92,15 @@ final class RefreshPolicy {
         List<Match> matches=new java.util.ArrayList<>();
         if(batches != null) for(Repository.Batch batch:batches) if(batch != null) matches.addAll(batch.matches);
         if(hasLive(matches)) return SCORES;
-        if(allBatchesSettled(batches)) return 0;
+        if(allBatchesSettled(batches)) return day.isBefore(today) ? 0 : IDLE_POLL;
         if(day.isBefore(today)) return 0;
-        if(batches != null) for(Repository.Batch batch:batches) if(batch != null && !batch.error.isEmpty()) return SCORES;
+        long retryAt=0;
+        if(batches != null) for(Repository.Batch batch:batches) {
+            if(batch == null || batch.error.isEmpty()) continue;
+            if(batch.retryAt>0 && (retryAt==0 || batch.retryAt<retryAt)) retryAt=batch.retryAt;
+        }
+        if(retryAt>0) return Math.max(SCORES,Math.min(120_000,retryAt-now));
+        if(batches != null) for(Repository.Batch batch:batches) if(batch != null && !batch.error.isEmpty()) return SLOW_POLL;
         if(hasSlow(matches)) return SLOW_POLL;
         long next=nextConfirmedStart(matches);
         if(next>0) {
@@ -105,8 +113,28 @@ final class RefreshPolicy {
 
     /** A detail already fetched after both the list and the cache reached a terminal state. */
     static boolean frozenDetail(Match requested,Match cached) {
-        return requested != null && cached != null && requested.id.equals(cached.id)
+        return requested != null && cached != null && sameDetailState(requested,cached)
             && terminal(requested) && terminal(cached);
+    }
+
+    private static boolean sameDetailState(Match requested,Match cached) {
+        return requested.id.equals(cached.id) && requested.state.equals(cached.state)
+            && requested.homeScore.equals(cached.homeScore) && requested.awayScore.equals(cached.awayScore);
+    }
+
+    static long teamCacheTtl(List<Match> matches,long now) {
+        if(hasLive(matches))return SCORE_CACHE;
+        if(hasSlow(matches))return SLOW_CACHE;
+        long next=nextConfirmedStart(matches);
+        return next>0&&next-now<=NEAR_WINDOW?NEAR_CACHE:30*60_000L;
+    }
+
+    /** Wake before a scheduled fixture becomes live, even while its team page stays open. */
+    static long teamPollDelay(List<Match> matches,long now) {
+        if(hasLive(matches))return 30_000L;
+        if(hasSlow(matches))return SLOW_POLL;
+        long next=nextConfirmedStart(matches);
+        return next>0?Math.min(IDLE_POLL,Math.max(NEAR_POLL,next-now-NEAR_WINDOW)):0;
     }
 
     static long detail(Match match,long now) {
@@ -126,10 +154,10 @@ final class RefreshPolicy {
 
     static boolean freshDetail(Match requested,Match cached,long fetched,long now){
         // A list that reports a changed state/score must not be hidden by a six-hour final cache.
-        if(!requested.id.equals(cached.id)||!requested.state.equals(cached.state)||!requested.homeScore.equals(cached.homeScore)||!requested.awayScore.equals(cached.awayScore))return false;
+        if(!sameDetailState(requested,cached))return false;
         long age=now-fetched;return fetched>0&&age>=0&&age<Math.max(1000,detail(requested,now)-500);
     }
-    static long retry(long interval,int failures){return Math.min(120_000,interval*(1L<<Math.min(4,Math.max(0,failures))));}
+    static long retry(long interval,int failures){return interval>=120_000?interval:Math.min(120_000,interval*(1L<<Math.min(4,Math.max(0,failures))));}
     static long remaining(long interval,long elapsed){return Math.max(1000,interval-Math.max(0,elapsed));}
     /** Wake once at the next Beijing midnight so an open page re-anchors its relative date. */
     static long untilNextDay(long now) {

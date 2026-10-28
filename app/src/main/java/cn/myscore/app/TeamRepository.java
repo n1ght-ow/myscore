@@ -15,8 +15,8 @@ import java.util.List;
  * could not update; an empty successful response is cached as an empty schedule, never as a failure.
  */
 final class TeamRepository {
-    private static final long TTL=30*60_000L;
     private static final Object LOCK=new Object();
+    private static final java.util.concurrent.atomic.AtomicLong WRITES=new java.util.concurrent.atomic.AtomicLong();
     static final class Result {
         final List<Match> matches=new ArrayList<>();
         long fetched=0;
@@ -48,7 +48,7 @@ final class TeamRepository {
     Result fetch(Team team,boolean force) {
         Result cached=cached(team);
         long now=System.currentTimeMillis();
-        if(!force&&cached.fetched>0&&now-cached.fetched>=0&&now-cached.fetched<TTL)return cached;
+        if(!force&&fresh(cached,now))return cached;
         try {
             TeamSchedule.Result fresh=TeamSchedule.fetch(team,now);
             if(fresh.fetched<=0)fresh.fetched=now;
@@ -60,6 +60,11 @@ final class TeamRepository {
             cached.error=friendly(e);
             return cached;
         }
+    }
+    static boolean fresh(Result result,long now) {
+        if(result==null||!result.error.isEmpty()||result.fetched<=0)return false;
+        long age=now-result.fetched;
+        return age>=0&&age<RefreshPolicy.teamCacheTtl(result.matches,now);
     }
     static String friendly(Exception e) {
         if(e instanceof InterruptedException)return "请求已取消";
@@ -86,8 +91,10 @@ final class TeamRepository {
                 if(out!=null)file.failWrite(out);
                 android.util.Log.w("MyScore","Cannot persist team cache");
             }
-            File[] files=file(team).getParentFile().listFiles();
-            if(files!=null)for(File old:files)if(System.currentTimeMillis()-old.lastModified()>14L*24*60*60_000&&!old.delete())android.util.Log.d("MyScore","Team cache cleanup deferred");
+            if(WRITES.incrementAndGet()%32==1) {
+                File[] files=file(team).getParentFile().listFiles();
+                if(files!=null)for(File old:files)if(System.currentTimeMillis()-old.lastModified()>14L*24*60*60_000&&!old.delete())android.util.Log.d("MyScore","Team cache cleanup deferred");
+            }
         }
     }
 }

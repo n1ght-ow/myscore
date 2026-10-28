@@ -55,7 +55,7 @@ public final class Parsers {
                 if(c.id.equals("f1")) {
                     String abbr=obj(comp, "type").optString("abbreviation");
                     String session=switch(abbr) {case "FP1"->"练习赛 1";case "FP2"->"练习赛 2";case "FP3"->"练习赛 3";case "Qual", "Q"->"排位赛";case "Race"->"正赛";case "Sprint"->"冲刺赛";case "Sprint Qual", "Sprint Shootout", "SQ"->"冲刺排位";default->abbr.isEmpty()?"场次待确认":abbr;};
-                    m.title=e.optString("name", "F1")+" · "+session;
+                    m.title=DetailParsers.text(e,"name","F1")+" · "+session;
                     if(m.live() && (abbr.equals("Race") || abbr.equals("Sprint")) && status.optInt("period")>0) m.status="第 "+status.optInt("period")+" 圈";
                     JSONArray drivers=arr(comp,"competitors");
                     List<JSONObject> sorted=new ArrayList<>();
@@ -77,9 +77,9 @@ public final class Parsers {
                         if(team.optString("homeAway").equals("away")) away=team;
                     }
                     if(home==null || away==null) continue;
-                    m.home=obj(home,"team").optString("displayName", "主队待定");
-                    m.away=obj(away,"team").optString("displayName", "客队待定");
-                    m.homeId=obj(home,"team").optString("id");m.awayId=obj(away,"team").optString("id");
+                    m.home=DetailParsers.text(obj(home,"team"),"displayName","主队待定");
+                    m.away=DetailParsers.text(obj(away,"team"),"displayName","客队待定");
+                    m.homeId=DetailParsers.text(obj(home,"team"),"id");m.awayId=DetailParsers.text(obj(away,"team"),"id");
                     m.homeLogo=logo(obj(home,"team"));m.awayLogo=logo(obj(away,"team"));
                     if(!m.scheduled()) { m.homeScore=value(home,"score"); m.awayScore=value(away,"score"); }
                     JSONArray hs=arr(home,"linescores"), as=arr(away,"linescores");
@@ -102,38 +102,4 @@ public final class Parsers {
         JSONArray logos=arr(team,"logos");for(int i=0;i<logos.length();i++){JSONObject l=logos.optJSONObject(i);if(l!=null&&l.optString("href").startsWith("https://"))return l.optString("href");}return "";
     }
 
-    public static List<Match> bo3(JSONObject root, Competition c, long fetched) throws Exception {
-        if(!root.has("results")) throw new Exception("电竞来源未返回比赛列表");
-        List<Match> list=new ArrayList<>(); JSONArray events=arr(root,"results");
-        for(int i=0;i<events.length();i++) {
-            JSONObject e=events.optJSONObject(i); if(e==null) continue;
-            int discipline=e.optInt("discipline_id"); JSONObject tournament=obj(e,"tournament");
-            if(c.id.equals("cs2") && !Rules.isSpirit(e.optInt("team1_id"),e.optInt("team2_id"),discipline)) continue;
-            if(c.id.equals("lol") && (discipline!=3 || !Rules.isWorlds(tournament.optString("name"),tournament.optString("slug")))) continue;
-            if(e.optString("id").isEmpty()) continue;
-            Match m=new Match(); m.id="bo3:"+c.id+":"+e.optString("id"); m.league=c.id;m.group=c.group;m.source="BO3.gg";m.updated=fetched;
-            m.home=obj(e,"team1").optString("name", "对阵待定");m.away=obj(e,"team2").optString("name", "对阵待定");
-            m.start=Match.parseTime(e.optString("start_date"));m.timeConfirmed=m.start>0;
-            m.state=Rules.state(e.optString("status"),"");m.status=Rules.stateLabel(m.state);
-            if(!m.scheduled()) {m.homeScore=value(e,"team1_score");m.awayScore=value(e,"team2_score");}
-            m.detail=tournament.optString("name")+(e.optInt("bo_type")>0?" · BO"+e.optInt("bo_type"):"");
-            String slug=e.optString("slug"); if(slug.matches("[a-zA-Z0-9-]+")) m.url="https://bo3.gg/"+(c.id.equals("lol")?"lol/":"")+"matches/"+slug;
-            JSONArray games=arr(e,"games"); List<JSONObject> sorted=new ArrayList<>();
-            for(int k=0;k<games.length();k++) if(games.optJSONObject(k)!=null) sorted.add(games.optJSONObject(k));
-            sorted.sort(Comparator.comparingInt(o->o.optInt("number")));
-            for(JSONObject game:sorted) {
-                if(!game.optString("status").equals("finished")) continue;
-                String map=game.optString("map_name").replace("de_", "");
-                String line="第 "+game.optInt("number")+(c.id.equals("cs2")?" 图":" 局")+(map.isEmpty()?"":" · "+map)+" · 已结束";
-                // Never infer map winners or round scores from the series score.
-                if(!game.isNull("winner_clan_score") && !game.isNull("loser_clan_score")) {
-                    String winner=obj(game,"winner_team_clan").optString("clan_name",game.optString("winner_clan_name", ""));
-                    if(!winner.isEmpty()) line+=" · "+winner+" "+value(game,"winner_clan_score")+":"+value(game,"loser_clan_score");
-                }
-                m.results.add(line);
-            }
-            list.add(m);
-        }
-        return list;
-    }
 }

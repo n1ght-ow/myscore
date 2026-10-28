@@ -13,5 +13,7 @@ local.properties
 # 设计工具工作缓存、原始接口抓包、验收产物
 .impeccable/
 .taste-skill/
+.agents/
+.codex-remote-attachments/
 detail-probes/
 artifacts/

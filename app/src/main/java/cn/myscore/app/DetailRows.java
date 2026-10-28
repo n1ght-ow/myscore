@@ -5,6 +5,7 @@ import java.util.*;
 /** Source rows with stable athlete identity, filters, and missing-last sorting. */
 final class DetailRows {
     record Entry(MatchDetail.Table table,List<String> values,MatchDetail.Person person){}
+    private static final java.util.regex.Pattern LEADING_NUMBER=java.util.regex.Pattern.compile("^[+-]?[0-9]+(?:\\.[0-9]+)?");
     static String category(MatchDetail.Table table){return table.category.isBlank()?table.title:table.category;}
     static List<Entry> select(List<MatchDetail.Table> tables,String category,String team,String sort,boolean descending){
         List<Entry> rows=new ArrayList<>();
@@ -13,5 +14,5 @@ final class DetailRows {
         return rows;
     }
     static String cell(List<String> values,int index){return index>=0&&index<values.size()&&!values.get(index).isBlank()?values.get(index):"—";}
-    static double number(String text){try{String value=text.replace("%","").trim();if(value.contains(":")){double seconds=0;for(String part:value.split(":"))seconds=seconds*60+Double.parseDouble(part);return seconds;}java.util.regex.Matcher m=java.util.regex.Pattern.compile("^[+-]?[0-9]+(?:\\.[0-9]+)?").matcher(value);return m.find()?Double.parseDouble(m.group()):Double.NaN;}catch(RuntimeException e){return Double.NaN;}}
+    static double number(String text){try{String value=text.replace("%","").trim();if(value.contains(":")){double seconds=0;for(String part:value.split(":"))seconds=seconds*60+Double.parseDouble(part);return seconds;}java.util.regex.Matcher m=LEADING_NUMBER.matcher(value);return m.find()?Double.parseDouble(m.group()):Double.NaN;}catch(RuntimeException e){return Double.NaN;}}
 }

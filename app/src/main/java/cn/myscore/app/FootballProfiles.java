@@ -35,7 +35,11 @@ final class FootballProfiles {
             }
         }
         if(enriched)detail.fact("球员资料来源","ESPN · 英超官方 FPL（照片按姓名与出生日期匹配）");
-        detail.fact("阵容资料版本","1");
+        setFact(detail,"阵容资料版本","1");
+    }
+    private static void setFact(MatchDetail detail,String label,String value){
+        detail.facts.removeIf(f->f.label().equals(label));
+        detail.fact(label,value);
     }
     static String photo(JSONObject athlete,JSONObject fpl){
         String supplied=DetailParsers.obj(athlete,"headshot").optString("href");
@@ -91,8 +95,11 @@ final class FootballProfiles {
                 if(!valid)throw new IOException("Empty player source");
                 AtomicFile atomic=new AtomicFile(file);FileOutputStream out=null;try{out=atomic.startWrite();out.write(data.toString().getBytes(StandardCharsets.UTF_8));atomic.finishWrite(out);}catch(Exception e){if(out!=null)atomic.failWrite(out);}
                 return data;
+            }catch(InterruptedException e){
+                // Future.get cleared the interrupt flag; restore it so the caller aborts the write.
+                Thread.currentThread().interrupt();return new JSONObject();
             }catch(Exception e){RETRY.put(key,now+300_000);return cached==null?new JSONObject():cached;}
-        });}catch(Exception e){return new JSONObject();}
+        });}catch(InterruptedException e){Thread.currentThread().interrupt();return new JSONObject();}catch(Exception e){return new JSONObject();}
     }
     private static JSONObject await(Future<JSONObject> task){try{return task.get(25,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();task.cancel(true);return new JSONObject();}catch(Exception e){task.cancel(true);return new JSONObject();}}
 }

@@ -32,7 +32,13 @@ public final class DetailSources {
         if(teams==null||System.currentTimeMillis()-teamsAt>86400_000){teams=DetailParsers.obj(assignment(Repository.get("https://lpl.qq.com/web201612/data/LOL_MATCH2_TEAM_LIST.js")),"msg");teamsAt=System.currentTimeMillis();}
         for(Match m:list){m.homeLogo=https(DetailParsers.obj(teams,m.homeId).optString("TeamLogo"));m.awayLogo=https(DetailParsers.obj(teams,m.awayId).optString("TeamLogo"));}
     }
-    static String https(String url){return url.startsWith("//")?"https:"+url:url.startsWith("http://img.crawler.qq.com/")?url.replaceFirst("http:","https:"):url;}
+    static String https(String url){
+        if(url==null||url.isBlank())return "";
+        if(url.startsWith("//"))return "https:"+url;
+        // Every allow-listed image host serves HTTPS; upgrading avoids a blocked cleartext load.
+        if(url.startsWith("http://"))return "https://"+url.substring(7);
+        return url;
+    }
     private static synchronized String websiteClient(boolean refresh)throws Exception {
         if(refresh||publicClient.isEmpty()||System.currentTimeMillis()-clientAt>3600_000){String js=Repository.get("https://lpl.qq.com/web201612/js/after-data-1.js");Matcher m=Pattern.compile("Authorization\\s*:\\s*\"([^\"]{8,128})\"").matcher(js);if(!m.find())throw new Exception("官网公开客户端配置已变化");publicClient=m.group(1);clientAt=System.currentTimeMillis();}return publicClient;
     }
@@ -41,9 +47,12 @@ public final class DetailSources {
         JSONObject base=assignment(Repository.get("https://lpl.qq.com/web201612/data/LOL_MATCH_DETAIL_"+mid+".js"));
         JSONObject rich=new JSONObject();String warning="";
         try{rich=new JSONObject(Repository.get("https://open.tjstats.com/match-auth-app/open/v1/compound/matchDetail?matchId="+mid,Collections.singletonMap("Authorization",websiteClient(false))));if(!rich.optBoolean("success")){if(previous.finalised()||previous.live())warning="官网暂未提供这场比赛的小局数据。";}}
+        catch(InterruptedException e){throw e;}
         catch(Exception e){warning="小局数据暂时无法连接，保留官网赛程信息。";}
         MatchDetail detail=DetailParsers.lol(base,rich,previous,now);detail.warning=warning;
-        try{enrichWorlds(Collections.singletonList(detail.match));}catch(Exception e){/* Detail TeamIcon remains valid. */}
+        try{enrichWorlds(Collections.singletonList(detail.match));}
+        catch(InterruptedException e){throw e;}
+        catch(Exception e){/* Detail TeamIcon remains valid. */}
         return detail;
     }
     private static MatchDetail f1(Match previous,String[] ids,long now)throws Exception {

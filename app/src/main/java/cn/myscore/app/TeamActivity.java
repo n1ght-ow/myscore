@@ -48,7 +48,8 @@ public final class TeamActivity extends Activity {
     private boolean pendingForce;
     private final Runnable renderSoon=()->{if(active&&!isDestroyed())render();};
     private int pendingPosition=-1;
-    private final Runnable tick=()->load(true);
+    private int pendingPadUpcoming=-1,pendingPadFinished=-1;
+    private final Runnable tick=()->load(false);
     private boolean pad;
     private ScoreList padUpcomingList,padFinishedList;
     private TeamScheduleAdapter padUpcomingAdapter,padFinishedAdapter;
@@ -65,7 +66,7 @@ public final class TeamActivity extends Activity {
             team=null;
         }
         if(team==null||!team.usable()){finish();return;}
-        if(saved!=null){pendingPosition=saved.getInt("position",-1);filter=saved.getString("filter","all");}
+        if(saved!=null){pendingPosition=saved.getInt("position",-1);pendingPadUpcoming=saved.getInt("pad_upcoming",-1);pendingPadFinished=saved.getInt("pad_finished",-1);filter=saved.getString("filter","all");String pending=saved.getString("pending_subscription","");if(!pending.isEmpty())try{pendingSubscription=Match.fromJson(new JSONObject(pending));}catch(Exception ignored){pendingSubscription=null;}}
         repository=new TeamRepository(this);calendarSync=new CalendarSync(this);
         getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.bg);
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(ui.bg));
@@ -79,13 +80,12 @@ public final class TeamActivity extends Activity {
         });
         root.requestApplyInsets();
         build();
-        load(false);
     }
-    @Override public void onResume(){super.onResume();active=true;if(repository==null||isFinishing())return;render();if(result==null||pendingForce||System.currentTimeMillis()-result.fetched>5*60_000)load(false);else schedule();}
+    @Override public void onResume(){super.onResume();active=true;if(repository==null||isFinishing())return;render();if(pendingForce||!TeamRepository.fresh(result,System.currentTimeMillis()))load(false);else schedule();}
     @Override public void onPause(){active=false;handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);super.onPause();}
-    @Override public void onDestroy(){handler.removeCallbacksAndMessages(null);worker.shutdownNow();calendarWorker.shutdownNow();super.onDestroy();}
+    @Override public void onDestroy(){active=false;Sheet.dismissAll(this);handler.removeCallbacksAndMessages(null);worker.shutdownNow();calendarWorker.shutdownNow();super.onDestroy();}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
-    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putInt("position",list==null?pendingPosition:list.getFirstVisiblePosition());state.putString("filter",filter);}
+    @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putInt("position",list==null?pendingPosition:list.getFirstVisiblePosition());state.putInt("pad_upcoming",padUpcomingList==null?pendingPadUpcoming:padUpcomingList.getFirstVisiblePosition());state.putInt("pad_finished",padFinishedList==null?pendingPadFinished:padFinishedList.getFirstVisiblePosition());state.putString("filter",filter);if(pendingSubscription!=null)state.putString("pending_subscription",pendingSubscription.json().toString());}
 
     private void build() {
         if(pad){buildPad();return;}
@@ -160,9 +160,9 @@ public final class TeamActivity extends Activity {
         padError=ui.text("",12,ui.error,false);padError.setLineSpacing(ui.dp(3),1);padError.setVisibility(View.GONE);ui.gap(names,6);names.addView(padError);
         hero.addView(names,np);
         LinearLayout summary=ui.row();hero.addView(summary,new LinearLayout.LayoutParams(-2,-2));
-        teamSummaryCounts=new TextView[3];
-        String[] summaryLabels={"接下来","已结束","总场次"};
-        for(int i=0;i<3;i++){LinearLayout metric=padMetric(summaryLabels[i],"");summary.addView(metric,new LinearLayout.LayoutParams(ui.dp(96),-2));teamSummaryCounts[i]=(TextView)metric.getTag();}
+        teamSummaryCounts=new TextView[4];
+        String[] summaryLabels={"接下来","已结束","其他","总场次"};
+        for(int i=0;i<4;i++){LinearLayout metric=padMetric(summaryLabels[i],"");summary.addView(metric,new LinearLayout.LayoutParams(ui.dp(88),-2));teamSummaryCounts[i]=(TextView)metric.getTag();}
         root.addView(hero);root.addView(ui.divider());
 
         LinearLayout columns=ui.row();
@@ -235,11 +235,13 @@ public final class TeamActivity extends Activity {
         if(padUpcomingAdapter!=null)padUpcomingAdapter.updateRows(upcoming);
         if(padFinishedAdapter!=null)padFinishedAdapter.updateRows(finished);
         if(result!=null){
-            int up=0,fin=0;
-            for(Match m:result.matches){if(m.finalised())fin++;else if(m.live()||m.scheduled()||m.state.equals("delayed"))up++;}
+            if(pendingPadUpcoming>=0&&padUpcomingList!=null){int p=pendingPadUpcoming;pendingPadUpcoming=-1;padUpcomingList.post(()->padUpcomingList.setSelection(p));}
+            if(pendingPadFinished>=0&&padFinishedList!=null){int p=pendingPadFinished;pendingPadFinished=-1;padFinishedList.post(()->padFinishedList.setSelection(p));}
+            int up=0,fin=0,other=0;
+            for(Match m:result.matches){if(m.finalised())fin++;else if(m.live()||m.scheduled()||m.state.equals("delayed"))up++;else other++;}
             if(padUpcomingCount!=null)padUpcomingCount.setText(up+" 场");
             if(padFinishedCount!=null)padFinishedCount.setText(fin+" 场");
-            if(teamSummaryCounts!=null){teamSummaryCounts[0].setText(String.valueOf(up));teamSummaryCounts[1].setText(String.valueOf(fin));teamSummaryCounts[2].setText(String.valueOf(result.matches.size()));}
+            if(teamSummaryCounts!=null){teamSummaryCounts[0].setText(String.valueOf(up));teamSummaryCounts[1].setText(String.valueOf(fin));teamSummaryCounts[2].setText(String.valueOf(other));teamSummaryCounts[3].setText(String.valueOf(result.matches.size()));}
         }
     }
     private TextView[] teamSummaryCounts;
@@ -250,13 +252,14 @@ public final class TeamActivity extends Activity {
         List<Match> live=new ArrayList<>(),upcoming=new ArrayList<>(),done=new ArrayList<>(),other=new ArrayList<>();
         for(Match m:result.matches){if(m.live())live.add(m);else if(m.scheduled()||m.state.equals("delayed"))upcoming.add(m);else if(m.finalised())done.add(m);else other.add(m);}
         Comparator<Match> byStart=Comparator.comparingLong((Match m)->m.start==0?Long.MAX_VALUE:m.start).thenComparing(m->m.id);
-        live.sort(byStart);upcoming.sort(byStart);done.sort(byStart.reversed());
+        live.sort(byStart);upcoming.sort(byStart);done.sort(byStart.reversed());other.sort(byStart);
         if(finished){
             for(Match m:done)rows.add(TeamScheduleRow.match(m,team));
             if(rows.isEmpty())rows.add(TeamScheduleRow.note("没有已结束的比赛","来源尚未返回这支球队的赛果。"));
         }else{
             if(!live.isEmpty()){rows.add(TeamScheduleRow.section("进行中 · "+live.size()));for(Match m:live)rows.add(TeamScheduleRow.match(m,team));}
             for(Match m:upcoming)rows.add(TeamScheduleRow.match(m,team));
+            if(!other.isEmpty()){rows.add(TeamScheduleRow.section("其他状态 · "+other.size()));for(Match m:other)rows.add(TeamScheduleRow.match(m,team));}
             if(rows.isEmpty())rows.add(TeamScheduleRow.note("没有接下来的比赛","来源尚未返回这支球队的后续赛程。"));
         }
         return rows;
@@ -321,7 +324,7 @@ public final class TeamActivity extends Activity {
         if(!active||isFinishing()||isDestroyed())return;
         if(busy){pendingForce|=force;return;}
         handler.removeCallbacks(tick);
-        boolean forced=force||pendingForce;pendingForce=false;
+        boolean forced=force||pendingForce||(result!=null&&!result.error.isEmpty());pendingForce=false;
         if(forced)Logos.retryFailures();
         busy=true;render();
         Team requested=team;boolean readCache=result==null;
@@ -339,11 +342,12 @@ public final class TeamActivity extends Activity {
         });
     }
 
-    /** A live match refreshes at the app's foreground cadence; a static schedule does not poll. */
+    /** Live and approaching fixtures keep updating; completed schedules stop polling. */
     private void schedule() {
         handler.removeCallbacks(tick);
         if(!active||result==null)return;
-        if(result.matches.stream().anyMatch(Match::live))handler.postDelayed(tick,30_000);
+        long delay=result.error.isEmpty()?RefreshPolicy.teamPollDelay(result.matches,System.currentTimeMillis()):RefreshPolicy.SLOW_POLL;
+        if(delay>0)handler.postDelayed(tick,delay);
     }
 
     private void render() {

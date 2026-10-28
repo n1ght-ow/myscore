@@ -12,12 +12,15 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -237,10 +240,15 @@ final class WatchRepository {
                 miguHits.put(key, hit);
                 miguChecked.put(key, System.currentTimeMillis());
                 miguFailed.remove(key);
+                pruneMigu(System.currentTimeMillis());
                 saveMigu();
             } else {
                 miguFailed.put(key, System.currentTimeMillis() + MIGU_FAIL);
-                if (miguFailed.size() > 200) miguFailed.clear();
+                if (miguFailed.size() > 200) {
+                    long cleanupNow=System.currentTimeMillis();
+                    miguFailed.entrySet().removeIf(entry -> entry.getValue()<=cleanupNow);
+                    if (miguFailed.size() > 200) miguFailed.clear();
+                }
             }
             List<Runnable> waiters;
             synchronized (miguWaiters) {
@@ -345,7 +353,10 @@ final class WatchRepository {
         try (InputStream in = input; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
             int n;
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
             while ((n = in.read(buffer)) != -1) {
+                if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Watch request cancelled");
+                if (System.nanoTime() > deadline) throw new SocketTimeoutException("Watch response timed out");
                 if (out.size() + n > 8_000_000) throw new IOException("response too large");
                 out.write(buffer, 0, n);
             }
@@ -416,8 +427,31 @@ final class WatchRepository {
                     h.optLong("start"), h.optString("competition")));
                 miguChecked.put(key, h.optLong("fetched"));
             }
+            pruneMigu(System.currentTimeMillis());
         } catch (Exception e) {
             Log.i(TAG, "Ignoring Migu watch cache");
+        }
+    }
+
+    /** Keep the long-lived Migu hit cache bounded; old entries otherwise accumulate forever. */
+    private void pruneMigu(long now) {
+        if (miguHits.size() <= 400) return;
+        long cutoff = now - 14L * 24 * 60 * 60_000;
+        for (String key : new ArrayList<>(miguHits.keySet())) {
+            Long checked = miguChecked.get(key);
+            if (checked == null || checked < cutoff) {
+                miguHits.remove(key);
+                miguChecked.remove(key);
+            }
+        }
+        if (miguHits.size() > 500) {
+            List<String> keys = new ArrayList<>(miguHits.keySet());
+            keys.sort(Comparator.comparingLong(key -> miguChecked.getOrDefault(key, 0L)));
+            int excess = keys.size() - 400;
+            for (int i = 0; i < excess; i++) {
+                miguHits.remove(keys.get(i));
+                miguChecked.remove(keys.get(i));
+            }
         }
     }
 
@@ -439,16 +473,14 @@ final class WatchRepository {
     }
 
     private void write(String name, JSONObject root) {
-        FileOutputStream out = null;
+        AtomicFile file=new AtomicFile(new File(dir,name));
+        FileOutputStream out=null;
         try {
-            AtomicFile file = new AtomicFile(new File(dir, name));
             out = file.startWrite();
             out.write(root.toString().getBytes(StandardCharsets.UTF_8));
             file.finishWrite(out);
         } catch (Exception e) {
-            if (out != null) {
-                try { out.close(); } catch (Exception ignored) {}
-            }
+            if (out != null) file.failWrite(out);
             Log.w(TAG, "Cannot write watch cache", e);
         }
     }

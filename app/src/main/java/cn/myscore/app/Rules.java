@@ -1,24 +1,13 @@
 package cn.myscore.app;
 
-import java.time.LocalDate;
 import java.util.Locale;
 
 public final class Rules {
     private Rules() {}
 
-    public static boolean shouldImport(Match m, long now) {
-        if (!m.timeConfirmed || !m.scheduled() || m.start <= now || m.day() == null) return false;
-        LocalDate today = Match.today(now);
-        return !m.day().isBefore(today) && !m.day().isAfter(today.plusDays(1));
-    }
-
     public static boolean isWorlds(String name, String slug) {
         String text=(name+" "+slug).toLowerCase(Locale.ROOT).replace('-', ' ');
         return !text.contains("esports world cup") && (text.matches(".*\\bworlds\\b.*") || text.contains("world championship"));
-    }
-
-    public static boolean isSpirit(int firstId, int secondId, int discipline) {
-        return discipline==1 && (firstId==654 || secondId==654);
     }
 
     public static String state(String name, String rawState) {

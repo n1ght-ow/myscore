@@ -12,9 +12,6 @@ final class DetailTableView {
     private final boolean nba,showTeam,narrow;
     private final int widthDp;
     DetailTableView(Ui ui){this(ui,false,true,false,0);}
-    DetailTableView(Ui ui,boolean nba){this(ui,nba,true,false,0);}
-    DetailTableView(Ui ui,boolean nba,boolean showTeam){this(ui,nba,showTeam,false,0);}
-    DetailTableView(Ui ui,boolean nba,boolean showTeam,boolean narrow){this(ui,nba,showTeam,narrow,0);}
     DetailTableView(Ui ui,boolean nba,boolean showTeam,boolean narrow,int widthDp){this.ui=ui;this.nba=nba;this.showTeam=showTeam;this.narrow=narrow;this.widthDp=widthDp;}
     View build(List<String> columns,List<DetailRows.Entry> entries,String sorted,boolean descending,Consumer<String> sort,java.util.function.IntConsumer savedScroll,int scrollX){
         LinearLayout shell=ui.row();shell.setGravity(Gravity.TOP);shell.setBackground(ui.panel());shell.setClipToOutline(true);shell.setTag("detail-data-table");
@@ -23,8 +20,10 @@ final class DetailTableView {
         LinearLayout names=ui.column(),numbers=ui.column();names.addView(header(columns.isEmpty()?"球员":columns.get(0),false,false,null),new LinearLayout.LayoutParams(-1,headerHeight));
         LinearLayout labels=ui.row();labels.setGravity(Gravity.TOP);
         int[] widths=new int[Math.max(0,columns.size()-1)];
+        boolean[] sortableColumns=new boolean[Math.max(0,columns.size()-1)];
+        if(sort!=null)for(int i=1;i<columns.size();i++)for(DetailRows.Entry entry:entries)if(!Double.isNaN(DetailRows.number(DetailRows.cell(entry.values(),i)))){sortableColumns[i-1]=true;break;}
         boolean periods=identity.equals("球队")&&columns.size()<=7&&columns.subList(1,columns.size()).stream().allMatch(s->s.matches("Q[1-4]|OT[0-9]+"));
-        for(int i=1;i<columns.size();i++){String label=columns.get(i);int index=i;boolean sortable=sort!=null&&entries.stream().anyMatch(row->!Double.isNaN(DetailRows.number(DetailRows.cell(row.values(),index))));widths[i-1]=periods?Math.max(ui.dp(36),(available-rail-ui.dp(1))/(columns.size()-1)):label.equals("说明")?ui.dp(200*scale):label.equals("车队")||label.equals("位置")||label.equals("状态")||label.contains("成绩")||identity.equals("车手")&&label.matches("Q[1-3]")?Math.max(cell,ui.dp(100*scale)):label.equals("ADR")||label.equals("KAST")||label.equals("Rating")?ui.dp(70*scale):Math.max(cell,ui.dp(Math.min(90,Math.max(48,label.length()*9))*scale));labels.addView(header(label,label.equals(sorted),descending,sortable?()->sort.accept(label):null),new LinearLayout.LayoutParams(widths[i-1],headerHeight));}numbers.addView(labels);
+        for(int i=1;i<columns.size();i++){String label=columns.get(i);int index=i;boolean sortable=sortableColumns[i-1];widths[i-1]=periods?Math.max(ui.dp(36),(available-rail-ui.dp(1))/(columns.size()-1)):label.equals("说明")?ui.dp(200*scale):label.equals("车队")||label.equals("位置")||label.equals("状态")||label.contains("成绩")||identity.equals("车手")&&label.matches("Q[1-3]")?Math.max(cell,ui.dp(100*scale)):label.equals("ADR")||label.equals("KAST")||label.equals("Rating")?ui.dp(70*scale):Math.max(cell,ui.dp(Math.min(90,Math.max(48,label.length()*9))*scale));labels.addView(header(label,label.equals(sorted),descending,sortable?()->sort.accept(label):null),new LinearLayout.LayoutParams(widths[i-1],headerHeight));}numbers.addView(labels);
         int total=0;for(int width:widths)total+=width;int spare=Math.max(0,available-rail-ui.dp(1)-total);for(int i=0;i<widths.length;i++){widths[i]+=spare/widths.length;labels.getChildAt(i).getLayoutParams().width=widths[i];}
         headerHeight=Math.max(headerHeight,naturalHeight(names.getChildAt(0),rail));
         for(int i=0;i<widths.length;i++)headerHeight=Math.max(headerHeight,naturalHeight(labels.getChildAt(i),widths[i]));
@@ -35,7 +34,7 @@ final class DetailTableView {
             names.addView(ui.divider());numbers.addView(ui.divider());
             View name=identity(entry,++rank);LinearLayout line=ui.row();
             int height=Math.max(rowHeight,naturalHeight(name,rail));
-            for(int i=1;i<columns.size();i++){String value=DetailRows.cell(entry.values(),i);boolean selected=columns.get(i).equals(sorted);int color=value.equals("—")?ui.muted:ui.text;if(identity.equals("地图")&&(i==1||i==2)&&DetailRows.cell(entry.values(),3).equals("已结束"))color=ui.scoreColor(value,DetailRows.cell(entry.values(),i==1?2:1),true);TextView number=ui.text(value,13,color,selected);if(selected)number.setBackgroundColor(ui.tonal);number.setGravity(Gravity.CENTER);number.setPadding(ui.dp(4),ui.dp(6),ui.dp(4),ui.dp(6));number.setContentDescription(columns.get(i)+" "+value);height=Math.max(height,naturalHeight(number,widths[i-1]));line.addView(number,new LinearLayout.LayoutParams(widths[i-1],-2));}
+            for(int i=1;i<columns.size();i++){String value=DetailRows.cell(entry.values(),i);boolean selected=columns.get(i).equals(sorted);int color=value.equals("—")?ui.muted:ui.text;if(identity.equals("地图")&&(i==1||i==2)&&DetailRows.cell(entry.values(),3).equals("已结束"))color=ui.scoreColor(value,DetailRows.cell(entry.values(),i==1?2:1),true);TextView number=ui.text(value,13,color,selected);if(selected)number.setBackgroundColor(ui.tonal);number.setGravity(Gravity.CENTER);number.setPadding(ui.dp(4),ui.dp(6),ui.dp(4),ui.dp(6));number.setContentDescription(columns.get(i)+" "+value);if(value.length()>18)height=Math.max(height,naturalHeight(number,widths[i-1]));line.addView(number,new LinearLayout.LayoutParams(widths[i-1],-2));}
             names.addView(name,new LinearLayout.LayoutParams(-1,height));
             for(int i=0;i<line.getChildCount();i++)line.getChildAt(i).getLayoutParams().height=height;
             numbers.addView(line);tableHeight+=height+ui.dp(1);
@@ -47,7 +46,7 @@ final class DetailTableView {
     private View identity(DetailRows.Entry entry,int rank){
         LinearLayout row=ui.row();row.setPadding(ui.dp(10),ui.dp(6),ui.dp(8),ui.dp(6));MatchDetail.Person p=entry.person();
         boolean compact=entry.table().columns.get(0).equals("选手");
-        if(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())){FrameLayout portrait=new FrameLayout(ui.c);portrait.addView(Logos.artwork(ui,p.photo(),p.name(),30));if((nba||!p.photo().isBlank())&&!p.teamLogo().isBlank())portrait.addView(Logos.view(ui,p.teamLogo(),p.team(),14),new FrameLayout.LayoutParams(ui.dp(14),ui.dp(14),Gravity.BOTTOM|Gravity.END));if(nba)portrait.setTag("nba-player-portrait");row.addView(portrait,new LinearLayout.LayoutParams(ui.dp(30),ui.dp(30)));}
+        if(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())){FrameLayout portrait=new FrameLayout(ui.c);View avatar=p.photo().startsWith("https://resources.premierleague.com/")?Logos.portrait(ui,p.photo(),p.name(),30,()->new FootballProfiles(ui.c).backup(p)):Logos.artwork(ui,p.photo(),p.name(),30);portrait.addView(avatar);if((nba||!p.photo().isBlank())&&!p.teamLogo().isBlank())portrait.addView(Logos.view(ui,p.teamLogo(),p.team(),14),new FrameLayout.LayoutParams(ui.dp(14),ui.dp(14),Gravity.BOTTOM|Gravity.END));if(nba)portrait.setTag("nba-player-portrait");row.addView(portrait,new LinearLayout.LayoutParams(ui.dp(30),ui.dp(30)));}
         LinearLayout words=ui.column();LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(0,-2,1);wp.setMarginStart(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())?ui.dp(8):0);String name=p==null?DetailRows.cell(entry.values(),0):entry.table().columns.get(0).equals("球员")?p.shortName().matches("^\\p{L}\\..*|^[A-Z]{2}\\..*")?p.shortName():DetailFormat.shortName(p.name()):p.name();TextView title=ui.text(name,12,ui.text,true);words.addView(title);
         boolean nbaPlayer=nba&&p!=null&&entry.table().category.equals("球员");
         String sub=p==null?"":String.join(" · ",java.util.stream.Stream.of(p.jersey(),p.position(),nba?"":p.absent()?"未出场":p.starter()?"首发":showTeam?p.team():"").filter(s->!s.isBlank()).toArray(String[]::new));
@@ -74,5 +73,10 @@ final class DetailTableView {
         else {meta.setVisibility(View.GONE);caption.addView(meta,new LinearLayout.LayoutParams(-2,-2));}
         return caption;
     }
-    View simple(MatchDetail.Table table){List<DetailRows.Entry> rows=new ArrayList<>();for(int i=0;i<table.rows.size();i++)rows.add(new DetailRows.Entry(table,table.rows.get(i),i<table.people.size()?table.people.get(i):null));return build(table.columns,rows,"",false,null,null,0);}
+    View simple(MatchDetail.Table table){return simple(table,null,0);}
+    View simple(MatchDetail.Table table,java.util.function.IntConsumer savedScroll,int scrollX){
+        List<DetailRows.Entry> rows=new ArrayList<>();
+        for(int i=0;i<table.rows.size();i++)rows.add(new DetailRows.Entry(table,table.rows.get(i),i<table.people.size()?table.people.get(i):null));
+        return build(table.columns,rows,"",false,null,savedScroll,scrollX);
+    }
 }

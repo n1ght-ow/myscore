@@ -94,9 +94,9 @@ final class TeamSchedule {
             if(!id.matches("csgo_mc_[0-9]+"))continue;
             Match m=new Match();
             m.id="five:cs2:"+id;m.league="cs2";m.group="CS2";m.source="5EPlay";m.updated=now;
-            m.home=home.optString("disp_name","对阵待定");m.away=away.optString("disp_name","对阵待定");
-            m.homeId=home.optString("id");m.awayId=away.optString("id");
-            m.homeLogo=DetailSources.https(home.optString("logo"));m.awayLogo=DetailSources.https(away.optString("logo"));
+            m.home=DetailParsers.text(home,"disp_name","对阵待定");m.away=DetailParsers.text(away,"disp_name","对阵待定");
+            m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");
+            m.homeLogo=DetailSources.https(DetailParsers.text(home,"logo"));m.awayLogo=DetailSources.https(DetailParsers.text(away,"logo"));
             m.start=seconds(mc.optString("ts"));if(m.start==0)m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
             String status=mc.optString("match_status");
             m.state=switch(status) {
@@ -108,10 +108,11 @@ final class TeamSchedule {
             m.status=Rules.stateLabel(m.state);
             if(!m.scheduled()) {
                 String homeScore=mc.optString("home_score"),awayScore=mc.optString("opponent_score");
-                if(!homeScore.isEmpty()&&!awayScore.isEmpty()) {m.homeScore=homeScore;m.awayScore=awayScore;}
+                if(!homeScore.isEmpty()&&!awayScore.isEmpty()&&!"null".equals(homeScore)&&!"null".equals(awayScore)) {m.homeScore=homeScore;m.awayScore=awayScore;}
             }
             JSONObject tournament=obj(row,"tt_info");
-            m.detail=(tournament.optString("disp_name")+(mc.optString("format").isEmpty()?"":" · BO"+mc.optString("format"))+(mc.optString("tt_stage_desc").isEmpty()?"":" · "+mc.optString("tt_stage_desc"))).trim();
+            String format=DetailParsers.text(mc,"format"),stage=DetailParsers.text(mc,"tt_stage_desc");
+            m.detail=(DetailParsers.text(tournament,"disp_name")+(format.isEmpty()?"":" · BO"+format)+(stage.isEmpty()?"":" · "+stage)).trim();
             m.url="https://www.5eplay.com/";
             matches.add(m);
         }

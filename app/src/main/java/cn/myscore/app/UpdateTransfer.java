@@ -19,15 +19,29 @@ final class UpdateTransfer {
         download(release,partial,progress,cancelled,url->(HttpURLConnection)url.openConnection());
     }
     static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,Connection connections)throws Exception {
-        download(release,partial,progress,cancelled,connections,release.assetUrl.isEmpty()?release.url:release.assetUrl);
+        download(release,partial,progress,cancelled,connections,release.assetUrl.isEmpty()?release.url:release.assetUrl,false);
     }
     static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,boolean alternate)throws Exception {
         String address=alternate||release.assetUrl.isEmpty()?release.url:release.assetUrl;
-        download(release,partial,progress,cancelled,url->(HttpURLConnection)url.openConnection(),address);
+        download(release,partial,progress,cancelled,url->(HttpURLConnection)url.openConnection(),address,false);
     }
-    private static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,Connection connections,String address)throws Exception {
+    static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,boolean alternate,boolean keepPartial)throws Exception {
+        String address=alternate||release.assetUrl.isEmpty()?release.url:release.assetUrl;
+        download(release,partial,progress,cancelled,url->(HttpURLConnection)url.openConnection(),address,keepPartial);
+    }
+    static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,Connection connections,boolean alternate,boolean keepPartial)throws Exception {
+        String address=alternate||release.assetUrl.isEmpty()?release.url:release.assetUrl;
+        download(release,partial,progress,cancelled,connections,address,keepPartial);
+    }
+    private static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,Connection connections,String address,boolean keepPartial)throws Exception {
         boolean success=false;long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.MINUTES.toNanos(5);
         try {
+            long existing=keepPartial&&partial.isFile()?partial.length():0;
+            if(existing==release.size) {
+                try{release.verifyFile(partial);success=true;return;}
+                catch(Exception e){if(!partial.delete())android.util.Log.d("MyScore","Cannot reset invalid update partial");existing=0;}
+            }
+            if(existing>release.size&&partial.isFile()){if(!partial.delete())android.util.Log.d("MyScore","Cannot reset oversized update partial");existing=0;}
             URL url=new URL(address);
             for(int redirects=0;redirects<=5;redirects++) {
                 interrupted(cancelled,deadline);
@@ -38,17 +52,23 @@ final class UpdateTransfer {
                     connection.setRequestProperty("User-Agent","MyScore/"+BuildConfig.VERSION_NAME+" Android");
                     connection.setRequestProperty("Accept","application/octet-stream");connection.setRequestProperty("Accept-Encoding","identity");
                     connection.setRequestProperty("Cache-Control","no-cache");
+                    if(keepPartial&&existing>0)connection.setRequestProperty("Range","bytes="+existing+"-");
                     int code=connection.getResponseCode();
                     if(code==301||code==302||code==303||code==307||code==308) {
                         String location=connection.getHeaderField("Location");
                         if(location==null||location.isBlank())throw new IOException("更新下载跳转缺少地址");
                         url=new URL(url,location);continue;
                     }
-                    if(code!=200)throw new IOException("下载服务器返回 HTTP "+code+"，请稍后重试");
+                    if(code==206) {
+                        if(!keepPartial||existing<=0)throw new IOException("下载服务器返回了异常的续传响应");
+                    } else if(code==200) {
+                        // The server ignored Range (or this is the first attempt): start over.
+                        existing=0;
+                    } else throw new IOException("下载服务器返回 HTTP "+code+"，请稍后重试");
                     long length=connection.getContentLengthLong();
-                    if(length>0&&length!=release.size)throw new IOException("安装包大小与发布信息不一致");
-                    long bytes=0;progress.changed(0);
-                    try(InputStream input=connection.getInputStream();FileOutputStream output=new FileOutputStream(partial)) {
+                    if(length>0&&existing+length!=release.size&&length!=release.size)throw new IOException("安装包大小与发布信息不一致");
+                    long bytes=existing;progress.changed(bytes);
+                    try(InputStream input=connection.getInputStream();FileOutputStream output=new FileOutputStream(partial,existing>0)) {
                         byte[] buffer=new byte[32768];int read;
                         while((read=input.read(buffer))!=-1) {
                             interrupted(cancelled,deadline);
@@ -57,11 +77,14 @@ final class UpdateTransfer {
                         }
                         output.getFD().sync();
                     }
-                    interrupted(cancelled,deadline);release.verifyFile(partial);success=true;return;
+                    interrupted(cancelled,deadline);
+                    try{release.verifyFile(partial);}
+                    catch(Exception e){if(!partial.delete())android.util.Log.d("MyScore","Cannot delete invalid update partial");throw e;}
+                    success=true;return;
                 } finally {connection.disconnect();}
             }
             throw new IOException("更新下载跳转次数过多，请稍后重试");
-        } finally {if(!success&&partial.exists())partial.delete();}
+        } finally {if(!success&&!keepPartial&&partial.exists())partial.delete();}
     }
     private static void interrupted(BooleanSupplier cancelled,long deadline)throws IOException {
         if(Thread.currentThread().isInterrupted()||cancelled.getAsBoolean())throw new InterruptedIOException("下载已取消");

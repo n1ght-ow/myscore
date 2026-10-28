@@ -30,24 +30,27 @@ public final class DomesticEsports {
             m.start=localTime(e.optString("MatchDate"));m.timeConfirmed=m.start>0;
             m.state=switch(e.optString("MatchStatus")){case "1"->"scheduled";case "2"->"live";case "3"->"final";default->"unknown";};
             m.status=Rules.stateLabel(m.state);String name=e.optString("bMatchName");String[] teams=name.split("(?i)\\s+vs\\s+");
-            m.home=e.optString("TeamShortNameA");m.away=e.optString("TeamShortNameB");
-            m.homeId=e.optString("TeamA");m.awayId=e.optString("TeamB");
+            m.home=DetailParsers.text(e,"TeamShortNameA");m.away=DetailParsers.text(e,"TeamShortNameB");
+            m.homeId=DetailParsers.text(e,"TeamA");m.awayId=DetailParsers.text(e,"TeamB");
             if(teams.length==2){if(m.home.isEmpty())m.home=teams[0];if(m.away.isEmpty())m.away=teams[1];}
-            else if(!name.isEmpty())m.title=name;
+            else if(!name.isEmpty())m.title=DetailParsers.plain(name);
             if(m.home.isEmpty())m.home="对阵待定";if(m.away.isEmpty())m.away="对阵待定";
             if(!m.scheduled()){m.homeScore=score(e,"ScoreA");m.awayScore=score(e,"ScoreB");}
-            m.detail=tournament+" · "+e.optString("GameModeName")+" · "+e.optString("GameProcName");m.url="https://lpl.qq.com/";
+            m.detail=DetailParsers.text(e,"GameName")+" · "+DetailParsers.text(e,"GameModeName")+" · "+DetailParsers.text(e,"GameProcName");m.url="https://lpl.qq.com/";
             all.add(m);
         }
         return all;
     }
     private static Match fiveBase(JSONObject mc,JSONObject tournament,long fetched) {
         Match m=new Match();m.id="five:cs2:"+mc.optString("id");m.league="cs2";m.group="CS2";m.source="5EPlay";m.updated=fetched;
-        m.home=obj(mc,"t1_info").optString("disp_name");m.away=obj(mc,"t2_info").optString("disp_name");
-        m.homeId=obj(mc,"t1_info").optString("id");m.awayId=obj(mc,"t2_info").optString("id");
-        m.homeLogo=obj(mc,"t1_info").optString("logo");m.awayLogo=obj(mc,"t2_info").optString("logo");
-        m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
-        m.detail=tournament.optString("disp_name")+" · BO"+mc.optString("format")+" · "+mc.optString("tt_stage_desc");m.url="https://www.5eplay.com/";return m;
+        JSONObject home=obj(mc,"t1_info"),away=obj(mc,"t2_info");
+        m.home=DetailParsers.text(home,"disp_name");m.away=DetailParsers.text(away,"disp_name");
+        m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");
+        m.homeLogo=DetailSources.https(DetailParsers.text(home,"logo"));m.awayLogo=DetailSources.https(DetailParsers.text(away,"logo"));
+        // The live feed uses ts for the scheduled start; the team feed may only carry plan_ts.
+        m.start=seconds(mc.optString("ts"));if(m.start==0)m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
+        if(m.home.isEmpty())m.home="对阵待定";if(m.away.isEmpty())m.away="对阵待定";
+        m.detail=DetailParsers.text(tournament,"disp_name")+(DetailParsers.text(mc,"format").isEmpty()?"":" · BO"+DetailParsers.text(mc,"format"))+(DetailParsers.text(mc,"tt_stage_desc").isEmpty()?"":" · "+DetailParsers.text(mc,"tt_stage_desc"));m.url="https://www.5eplay.com/";return m;
     }
     public static boolean spirit(JSONObject first,JSONObject second){return first.optString("id").equals("csgo_tm_7020")||second.optString("id").equals("csgo_tm_7020");}
     public static Match fiveMatch(JSONObject match,long fetched,boolean confirmed) throws Exception {
@@ -75,8 +78,8 @@ public final class DomesticEsports {
         for(int i=0;i<rows.length();i++) {
             JSONObject row=rows.optJSONObject(i);if(row==null)continue;JSONObject mc=obj(row,"mc_info"),home=obj(mc,"home_info"),away=obj(mc,"opponent_info");
             if(!spirit(home,away))continue;
-            Match m=fiveBase(mc,obj(row,"tt_info"),fetched);m.home=home.optString("disp_name");m.away=away.optString("disp_name");m.start=seconds(mc.optString("ts"));m.timeConfirmed=m.start>0;
-            m.homeId=home.optString("id");m.awayId=away.optString("id");m.homeLogo=home.optString("logo");m.awayLogo=away.optString("logo");
+            Match m=fiveBase(mc,obj(row,"tt_info"),fetched);m.home=DetailParsers.text(home,"disp_name");m.away=DetailParsers.text(away,"disp_name");m.start=seconds(mc.optString("ts"));m.timeConfirmed=m.start>0;
+            m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");m.homeLogo=DetailSources.https(DetailParsers.text(home,"logo"));m.awayLogo=DetailSources.https(DetailParsers.text(away,"logo"));
             m.state=switch(mc.optString("status")){case "past"->"final";case "future","upcoming"->"scheduled";case "live"->"live";default->"unknown";};m.status=Rules.stateLabel(m.state);
             // History is in home/opponent coordinates, not t1/t2 coordinates.
             if(!m.scheduled()){m.homeScore=score(mc,"home_score");m.awayScore=score(mc,"opponent_score");}

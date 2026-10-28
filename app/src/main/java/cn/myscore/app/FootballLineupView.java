@@ -194,21 +194,12 @@ final class FootballLineupView {
             this.headingInto(benchHost, "受伤与停赛");
             this.list(injuries, benchHost);
         }
-        if (Ui.isPad(this.ui.c) && benchHost.getChildCount() == 0) {
-            benchHost.addView((View)this.ui.text("来源尚未提供替补名单。", 12, this.ui.muted, false));
-        }
         this.ui.gap(this.body, 16);
         this.body.addView((View)this.ui.text("比赛数据：ESPN。首发阵型为示意，不代表平均站位。", 11, this.ui.muted, false));
     }
 
     private MatchDetail.Table find(String team, String category) {
         return this.detail.tables.stream().filter(t -> t.tab.equals("lineup") && t.teamId.equals(team) && t.category.equals(category)).findFirst().orElse(null);
-    }
-
-    private void heading(String title) {
-        this.ui.gap(this.body, 24);
-        this.body.addView((View)this.ui.text(title, 16, this.ui.text, true));
-        this.ui.gap(this.body, 12);
     }
 
     private void headingInto(LinearLayout host, String title) {

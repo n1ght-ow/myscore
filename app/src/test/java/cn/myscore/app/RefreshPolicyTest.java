@@ -16,6 +16,12 @@ public class RefreshPolicyTest {
     @Test public void finishedDetailsUseLongCache(){Match m=new Match();m.state="final";assertEquals(21_600_000,RefreshPolicy.detail(m));}
     @Test public void slowRequestsDoNotAddAnotherWholeInterval(){assertEquals(7000,RefreshPolicy.remaining(10_000,3000));assertEquals(1000,RefreshPolicy.remaining(10_000,20_000));}
     @Test public void failuresBackOffIndependentlyAndRemainBounded(){assertEquals(10_000,RefreshPolicy.retry(10_000,0));assertEquals(20_000,RefreshPolicy.retry(10_000,1));assertEquals(40_000,RefreshPolicy.retry(10_000,2));assertEquals(120_000,RefreshPolicy.retry(10_000,100));}
+    @Test public void retryNeverShortensAnIdleOrFinishedDetailInterval(){
+        for(long interval:new long[]{RefreshPolicy.DETAIL_IDLE,RefreshPolicy.FINAL_DETAIL}) {
+            assertEquals(interval,RefreshPolicy.retry(interval,0));
+            assertTrue(RefreshPolicy.retry(interval,3)>=interval);
+        }
+    }
     @Test public void changedListStateInvalidatesFinishedDetail(){Match requested=new Match(),cached=new Match();requested.id=cached.id="same";requested.state="live";cached.state="final";assertFalse(RefreshPolicy.freshDetail(requested,cached,1000,2000));}
     @Test public void changedScoreInvalidatesDetail(){Match requested=new Match(),cached=new Match();requested.id=cached.id="same";requested.homeScore="2";cached.homeScore="1";assertFalse(RefreshPolicy.freshDetail(requested,cached,1000,2000));}
     @Test public void detailCacheAllowsCadenceJitterAndRejectsFutureTime(){Match m=new Match();m.state="live";assertTrue(RefreshPolicy.freshDetail(m,m,1000,10_000));assertFalse(RefreshPolicy.freshDetail(m,m,1000,10_500));assertFalse(RefreshPolicy.freshDetail(m,m,2000,1000));assertFalse(RefreshPolicy.freshDetail(m,m,0,100));}
@@ -26,14 +32,14 @@ public class RefreshPolicyTest {
         assertTrue(RefreshPolicy.terminal(finished));assertTrue(RefreshPolicy.terminal(cancelled));assertFalse(RefreshPolicy.terminal(live));
         assertTrue(RefreshPolicy.settled(List.of(finished,cancelled)));
         assertFalse(RefreshPolicy.settled(List.of(finished,live)));
-        assertFalse(RefreshPolicy.settled(List.of()));
+        assertTrue(RefreshPolicy.settled(List.of()));
     }
 
     @Test public void settledMatchesSkipTheSource(){
         List<Match> done=List.of(match("final"),match("cancelled"));
         assertEquals(RefreshPolicy.PAST_CACHE,RefreshPolicy.cacheTtl(done,TODAY.minusDays(1),TODAY,NOW));
         Repository.Batch batch=batch(done.toArray(Match[]::new));
-        assertEquals(0,RefreshPolicy.pollDelay(List.of(batch),TODAY,TODAY,NOW));
+        assertEquals(RefreshPolicy.IDLE_POLL,RefreshPolicy.pollDelay(List.of(batch),TODAY,TODAY,NOW));
     }
 
     @Test public void liveMatchesKeepTheFastCadenceEvenOnAnOldDate(){
@@ -79,7 +85,9 @@ public class RefreshPolicyTest {
 
     @Test public void errorsRetryOnTheFastCadenceUnlessTheDateIsPast(){
         Repository.Batch failed=batch(match("scheduled",NOW+5*60*60_000L));failed.error="连接失败";
-        assertEquals(RefreshPolicy.SCORES,RefreshPolicy.pollDelay(List.of(failed),TODAY,TODAY,NOW));
+        assertEquals(RefreshPolicy.SLOW_POLL,RefreshPolicy.pollDelay(List.of(failed),TODAY,TODAY,NOW));
+        failed.retryAt=NOW+45_000L;
+        assertEquals(45_000L,RefreshPolicy.pollDelay(List.of(failed),TODAY,TODAY,NOW));
         Repository.Batch pastFailed=batch(match("scheduled",NOW+5*60*60_000L));pastFailed.error="连接失败";
         assertEquals(0,RefreshPolicy.pollDelay(List.of(pastFailed),TODAY.minusDays(1),TODAY,NOW));
     }
@@ -92,12 +100,20 @@ public class RefreshPolicyTest {
         Match requested=match("final"),cached=match("final");
         assertTrue(RefreshPolicy.frozenDetail(requested,cached));
         Match cancelled=match("cancelled");cancelled.id=requested.id;
-        assertTrue(RefreshPolicy.frozenDetail(cancelled,cached));
+        assertFalse(RefreshPolicy.frozenDetail(cancelled,cached));
         Match live=match("live");live.id=requested.id;
         assertFalse(RefreshPolicy.frozenDetail(requested,live));
         assertFalse(RefreshPolicy.frozenDetail(live,cancelled));
         Match other=match("final");other.id="other";
         assertFalse(RefreshPolicy.frozenDetail(requested,other));
+    }
+
+    @Test public void correctedFinalScoresInvalidateFrozenDetails(){
+        Match requested=match("final"),cached=match("final");
+        requested.homeScore="2";cached.homeScore="1";
+        assertFalse(RefreshPolicy.frozenDetail(requested,cached));
+        cached.homeScore="2";requested.awayScore="3";cached.awayScore="2";
+        assertFalse(RefreshPolicy.frozenDetail(requested,cached));
     }
 
     @Test public void scheduledDetailsUseTheIdleCadenceUntilCloseToStart(){

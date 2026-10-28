@@ -40,7 +40,7 @@ final class TeamPanelsView {
         boolean nba = this.nba();
         String category = this.scope(nba);
         int players = this.countRows(this.teamTables(category, this.detail.match.homeId)) + this.countRows(this.teamTables(category, this.detail.match.awayId));
-        boolean bl = anyInjuries = nba && !this.injuryTables(null).isEmpty();
+        anyInjuries = nba && !this.injuryTables(null).isEmpty();
         if (players == 0 && !anyInjuries) {
             this.body.addView((View)this.ui.text("本场数据尚未提供", 18, this.ui.text, true));
             this.ui.gap(this.body, 10);
@@ -60,10 +60,6 @@ final class TeamPanelsView {
             scroll = !scrollers.isEmpty() && (((HorizontalScrollView)scrollers.get(0)).canScrollHorizontally(1) || ((HorizontalScrollView)scrollers.get(0)).canScrollHorizontally(-1));
             hint.setText((CharSequence)(players > 0 ? "点数值列排序 · " + (scroll ? "横向滑动同步查看两队 · " : "") + "点姓名查看详情" : "伤停名单按来源发布"));
         });
-    }
-
-    void scope(String category, String sort, boolean descending, Consumer<Sort> changed, int scrollX, IntConsumer savedScroll) {
-        this.scope(category, sort, descending, changed, scrollX, savedScroll, Map.of(), Map.of());
     }
 
     void scope(String category, String sort, boolean descending, Consumer<Sort> changed, int scrollX, IntConsumer savedScroll, Map<String, String> homeScore, Map<String, String> awayScore) {
@@ -287,8 +283,7 @@ final class TeamPanelsView {
     }
 
     private String effectiveSort(List<String> columns, String sort) {
-        String value;
-        String string = value = sort == null ? "" : sort;
+        String value = sort == null ? "" : sort;
         if (!value.isBlank() && columns.contains(value)) {
             return value;
         }

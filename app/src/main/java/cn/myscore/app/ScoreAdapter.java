@@ -111,7 +111,6 @@ final class ScoreAdapter extends BaseAdapter {
     private void state(TextView label,Match m){
         label.setVisibility(View.VISIBLE);text(label,m.live()&&!m.status.isBlank()?m.status:stateText(m));
         label.setTextColor(m.live()?ui.primary:m.cancelled()?ui.error:ui.muted);
-        if(label.getBackground()==null||label.isActivated()!=m.live()){label.setActivated(m.live());label.setBackgroundColor(Color.TRANSPARENT);}
     }
     private void subscription(Ui.Icon icon,Match m,FrameLayout sub) {
         boolean isSubscribed=host.isSubscribed(m.id);

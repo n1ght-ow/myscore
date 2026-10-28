@@ -50,6 +50,7 @@ import cn.myscore.app.Team;
 import cn.myscore.app.TeamActivity;
 import cn.myscore.app.Ui;
 import cn.myscore.app.UpdateActivity;
+import org.json.JSONObject;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -82,6 +83,9 @@ implements ScoreAdapter.Host {
     };
     private final Map<String,Long> prefetchedAt = new HashMap<String,Long>();
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private int pendingScorePosition = -1;
+    private int pendingPadPosition = -1;
+    private int pendingPadFocusScroll = -1;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final ExecutorService cacheWorker = Executors.newSingleThreadExecutor();
     private final ExecutorService prefetchWorker = Executors.newSingleThreadExecutor();
@@ -188,6 +192,17 @@ implements ScoreAdapter.Host {
             this.dayOffset = state.getInt("offset");
             this.group = state.getString("group", "全部");
             this.padSelectedId = state.getString("pad_selected", "");
+            this.pendingScorePosition = state.getInt("score_position", -1);
+            this.pendingPadPosition = state.getInt("pad_position", -1);
+            this.pendingPadFocusScroll = state.getInt("pad_focus_scroll", -1);
+            String pending = state.getString("pending_subscription", "");
+            if (!pending.isEmpty()) {
+                try {
+                    this.pendingSubscription = Match.fromJson(new JSONObject(pending));
+                } catch (Exception ignored) {
+                    this.pendingSubscription = null;
+                }
+            }
         }
         this.getWindow().setStatusBarColor(this.ui.bg);
         this.getWindow().setNavigationBarColor(this.ui.bg);
@@ -198,8 +213,7 @@ implements ScoreAdapter.Host {
         this.root = this.ui.column();
         this.setContentView((View)this.root);
         this.root.setOnApplyWindowInsetsListener((v, insets) -> {
-            int inset;
-            int n = inset = this.pad ? 0 : this.ui.pageInset();
+            int inset = this.pad ? 0 : this.ui.pageInset();
             if (Build.VERSION.SDK_INT >= 30) {
                 Insets b = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                 v.setPadding(b.left + inset, b.top, b.right + inset, b.bottom);
@@ -252,6 +266,12 @@ implements ScoreAdapter.Host {
         b.putInt("offset", this.dayOffset);
         b.putString("group", this.group);
         b.putString("pad_selected", this.padSelectedId);
+        b.putInt("score_position", this.scoreList == null ? this.pendingScorePosition : this.scoreList.getFirstVisiblePosition());
+        b.putInt("pad_position", this.padList == null ? this.pendingPadPosition : this.padList.getFirstVisiblePosition());
+        b.putInt("pad_focus_scroll", this.padFocusScroll == null ? this.pendingPadFocusScroll : this.padFocusScroll.getScrollY());
+        if (this.pendingSubscription != null) {
+            b.putString("pending_subscription", this.pendingSubscription.json().toString());
+        }
     }
 
     public void onWindowFocusChanged(boolean focus) {
@@ -284,6 +304,8 @@ implements ScoreAdapter.Host {
     }
 
     public void onDestroy() {
+        this.active = false;
+        Sheet.dismissAll(this);
         this.handler.removeCallbacksAndMessages(null);
         this.executor.shutdownNow();
         this.cacheWorker.shutdownNow();
@@ -398,12 +420,16 @@ implements ScoreAdapter.Host {
     }
 
     private void select(int nextTab, String nextGroup, int offset, boolean force) {
+        if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
         if (!force && this.tab == nextTab && this.group.equals(nextGroup) && this.dayOffset == offset) {
             return;
         }
         this.handler.removeCallbacks(this.tick);
         this.handler.removeCallbacks(this.renderSoon);
         this.handler.removeCallbacks(this.settleLoad);
+        this.cancelPrefetch();
         ++this.selectionVersion;
         if (this.scoreRequest != null) {
             this.scoreRequest.cancel(true);
@@ -454,6 +480,11 @@ implements ScoreAdapter.Host {
             this.padError = "";
             this.padSelected = null;
             ++this.padFocusVersion;
+            if (this.padFocusRequest != null) {
+                this.padFocusRequest.cancel(true);
+                this.padFocusRequest = null;
+            }
+            this.padFocusBusy = false;
         }
         if (this.pad) {
             // A day/filter change only replaces the list and reading pane. Rebuilding the rail
@@ -507,7 +538,12 @@ implements ScoreAdapter.Host {
                     return;
                 }
                 this.renderedScores = "";
-                this.updateScoreRows();
+                if (this.active) {
+                    this.updateScoreRows();
+                    if (this.pad) {
+                        this.rebuildPadFocus(true);
+                    }
+                }
                 if (BuildConfig.DEBUG) {
                     Log.i((String)"MyScorePerf", (String)("selection cache group=" + selectedGroup + " items=" + cached.matches().size()));
                 }
@@ -822,8 +858,11 @@ implements ScoreAdapter.Host {
         }
         this.headerHeight = height;
         if (this.tab == 0 && this.scoreList != null) {
-            this.scoreList.setPadding(this.ui.dp(16.0f), height, this.ui.dp(16.0f), this.ui.dp(24.0f));
-        } else if (this.scroll != null) {
+            int left = this.ui.dp(16.0f), bottom = this.ui.dp(24.0f);
+            if (this.scoreList.getPaddingTop() != height || this.scoreList.getPaddingLeft() != left || this.scoreList.getPaddingBottom() != bottom) {
+                this.scoreList.setPadding(left, height, left, bottom);
+            }
+        } else if (this.scroll != null && this.scroll.getPaddingTop() != height) {
             this.scroll.setPadding(0, height, 0, 0);
         }
         this.headerView.setTranslationY((float)(-Math.min(this.headerOffset, height)));
@@ -846,6 +885,19 @@ implements ScoreAdapter.Host {
         }
     }
 
+    private void applyPendingScorePosition(int count) {
+        if (this.pendingScorePosition < 0 || this.scoreList == null || count <= 0) return;
+        int position = Math.min(this.pendingScorePosition, Math.max(0, this.scoreList.getCount() - 1));
+        this.pendingScorePosition = -1;
+        this.scoreList.post(() -> this.scoreList.setSelection(position));
+    }
+    private void applyPendingPadPosition(int count) {
+        if (this.pendingPadPosition < 0 || this.padList == null || count <= 0) return;
+        int position = Math.min(this.pendingPadPosition, Math.max(0, this.padList.getCount() - 1));
+        this.pendingPadPosition = -1;
+        this.padList.post(() -> this.padList.setSelection(position));
+    }
+
     private void updateScoreRows() {
         if (this.pad) {
             if (this.padAdapter != null) {
@@ -855,6 +907,7 @@ implements ScoreAdapter.Host {
                 this.ensurePadSelection(all);
                 this.padAdapter.setSelected(this.padSelectedId);
                 this.updatePadChrome();
+                this.applyPendingPadPosition(all.size());
             }
             return;
         }
@@ -874,13 +927,14 @@ implements ScoreAdapter.Host {
         if (relaid) {
             this.scoreList.resetScrollTracking();
         }
+        this.applyPendingScorePosition(all.size());
         if (BuildConfig.DEBUG) {
             Log.i((String)"MyScorePerf", (String)("score rows rebound=" + rows.size() + " matches=" + all.size() + " relaid=" + relaid + " in " + (SystemClock.uptimeMillis() - started) + "ms"));
         }
     }
 
     private void onWatchChanged() {
-        if (this.isFinishing() || this.isDestroyed()) {
+        if (!this.active || this.isFinishing() || this.isDestroyed()) {
             return;
         }
         this.renderedScores = "";
@@ -901,7 +955,7 @@ implements ScoreAdapter.Host {
     }
 
     private void onPadWatchChanged() {
-        if (this.isFinishing() || this.isDestroyed()) {
+        if (!this.active || this.isFinishing() || this.isDestroyed()) {
             return;
         }
         this.rebuildPadFocus(true);
@@ -1211,10 +1265,13 @@ implements ScoreAdapter.Host {
     }
 
     private void calendarChoice() {
-        this.chooseCalendar(null);
+        this.chooseCalendar();
     }
 
-    private void chooseCalendar(Runnable after) {
+    private void chooseCalendar() {
+        if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
         if (!CalendarSync.permitted((Context)this)) {
             this.requestPermissions(new String[]{"android.permission.READ_CALENDAR", "android.permission.WRITE_CALENDAR"}, 42);
             return;
@@ -1255,9 +1312,6 @@ implements ScoreAdapter.Host {
                     this.calendarSync.chooseCalendar(choice.id, choice.name);
                     CalendarJob.schedule((Context)this);
                     this.render(true);
-                    if (after != null) {
-                        after.run();
-                    }
                 });
             });
         });
@@ -1265,6 +1319,9 @@ implements ScoreAdapter.Host {
 
     @Override
     public void toggleSubscription(Match m) {
+        if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
         if (this.calendarBusy) {
             Toast.makeText((Context)this, (CharSequence)"正在处理日历…", (int)0).show();
             return;
@@ -1302,6 +1359,10 @@ implements ScoreAdapter.Host {
     }
 
     private void subscribePending() {
+        if (this.isFinishing() || this.isDestroyed()) {
+            this.pendingSubscription = null;
+            return;
+        }
         Match m = this.pendingSubscription;
         if (m == null) {
             return;
@@ -1344,6 +1405,9 @@ implements ScoreAdapter.Host {
     }
 
     private void unsubscribeAsync(Match m) {
+        if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
         this.calendarBusy = true;
         this.calendarWorker.submit(() -> {
             CalendarSync.Result result;
@@ -1390,6 +1454,9 @@ implements ScoreAdapter.Host {
     }
 
     private void syncSubscriptions(boolean feedback) {
+        if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
         if (this.calendarBusy) {
             return;
         }
@@ -1474,7 +1541,7 @@ implements ScoreAdapter.Host {
         if (this.pendingSubscription != null) {
             this.subscribePending();
         } else {
-            this.chooseCalendar(null);
+            this.chooseCalendar();
         }
     }
 
@@ -1796,6 +1863,11 @@ implements ScoreAdapter.Host {
             public boolean isSubscribed(String id) {
                 return MainActivity.this.subscribed.contains(id);
             }
+
+            @Override
+            public void showSourceStatus() {
+                MainActivity.this.sourceStatus();
+            }
         });
         this.padAdapter.attach(this.padList);
         this.padList.setAdapter((ListAdapter)this.padAdapter);
@@ -1848,7 +1920,6 @@ implements ScoreAdapter.Host {
     }
 
     private void ensurePadSelection(List<Match> all) {
-        boolean staleLive;
         Match next = null;
         if (!this.padSelectedId.isBlank()) {
             for (Match m : all) {
@@ -1900,8 +1971,10 @@ implements ScoreAdapter.Host {
         if (next == null) {
             return;
         }
-        boolean bl = staleLive = next.live() && this.padDetail != null && this.padDetail.fetched > 0L && System.currentTimeMillis() - this.padDetail.fetched > 25000L;
-        if ((this.padDetail == null || staleLive) && !this.padFocusBusy) {
+        boolean stale = this.padDetail != null
+            && !RefreshPolicy.frozenDetail(next, this.padDetail.match)
+            && !RefreshPolicy.freshDetail(next, this.padDetail.match, this.padDetail.fetched, System.currentTimeMillis());
+        if ((this.padDetail == null || stale) && !this.padFocusBusy) {
             this.loadPadDetail(next, false);
         }
         this.watches.resolve(next, this::onPadWatchChanged);
@@ -1917,12 +1990,15 @@ implements ScoreAdapter.Host {
         this.padFocusRequest = this.focusWorker.submit(() -> {
             MatchDetail cached = this.detailRepository.cached(match);
             this.handler.post(() -> {
-                if (this.isDestroyed() || version != this.padFocusVersion || this.padSelected == null || !match.id.equals(this.padSelected.id)) {
+                if (this.isDestroyed() || this.isFinishing() || version != this.padFocusVersion || this.padSelected == null || !match.id.equals(this.padSelected.id)) {
                     return;
                 }
                 if (cached != null) {
                     this.padDetail = cached;
-                    this.rebuildPadFocus(true);
+                    if (this.active) {
+                        this.rebuildPadFocus(true);
+                    }
+                    this.enrichPadProfiles(cached);
                 }
             });
             MatchDetail next = null;
@@ -1936,7 +2012,7 @@ implements ScoreAdapter.Host {
             MatchDetail result = next;
             String problem = failure;
             this.handler.post(() -> {
-                if (this.isDestroyed() || version != this.padFocusVersion || this.padSelected == null || !match.id.equals(this.padSelected.id)) {
+                if (this.isDestroyed() || this.isFinishing() || version != this.padFocusVersion || this.padSelected == null || !match.id.equals(this.padSelected.id)) {
                     return;
                 }
                 this.padFocusBusy = false;
@@ -1948,9 +2024,25 @@ implements ScoreAdapter.Host {
                 } else {
                     this.padError = problem;
                 }
-                this.rebuildPadFocus(true);
+                if (this.active) {
+                    this.rebuildPadFocus(true);
+                }
+                this.enrichPadProfiles(result != null ? result : this.padDetail);
             });
         });
+    }
+
+    private void enrichPadProfiles(MatchDetail target) {
+        if (target == null) return;
+        this.detailRepository.enrichProfiles(target, enriched -> this.handler.post(() -> {
+            if (!this.active || this.isDestroyed() || this.isFinishing()) return;
+            if (this.padSelected == null || enriched == target) return;
+            if (!this.padSelected.id.equals(enriched.match.id)) return;
+            if (this.padDetail != target && (this.padDetail == null || enriched.fetched != this.padDetail.fetched)) return;
+            this.padDetail = enriched;
+            if (enriched.match.updated >= this.padSelected.updated) this.padSelected = enriched.match;
+            this.rebuildPadFocus(true);
+        }));
     }
 
     private void rebuildPadFocus(boolean preserve) {
@@ -1969,11 +2061,17 @@ implements ScoreAdapter.Host {
         this.renderedPadFocus = key;
         long started = SystemClock.uptimeMillis();
         int y = preserve && this.padFocusScroll != null ? this.padFocusScroll.getScrollY() : 0;
+        if (this.pendingPadFocusScroll >= 0 && this.padDetail != null) {
+            y = this.pendingPadFocusScroll;
+            this.pendingPadFocusScroll = -1;
+        }
         this.padFocusHost.removeAllViews();
         this.padFocusInto(this.padFocusHost);
         if (preserve && this.padFocusScroll != null) {
-            this.padFocusScroll.post(() -> this.padFocusScroll.scrollTo(0, y));
+            int restoreY = y;
+            this.padFocusScroll.post(() -> this.padFocusScroll.scrollTo(0, restoreY));
         }
+        this.updatePadFocusVolatileText();
         if (BuildConfig.DEBUG) {
             Log.i("MyScorePerf", "pad focus rebuilt in " + (SystemClock.uptimeMillis() - started) + "ms");
         }
@@ -1993,8 +2091,8 @@ implements ScoreAdapter.Host {
         }
         boolean canSubscribe = m.scheduled() && m.timeConfirmed && m.start > System.currentTimeMillis();
         key.append('|').append(m.id).append(',').append(m.state).append(',').append(m.homeScore).append(',').append(m.awayScore)
-            .append(',').append(m.status).append(',').append(m.start).append(',').append(m.timeConfirmed)
-            .append(',').append(m.updated / 60000L).append(',').append(m.source)
+            .append(',').append(m.start).append(',').append(m.timeConfirmed)
+            .append(',').append(m.source)
             .append(',').append(m.home).append(',').append(m.away).append(',').append(m.title).append(',').append(m.url)
             .append(',').append(m.homeLogo).append(',').append(m.awayLogo)
             .append(',').append(this.subscribed.contains(m.id)).append(',').append(canSubscribe);
@@ -2004,7 +2102,7 @@ implements ScoreAdapter.Host {
         if (detail == null) {
             key.append("|detail:none");
         } else {
-            key.append('|').append(detail.bodySignature()).append(',').append(detail.fetched / 60000L).append(',').append(detail.source);
+            key.append('|').append(detail.bodySignature()).append(',').append(detail.source);
         }
         List<Match> all = this.snapshot.matches();
         key.append("|related:").append(all.size());
@@ -2018,8 +2116,42 @@ implements ScoreAdapter.Host {
         return key.toString();
     }
 
+    private String padF1Meta(Match m) {
+        return m.status + " · " + (m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") : "时间待定");
+    }
+    private String padNarrowMeta(Match m) {
+        return m.status + " · " + (m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · 北京时间" : "时间待定");
+    }
+    private String padUpdatedText(Match m) {
+        return m.source + (m.updated > 0L ? " · 更新于 " + MainActivity.formatInstant(m.updated, "HH:mm") : "");
+    }
+    private String padFetchedText(Match m, MatchDetail d) {
+        return "获取于 " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm")
+            + (m.updated > 0L ? "\n来源发布 " + MainActivity.formatInstant(m.updated, "M月d日 HH:mm") : "");
+    }
+    /**
+     * Live clocks update every poll but do not change the reading pane's structure. Keep those
+     * labels in place instead of tearing the whole pane down each time.
+     */
+    private void updatePadFocusVolatileText() {
+        if (this.padFocusHost == null || this.padSelected == null) return;
+        Match m = this.padSelected;
+        setPadFocusText("pad-focus-status", m.status);
+        setPadFocusText("pad-focus-f1-meta", padF1Meta(m));
+        setPadFocusText("pad-focus-narrow-meta", padNarrowMeta(m));
+        setPadFocusText("pad-focus-updated", padUpdatedText(m));
+        if (this.padDetail != null) {
+            setPadFocusText("pad-focus-fetched", padFetchedText(m, this.padDetail));
+        }
+    }
+    private void setPadFocusText(String tag, String value) {
+        View view = this.padFocusHost.findViewWithTag(tag);
+        if (view instanceof TextView && !value.contentEquals(((TextView)view).getText())) {
+            ((TextView)view).setText(value);
+        }
+    }
+
     private void padFocusInto(LinearLayout host) {
-        int screen;
         Match m = this.padSelected;
         if (m == null) {
             LinearLayout empty = this.ui.column();
@@ -2044,7 +2176,8 @@ implements ScoreAdapter.Host {
         TextView kicker = this.ui.text((competition == null ? m.group : competition.name) + "  /  " + Formats.MONTH_DAY_WEEK.format(m.day() == null ? this.from() : m.day()), 11, this.ui.muted, true);
         kicker.setLetterSpacing(0.06f);
         eyebrow.addView((View)kicker, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        TextView updated = this.ui.text(m.source + (m.updated > 0L ? " · 更新于 " + MainActivity.formatInstant(m.updated, "HH:mm") : ""), 11, this.ui.muted, false);
+        TextView updated = this.ui.text(padUpdatedText(m), 11, this.ui.muted, false);
+        updated.setTag("pad-focus-updated");
         eyebrow.addView((View)updated);
         host.addView((View)eyebrow);
         this.ui.gap(host, 12);
@@ -2073,15 +2206,12 @@ implements ScoreAdapter.Host {
             this.ui.gap(host, 16);
         }
         if (!d.warning.isBlank()) {
-            if (m.group.equals("CS2")) {
-                // empty if block
-            }
             TextView note = this.ui.text(d.warning, 12, this.ui.muted, false);
             note.setLineSpacing((float)this.ui.dp(3.0f), 1.0f);
             host.addView((View)note);
             this.ui.gap(host, 16);
         }
-        boolean twoColumns = (screen = this.ui.c.getResources().getConfiguration().screenWidthDp) >= 1280;
+        boolean twoColumns = this.ui.c.getResources().getConfiguration().screenWidthDp >= 1280;
         LinearLayout left = this.ui.column();
         LinearLayout right = this.ui.column();
         if (twoColumns) {
@@ -2160,7 +2290,9 @@ implements ScoreAdapter.Host {
             title.setLetterSpacing(-0.03f);
             card.addView((View)title);
             this.ui.gap(card, 8);
-            card.addView((View)this.ui.text(m.status + " · " + (m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") : "时间待定"), 13, m.live() ? this.ui.primary : this.ui.muted, false));
+            TextView f1Meta = this.ui.text(padF1Meta(m), 13, m.live() ? this.ui.primary : this.ui.muted, false);
+            f1Meta.setTag("pad-focus-f1-meta");
+            card.addView((View)f1Meta);
         } else if (narrow) {
             LinearLayout stacked = this.ui.column();
             stacked.addView((View)this.padHeroTeamRow(m, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
@@ -2169,7 +2301,8 @@ implements ScoreAdapter.Host {
             this.ui.gap(stacked, 2);
             stacked.addView((View)this.padHeroTeamRow(m, false), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(stacked, 12);
-            TextView meta = this.ui.text(m.status + " · " + (m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · 北京时间" : "时间待定"), 11, m.live() ? this.ui.primary : this.ui.muted, false);
+            TextView meta = this.ui.text(padNarrowMeta(m), 11, m.live() ? this.ui.primary : this.ui.muted, false);
+            meta.setTag("pad-focus-narrow-meta");
             meta.setGravity(17);
             stacked.addView((View)meta);
             card.addView((View)stacked);
@@ -2184,6 +2317,7 @@ implements ScoreAdapter.Host {
             center.addView((View)score, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(center, 10);
             TextView state = this.ui.text(m.status, 14, m.live() ? this.ui.primary : this.ui.muted, true);
+            state.setTag("pad-focus-status");
             state.setGravity(17);
             center.addView((View)state);
             this.ui.gap(center, 4);
@@ -2210,7 +2344,7 @@ implements ScoreAdapter.Host {
         TextView open = this.ui.button("比赛详情", true, () -> this.matchDetail(m));
         actions.addView((View)open, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.3f));
         boolean isSubscribed = this.subscribed.contains(m.id);
-        boolean bl = canSubscribe = m.scheduled() && m.timeConfirmed && m.start > System.currentTimeMillis();
+        canSubscribe = m.scheduled() && m.timeConfirmed && m.start > System.currentTimeMillis();
         if (isSubscribed || canSubscribe) {
             View gap = new View((Context)this);
             actions.addView(gap, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(10.0f), 1));
@@ -2304,6 +2438,7 @@ implements ScoreAdapter.Host {
             LinkedHashMap<String, List> facts = new LinkedHashMap<String, List>();
             for (MatchDetail.Fact f : d.facts) {
                 String label = DetailParsers.label(DetailParsers.plain(f.label()));
+                if (label.equals("阵容资料版本")) continue;
                 String value = DetailParsers.plain(f.value());
                 if (value.isBlank()) continue;
                 facts.computeIfAbsent(label.isBlank() ? "信息" : label, k -> new ArrayList()).add(value);
@@ -2344,7 +2479,7 @@ implements ScoreAdapter.Host {
         LinearLayout source = this.padSurface();
         source.addView((View)this.ui.text(d.source, 13, this.ui.text, true));
         this.ui.gap(source, 4);
-        source.addView((View)this.ui.text("获取于 " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm") + (m.updated > 0L ? "\n来源发布 " + MainActivity.formatInstant(m.updated, "M月d日 HH:mm") : ""), 11, this.ui.muted, false));
+        source.addView((View)this.ui.text(padFetchedText(m, d), 11, this.ui.muted, false));
         right.addView((View)source);
         if (!m.url.isBlank()) {
             this.ui.gap(right, 10);
@@ -2430,18 +2565,17 @@ implements ScoreAdapter.Host {
         Repository.Snapshot countSource = allSnapshotReady
             ? (this.allSnapshot != null && this.from().equals(this.allSnapshotDay) ? this.allSnapshot : rememberedAll)
             : (cachedAllReady ? this.padSettingSources : null);
-        boolean complete = this.group.equals("全部") || countSource != null;
+        boolean complete = allSourcesKnown(countSource);
         Repository.Snapshot countSnapshot = countSource != null ? countSource : this.snapshot;
         if (!complete && !this.padSettingSourcesLoading) {
             this.padSourceSnapshot();
         }
-        List<Match> counted = countSnapshot.matches();
-        int total = counted.size();
+        List<Match> countedAll = countSnapshot.matches();
         long latest = 0L;
         for (Repository.Batch b : this.snapshot.batches) {
             latest = Math.max(latest, b.fetched);
         }
-        String string = updated = latest > 0L ? "更新于 " + MainActivity.formatInstant(latest, "HH:mm") : "正在读取";
+        updated = latest > 0L ? "更新于 " + MainActivity.formatInstant(latest, "HH:mm") : "正在读取";
         if (this.padListStatus != null) {
             String text = all.size() + " 场比赛 · " + (this.group.equals("全部") ? "全部赛事" : this.group) + " · " + updated;
             this.padListStatus.setText((CharSequence)text);
@@ -2465,23 +2599,26 @@ implements ScoreAdapter.Host {
             TextView count = this.railCounts.get(g);
             if (count == null) continue;
             View dot = this.railDots.get(g);
-            if (!complete && !g.equals(this.group)) {
+            boolean current = g.equals(this.group);
+            // Unknown sources must read "—", not "0 场"; the latter looks like a confirmed empty day.
+            if (!complete && !(current && !"全部".equals(g))) {
                 count.setText((CharSequence)"—");
                 count.setTextColor(this.ui.muted);
                 if (dot == null) continue;
                 dot.setVisibility(View.GONE);
                 continue;
             }
+            List<Match> groupMatches = current && !"全部".equals(g) ? all : countedAll;
             int live = 0;
             if (g.equals("全部")) {
-                c = total;
-                for (Match m : counted) {
+                c = groupMatches.size();
+                for (Match m : groupMatches) {
                     if (!m.live()) continue;
                     ++live;
                 }
             } else {
                 c = 0;
-                for (Match m : counted) {
+                for (Match m : groupMatches) {
                     if (!m.group.equals(g)) continue;
                     ++c;
                     if (!m.live()) continue;
@@ -2493,6 +2630,22 @@ implements ScoreAdapter.Host {
             if (dot == null) continue;
             dot.setVisibility(live > 0 ? View.VISIBLE : View.GONE);
         }
+        this.updatePadFocusVolatileText();
+    }
+
+    /** True only when every configured source has produced at least one successful read. */
+    private static boolean allSourcesKnown(Repository.Snapshot source) {
+        if (source == null || source.batches.isEmpty()) return false;
+        for (Competition competition : Competition.ALL) {
+            boolean known = false;
+            for (Repository.Batch batch : source.batches) {
+                if (!batch.competition.id.equals(competition.id)) continue;
+                known = batch.fetched > 0 || !batch.matches.isEmpty();
+                break;
+            }
+            if (!known) return false;
+        }
+        return true;
     }
 
     private void padSettingsWorkspace(LinearLayout shell) {
@@ -2523,7 +2676,7 @@ implements ScoreAdapter.Host {
         overview.addView(this.padSettingsRule(), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(1.0f), this.ui.dp(64.0f)));
         overview.addView((View)this.padSettingsOverviewCell("已订阅比赛", this.calendarSync.linkedEvents() + " 场", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "单场订阅 · 提前 5 分钟提醒", false, this::subscribedList), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 0.95f));
         overview.addView(this.padSettingsRule(), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(1.0f), this.ui.dp(64.0f)));
-        String sourceValue = sourceSnapshot == null ? "读取中" : (sourceSnapshot.failed() ? "部分未更新" : "全部已读取");
+        String sourceValue = sourceSnapshot == null ? "读取中" : !allSourcesKnown(sourceSnapshot) ? "部分读取" : (sourceSnapshot.failed() ? "部分未更新" : "全部已读取");
         String sourceDetail = sourceSnapshot == null ? "正在读取来源状态" : sourceSnapshot.batches.size() + " 个来源 · " + this.latestSourceLabel(sourceSnapshot);
         overview.addView((View)this.padSettingsOverviewCell("数据来源", sourceValue, sourceDetail, sourceSnapshot != null && sourceSnapshot.failed(), this::sourceStatus), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         host.addView((View)overview);
@@ -2648,19 +2801,6 @@ implements ScoreAdapter.Host {
         View line = new View((Context)this);
         line.setBackgroundColor(this.ui.line);
         return line;
-    }
-
-    private LinearLayout padMetric(String label, String value, String detail) {
-        LinearLayout card = this.padSurface();
-        card.setPadding(this.ui.dp(18.0f), this.ui.dp(16.0f), this.ui.dp(18.0f), this.ui.dp(16.0f));
-        card.addView((View)this.ui.text(label, 10, this.ui.muted, true));
-        this.ui.gap(card, 6);
-        TextView big = this.ui.text(value, 19, this.ui.text, true);
-        big.setSingleLine(false);
-        card.addView((View)big);
-        this.ui.gap(card, 4);
-        card.addView((View)this.ui.text(detail, 10, this.ui.muted, false));
-        return card;
     }
 
     private List<Repository.Batch> orderedSourceBatches(Repository.Snapshot source) {

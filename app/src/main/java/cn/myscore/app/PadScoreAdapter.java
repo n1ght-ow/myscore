@@ -26,6 +26,7 @@ final class PadScoreAdapter extends BaseAdapter {
         void openWatch(Match match);
         WatchLinks.Link watchLink(Match match);
         boolean isSubscribed(String id);
+        void showSourceStatus();
     }
     private final Ui ui;
     private final Host host;
@@ -79,7 +80,7 @@ final class PadScoreAdapter extends BaseAdapter {
                 if(banner==null){
                     banner=ui.text("",13,ui.error,true);banner.setPadding(ui.dp(14),ui.dp(14),ui.dp(14),ui.dp(14));
                     ui.clickable(banner,ui.surface,Ui.CARD_RADIUS);banner.setMinHeight(ui.dp(48));banner.setFocusable(true);
-                    banner.setOnClickListener(v->host.selectMatch(null));
+                    banner.setOnClickListener(v->host.showSourceStatus());
                 }
                 banner.setText(row.text);return banner;
             }

@@ -140,6 +140,7 @@ final class TeamChecks {
                 public void openWatch(Match m){}
                 public WatchLinks.Link watchLink(Match m){return null;}
                 public void retryScores(){}
+                public void resolveEmptySchedule(){}
                 public void showSourceStatus(){}
                 public boolean isSubscribed(String id){return false;}
             });

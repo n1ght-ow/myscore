@@ -79,24 +79,13 @@ final class FootballLineupView {
         LinearLayout title = this.ui.row();
         title.addView((View)this.ui.text("首发阵容", 16, this.ui.text, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         title.addView((View)this.ui.text(formation.isBlank() ? "阵型未提供" : formation, 16, this.ui.text, true));
-        this.body.addView((View)title);
-        this.ui.gap(this.body, 12);
+
         List lines = starters == null ? List.of() : FootballLayout.lines(starters, formation);
-        LinearLayout pitchHost = this.body;
-        LinearLayout benchHost = this.body;
-        if (Ui.isPad(this.ui.c) && this.ui.c.getResources().getConfiguration().screenWidthDp >= 1280) {
-            LinearLayout columns = this.ui.row();
-            columns.setGravity(48);
-            LinearLayout left = this.ui.column();
-            LinearLayout right = this.ui.column();
-            columns.addView((View)left, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.45f));
-            View gap = new View(this.ui.c);
-            columns.addView(gap, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(28.0f), 1));
-            columns.addView((View)right, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-            this.body.addView((View)columns);
-            pitchHost = left;
-            benchHost = right;
-        }
+        LinearLayout pitchHost = this.ui.column(), benchHost = this.ui.column();
+        title.setMinimumHeight(this.ui.dp(48));pitchHost.addView(title);
+        title.setTag("football-starters-heading");
+        this.ui.gap(pitchHost, 12);
+        this.body.addView(this.ui.columns(pitchHost, benchHost, 360, 24), new LinearLayout.LayoutParams(-1, -2));
         if (lines.isEmpty()) {
             pitchHost.addView((View)this.ui.text("完整首发站位尚未提供", 13, this.ui.muted, false));
             if (starters != null) {
@@ -149,7 +138,7 @@ final class FootballLineupView {
             };
             pitch.setOrientation(LinearLayout.VERTICAL);
             pitch.setWillNotDraw(false);
-            GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{this.blend(this.ui.surface, this.ui.primary, 0.05f), this.ui.surface});
+            GradientDrawable background = this.ui.panel();
             background.setCornerRadius((float)this.ui.dp(20.0f));
             pitch.setBackground((Drawable)background);
             pitch.setClipToOutline(true);
@@ -182,7 +171,7 @@ final class FootballLineupView {
         }
         this.ui.gap(pitchHost, 12);
         this.legend(pitchHost);
-        this.headingInto(benchHost, "替补");
+        TextView benchHeading=this.ui.text("替补",16,this.ui.text,true);benchHeading.setMinimumHeight(this.ui.dp(48));benchHeading.setGravity(android.view.Gravity.CENTER_VERTICAL);benchHeading.setTag("football-bench-heading");benchHost.addView(benchHeading);this.ui.gap(benchHost,12);
         MatchDetail.Table bench = this.find(teamId, "替补");
         if (bench == null) {
             benchHost.addView((View)this.ui.text("替补名单尚未提供", 13, this.ui.muted, false));
@@ -194,8 +183,7 @@ final class FootballLineupView {
             this.headingInto(benchHost, "受伤与停赛");
             this.list(injuries, benchHost);
         }
-        this.ui.gap(this.body, 16);
-        this.body.addView((View)this.ui.text("比赛数据：ESPN。首发阵型为示意，不代表平均站位。", 11, this.ui.muted, false));
+
     }
 
     private MatchDetail.Table find(String team, String category) {

@@ -73,23 +73,10 @@ final class TeamPanelsView {
         String effective = this.effectiveSort(columns, sort);
         boolean anyInjuries = injuries && !this.injuryTables(null).isEmpty();
         ArrayList<HorizontalScrollView> scrollers = new ArrayList<HorizontalScrollView>();
-        if (Ui.isPad(this.ui.c) && this.ui.c.getResources().getConfiguration().screenWidthDp >= 1280) {
-            LinearLayout columnsRow = this.ui.row();
-            columnsRow.setGravity(48);
-            LinearLayout left = this.ui.column();
-            LinearLayout right = this.ui.column();
-            columnsRow.addView((View)left, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-            View gap = new View(this.ui.c);
-            columnsRow.addView(gap, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(28.0f), 1));
-            columnsRow.addView((View)right, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-            this.body.addView((View)columnsRow);
-            scrollers.addAll(this.team(this.detail.match.homeId, category, effective, descending, changed, scrollX, anyInjuries, homeScore, left));
-            scrollers.addAll(this.team(this.detail.match.awayId, category, effective, descending, changed, scrollX, anyInjuries, awayScore, right));
-        } else {
-            scrollers.addAll(this.team(this.detail.match.homeId, category, effective, descending, changed, scrollX, anyInjuries, homeScore, this.body));
-            this.ui.gap(this.body, 28);
-            scrollers.addAll(this.team(this.detail.match.awayId, category, effective, descending, changed, scrollX, anyInjuries, awayScore, this.body));
-        }
+        LinearLayout left = this.ui.column(), right = this.ui.column();
+        scrollers.addAll(this.team(this.detail.match.homeId, category, effective, descending, changed, scrollX, anyInjuries, homeScore, left));
+        scrollers.addAll(this.team(this.detail.match.awayId, category, effective, descending, changed, scrollX, anyInjuries, awayScore, right));
+        this.body.addView(this.ui.columns(left, right, 440, 24), new LinearLayout.LayoutParams(-1, -2));
         return scrollers;
     }
 
@@ -101,7 +88,7 @@ final class TeamPanelsView {
         host.addView((View)section);
         LinearLayout header = this.ui.row();
         header.setTag((Object)"team-panel-header");
-        header.setPadding(this.ui.dp(4.0f), 0, this.ui.dp(4.0f), 0);
+        header.setPadding(0, 0, 0, 0);
         String name = this.teamName(teamId);
         header.addView((View)Logos.view(this.ui, this.teamLogo(teamId), name, 22), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(22.0f), this.ui.dp(22.0f)));
         TextView title = this.ui.text(name, 14, this.ui.text, true);
@@ -139,7 +126,7 @@ final class TeamPanelsView {
         if (rows.isEmpty()) {
             section.addView((View)this.ui.text("来源未提供这支球队的数据。", 13, this.ui.muted, false));
         } else {
-            View table = new DetailTableView(this.ui, this.nba(), false, !this.nba(), this.panelWidthDp()).build(tables.get((int)0).columns, rows, sort, descending, changed == null ? null : label -> changed.accept(new Sort((String)label, label.equals(sort) ? !descending : true)), null, scrollX);
+            View table = new DetailTableView(this.ui, this.nba(), false, !this.nba(), 0).build(tables.get((int)0).columns, rows, sort, descending, changed == null ? null : label -> changed.accept(new Sort((String)label, label.equals(sort) ? !descending : true)), null, scrollX);
             table.setContentDescription((CharSequence)(name + (this.nba() ? " 球员数据" : " 选手数据")));
             section.addView(table, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             HorizontalScrollView scroller = (HorizontalScrollView)table.findViewWithTag((Object)"detail-metrics-scroll");
@@ -320,14 +307,6 @@ final class TeamPanelsView {
             tables.add(table);
         }
         return tables;
-    }
-
-    private int panelWidthDp() {
-        if (!Ui.isPad(this.ui.c)) {
-            return 0;
-        }
-        int screen = this.ui.c.getResources().getConfiguration().screenWidthDp;
-        return Math.max(360, (screen - 500) / 2);
     }
 
     private int countRows(List<MatchDetail.Table> tables) {

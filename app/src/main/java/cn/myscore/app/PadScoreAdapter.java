@@ -27,14 +27,17 @@ final class PadScoreAdapter extends BaseAdapter {
         WatchLinks.Link watchLink(Match match);
         boolean isSubscribed(String id);
         void showSourceStatus();
+        void resolveEmptySchedule();
     }
     private final Ui ui;
     private final Host host;
+    private final boolean listOnly;
     private List<ScoreRow> rows=new ArrayList<>();
     private String selectedId="";
     private ListView list;
 
-    PadScoreAdapter(Ui ui,Host host){this.ui=ui;this.host=host;}
+    PadScoreAdapter(Ui ui,Host host){this(ui,host,false);}
+    PadScoreAdapter(Ui ui,Host host,boolean listOnly){this.ui=ui;this.host=host;this.listOnly=listOnly;}
     void attach(ListView list){this.list=list;}
 
     void updateRows(List<ScoreRow> next){
@@ -90,7 +93,7 @@ final class PadScoreAdapter extends BaseAdapter {
                 Object tag=convertView==null?null:convertView.getTag();
                 EmptyHolder holder=tag instanceof EmptyHolder?(EmptyHolder)tag:new EmptyHolder();
                 holder.root.setTag(holder);
-                holder.title.setText(row.title);holder.message.setText(row.message);return holder.root;
+                holder.root.bind(row);return holder.root;
             }
             case ScoreRow.F1: {
                 Object tag=convertView==null?null:convertView.getTag();
@@ -108,12 +111,9 @@ final class PadScoreAdapter extends BaseAdapter {
     }
 
     private final class EmptyHolder {
-        final LinearLayout root;final TextView title,message;
+        final Ui.ScheduleEmpty root;
         EmptyHolder(){
-            root=ui.column();root.setPadding(0,ui.dp(18),0,ui.dp(18));
-            LinearLayout card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(20),ui.dp(22),ui.dp(20),ui.dp(22));
-            title=ui.text("",17,ui.text,true);message=ui.text("",13,ui.muted,false);message.setLineSpacing(ui.dp(4),1);
-            card.addView(title);ui.gap(card,8);card.addView(message);root.addView(card);
+            root=ui.new ScheduleEmpty(host::resolveEmptySchedule);
         }
     }
 
@@ -178,26 +178,26 @@ final class PadScoreAdapter extends BaseAdapter {
 
             LinearLayout homeRow=ui.row();
             homeCrest=Logos.crest(ui,24,false);homeSlot=new FrameLayout(ui.c);
-            homeSlot.addView(homeCrest.box,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.CENTER));
+            homeSlot.addView(homeCrest.box,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.START|Gravity.CENTER_VERTICAL));
             ui.clickable(homeSlot,Color.TRANSPARENT,24);
-            homeRow.addView(homeSlot,new LinearLayout.LayoutParams(ui.dp(36),ui.dp(34)));
+            homeRow.addView(homeSlot,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
             home=ui.text("",15,ui.text,true);homeRow.addView(home,new LinearLayout.LayoutParams(0,-2,1));
-            homeScore=ui.text("—",21,ui.text,true);homeScore.setGravity(Gravity.END);homeScore.setMinWidth(ui.dp(34));
+            homeScore=ui.fixtureScore("—",21,ui.text);
             homeRow.addView(homeScore,new LinearLayout.LayoutParams(-2,-2));
             card.addView(homeRow);
 
             LinearLayout awayRow=ui.row();
             awayCrest=Logos.crest(ui,24,false);awaySlot=new FrameLayout(ui.c);
-            awaySlot.addView(awayCrest.box,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.CENTER));
+            awaySlot.addView(awayCrest.box,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.START|Gravity.CENTER_VERTICAL));
             ui.clickable(awaySlot,Color.TRANSPARENT,24);
-            awayRow.addView(awaySlot,new LinearLayout.LayoutParams(ui.dp(36),ui.dp(34)));
+            awayRow.addView(awaySlot,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
             away=ui.text("",15,ui.text,true);awayRow.addView(away,new LinearLayout.LayoutParams(0,-2,1));
-            awayScore=ui.text("—",21,ui.text,true);awayScore.setGravity(Gravity.END);awayScore.setMinWidth(ui.dp(34));
+            awayScore=ui.fixtureScore("—",21,ui.text);
             awayRow.addView(awayScore,new LinearLayout.LayoutParams(-2,-2));
             card.addView(awayRow);
 
             ui.gap(card,4);footer=ui.row();
-            provenance=ui.text("",10,ui.muted,false);provenance.setPadding(ui.dp(2),0,ui.dp(2),0);
+            provenance=ui.text("",11,ui.muted,false);
             footer.addView(provenance,new LinearLayout.LayoutParams(0,-2,1));
             LinearLayout.LayoutParams calendarParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));calendarParams.setMarginStart(ui.dp(8));
             footer.addView(calendar,calendarParams);
@@ -205,6 +205,23 @@ final class PadScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams watchParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));watchParams.setMarginStart(ui.dp(8));
             footer.addView(watch,watchParams);watch.setVisibility(View.GONE);card.addView(footer);
             root.addView(card);
+            if(listOnly){
+                // One fixture occupies one ledger row: 72dp clock + flexible teams + 48dp actions.
+                // The header holds competition and provenance, without another enclosing card.
+                root.setPadding(0,0,0,0);card.setPadding(ui.dp(14),ui.dp(16),ui.dp(10),ui.dp(16));
+                meta.removeView(clock);footer.removeView(provenance);
+                provenance.setTextSize(11);provenance.setGravity(Gravity.END);
+                meta.addView(provenance,new LinearLayout.LayoutParams(-2,-2));
+                card.removeView(homeRow);card.removeView(awayRow);card.removeView(footer);
+                LinearLayout teams=ui.column();teams.addView(homeRow);teams.addView(awayRow);
+                LinearLayout fixture=ui.row();fixture.setGravity(Gravity.CENTER_VERTICAL);
+                fixture.addView(clock,new LinearLayout.LayoutParams(ui.dp(72*Math.max(1f,ui.c.getResources().getConfiguration().fontScale)),-2));
+                fixture.addView(teams,new LinearLayout.LayoutParams(0,-2,1));
+                footer.addView(new View(ui.c),0,new LinearLayout.LayoutParams(0,1,1));
+                teams.addView(footer);card.addView(fixture);
+                time.setTextSize(16);state.setTextSize(11);home.setTextSize(16);away.setTextSize(16);
+                root.addView(ui.divider());
+            }
         }
 
         void bind(Match value){
@@ -220,10 +237,11 @@ final class PadScoreAdapter extends BaseAdapter {
             homeScore.setTextColor(ui.scoreColor(value,true));awayScore.setTextColor(ui.scoreColor(value,false));
             provenance.setText(value.source+" · "+updated(value));
             selected(card,active);
-            selectedMark.setVisibility(active?View.VISIBLE:View.INVISIBLE);
+            selectedMark.setVisibility(listOnly?View.GONE:active?View.VISIBLE:View.INVISIBLE);
             bindTeam(homeSlot,value,true);bindTeam(awaySlot,value,false);
             WatchLinks.Link link=host.watchLink(value);
             watch.bind(link,value.live(),()->host.openWatch(value));
+            ui.alignFixtureActions(calendar,watch,ui.scoreColumnWidth(21));
             bindCalendar(value,active);
             card.setContentDescription(value.displayTitle()+"，"+state.getText()+"，"+provenance.getText()+(active?"，已选中":""));
         }
@@ -251,7 +269,7 @@ final class PadScoreAdapter extends BaseAdapter {
     private void selected(LinearLayout card,boolean active){
         if(card.getTag() instanceof Boolean&&((Boolean)card.getTag())==active)return;
         card.setTag(active);
-        ui.clickable(card,active?ui.tonal:ui.surface,16);
+        ui.clickable(card,listOnly?Color.TRANSPARENT:active?ui.tonal:ui.surface,listOnly?0:16);
         card.setSelected(active);
     }
 

@@ -53,6 +53,9 @@ final class UiChecks {
             int originalDay=day.getInt(original);String originalGroup=(String)group.get(original);
             Method select=MainActivity.class.getDeclaredMethod("select",int.class,String.class,int.class);select.setAccessible(true);
             Method tag=MainActivity.class.getDeclaredMethod("queryTag");tag.setAccessible(true);String before=(String)tag.invoke(original);
+            // Isolate the cold-date path: adjacent-day prefetch may already have warmed this date.
+            @SuppressWarnings("unchecked") java.util.Map<String,Repository.Snapshot> cache=(java.util.Map<String,Repository.Snapshot>)field("daySnapshots").get(original);
+            java.util.Map<String,Repository.Snapshot> savedCache=new java.util.LinkedHashMap<>(cache);cache.clear();
             all.set(original,null);
             select.invoke(original,0,originalGroup,originalDay+1);
             require(((Repository.Snapshot)snapshot.get(original)).matches().isEmpty(),"new date never displays the previous date's matches");
@@ -60,6 +63,7 @@ final class UiChecks {
             // ListView attaches changed rows on its next layout; inspect the submitted data now.
             ScoreAdapter loading=(ScoreAdapter)scoreAdapter.get(original);
             require(loading.getCount()==1&&loading.getItem(0).type==ScoreRow.LOADING&&"正在读取赛程…".equals(loading.getItem(0).text),"date switch submits loading immediately");
+            cache.putAll(savedCache);
             select.invoke(original,0,originalGroup,originalDay);
             require(!before.equals(tag.invoke(original)),"returning to the same selection rejects earlier in-flight responses");
         }catch(ReflectiveOperationException e){throw new AssertionError(e);}});checks+=4;

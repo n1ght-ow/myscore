@@ -1,3 +1,45 @@
+# MyScore 4.4.0 · 手机与平板界面统一优化（2026-10-29，发布验收）
+
+- 版本统一为 4.4.0 / versionCode 46，发布标签 v4.4.0。包含本轮手机空状态、平板竖屏、详情表格、对齐与去重修改；未新增生产依赖。
+- 最终 clean 构建后 testDebugUnitTest 191 项、0 失败/错误；lintDebug 0 错误、24 项既有警告；assembleDebug / assembleDebugAndroidTest 通过。4.4.0 APK 的模拟器 SmokeInstrumentation 912 项、Redmi K80 Pro 专项 802 项、Xiaomi Pad 6S Pro 专项 846 项通过。旋转专项的竖向配置为兼容窗口，完整物理竖屏证据与逐路由审查见下一节，不混为同一次验证。
+- 4.4.0 / 46 已在两台真机覆盖安装，保留设置、比赛缓存及日历关联。读取设备已安装 base.apk，手机、平板均与发布 APK 的 SHA-256 一致：84ed1c1fc0451d608328d414cb3a0e0a2a77f1ada31c0f9499ee65aba304c053。
+- 发布 APK 为 artifacts/MyScore-4.4.0.apk，1,119,883 字节；校验附件 artifacts/SHA256SUMS-4.4.0.txt。aapt 确认 cn.myscore.app、4.4.0 / 46、minSdk 28 / targetSdk 35。
+- apksigner verify 通过，并与 v4.3.3 发布包实际对比：证书 SHA-256 同为 e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646，沿用个人安装 debug 签名。
+- 发布入口：[v4.4.0](https://github.com/n1ght-ow/myscore/releases/tag/v4.4.0)。版本、安装包、校验附件与源码标签作为同一批发布内容；界面和数据边界见本节之后的专项记录。
+
+# 全应用对齐、一致性与空间审查（2026-10-29，本地调试）
+
+- 最终 APK 已覆盖安装到 Redmi K80 Pro 与 Xiaomi Pad 6S Pro；保留 4.3.3 / 45。本轮没有新增生产依赖、提交、推送或新版本发布。
+- 最终构建：testDebugUnitTest 191 项、0 失败/错误；lintDebug 0 错误、24 项既有警告；assembleDebug 和 assembleDebugAndroidTest 通过。最终手机尺寸模拟器 SmokeInstrumentation 912 项通过，临时日历只在模拟器中创建并清理，设置与日历关联由原套件恢复。
+- 新增 AlignmentChecks：以真实视图坐标验证手机、平板卡片与竖屏账本的比分/末端操作中心轴，堆叠队徽/时间左边缘；覆盖 288/320/360/480/560/680/1020dp、1.0/1.3/2.0 字号、深浅主题、播放入口有无、长队名和尺寸变化。共用分栏检查实际宽度/字号断点、顶线、无重叠与空栏回收。样本仅在内存中存在，不写正式缓存。
+- 实际页面审查 UiAuditInstrumentation：手机最终 5517 项、36 个页面或弹层；平板最终横屏 6399 项、36 个页面或弹层；完整物理竖屏 5599 项、36 个页面或弹层。计数主要是每段文字的测量断言并有重叠，不相加为独立用例数量。
+- 原生配置核对：横屏 3048×2032、w1219dp / h813dp；竖屏 2032×3048、w813dp / h1219dp，两者均 fullscreen、letterBoxed=false。测试结束恢复原先 wm user-rotation free 状态；没有把旋转兼容窗口当作完整竖屏。
+- 路由：主赛程、设置、日期/选择/确认弹窗；足球/NBA/NFL 的总览、阵容或球员、统计、进程及球队页；CS2 总览/选手/小局/球员弹层/球队页；LOL 总览/比赛/统计/球队页；足球球员弹层；F1 总览/车手/成绩；软件更新。空/读取/失败状态另由既有组件/功能回归与源码审查覆盖，不把它们说成每个状态都做了真机视觉截图。
+- 所用赛事来自设备真实缓存，缺少 F1 样本时读取来源的既有日期赛程与详情；没有制作虚假比分、名单或比赛缓存，没有在真机写测试日历。此审查验证界面，不作为持续联网或外部视频播放验收。
+- 人工复核发现并修正：NBA 排序箭头挤压表头、球队比分在破折号后折行、足球首发/替补标题错位、手机 LOL 单人卡和装备提示重复。对齐、刷新与导航专项在前一检查点也通过（平板 799 / 手机 802）。
+- 自动化连续切页截图有时遗漏部分未变化的文字/图标；普通启动及手动切换的系统截图显示完整。已另存普通操作截图作为展示证据，不根据受影响的截图声称应用存在缺字或已修复绘制故障。
+- 证据目录 artifacts/ui-audit/：phone-final-b、tablet-landscape-final-b 为最终逐路由原生窗口截图；tablet-portrait-final 为完整竖屏审查；各目录 coverage.txt 保留原生配置与路由清单。tablet-normal.png / tablet-settings-normal.png 为普通操作的系统截图。
+- 最终调试包：artifacts/ui-audit/MyScore-ui-alignment-4.3.3.apk，校验文件同目录 SHA256SUMS.txt。
+
+# 详情表格空间利用与重复元素清理（2026-10-29，本地调试）
+
+- 最终生产 APK 已覆盖安装到 Xiaomi Pad 6S Pro 与 Redmi K80 Pro，保留 4.3.3 / 45；本次没有提交、推送或发布新版本，没有新增生产依赖。
+- testDebugUnitTest 191 项通过；lintDebug 通过；assembleDebug 与 assembleDebugAndroidTest 通过。模拟器完整 SmokeInstrumentation 492 项通过；最终真机完整专项平板 426 项、手机 382 项通过；真实缓存截图专项两端各 361 项通过。以上检查有重叠，不相加作为独立用例数。
+- 新增原生测量覆盖 320 / 747 / 1020dp 内容容器、深浅主题、1.0 / 1.3 / 2.0 字号：表格不遗留内部空带，NFL 指标保持紧凑宽度，LOL 宽屏十位选手同表且窄屏回退、尺寸变化不复制行，观看行仅三项子视图且点击仍有效。测试样本只在内存构建，不写入真机比赛缓存或日历。
+- 真机截图取设备已有的 Spirit / NAVI、CFO / T1、Ravens / Bengals 缓存，验证布局，不作为全量实时来源或视频播放验收。平板横屏实际 w1219dp / h813dp；本轮旋转回归的竖向配置为 HyperOS 兼容窗口 w666dp / h813dp，不冒充物理完整竖屏。之前完整物理竖屏证据见下节。
+- 一次既有平板滚动刷新时序检查在固定等待时间内失败，完整复跑 426 项通过；保留该瞬时失败记录。截图采集曾出现转场或局部渲染不完整，仅完整图作为对外展示证据，表格几何另由原生运行时断言核对。
+- APK：artifacts/space-review/MyScore-space-optimized-4.3.3.apk；校验文件：artifacts/space-review/SHA256SUMS.txt。截图：artifacts/space-review/tablet-final 与 phone-final，CS2 总览、CS2 小局、LOL 统计及手机播放入口已人工核对。
+
+# 手机空状态与平板竖屏精简（2026-10-29，本地调试）
+
+- 最终调试 APK 已覆盖安装到 Xiaomi Pad 6S Pro（USB，2032×3048 / 3048×2032，400dpi）和 Redmi K80 Pro（无线 ADB，1440×3200，600dpi）。保留版本 `4.3.3 / 45`，本节不代表新版本发布。
+- `testDebugUnitTest`：191 项通过；`lintDebug`：0 错误、24 项既有警告；`assembleDebug` 与 `assembleDebugAndroidTest` 通过。
+- 最终真机专项：平板 276 项、手机 236 项通过，包含赛事筛选、平板横竖屏、窄窗口不创建第二阅读区、列表高度，以及空状态 / 平铺赛程在 1.0 / 1.3 / 2.0 字号和深浅主题下的文字测量。测试对象仅在内存中构建，不写入真机比赛缓存或日历。
+- 手机尺寸模拟器完整 `SmokeInstrumentation`：346 项通过。冷日期回归先清理并恢复内存预取快照，避免把已预取日期误判为未读取日期；未修改实际日期缓存逻辑。临时测试日历只在模拟器创建，并由测试恢复设置和清理。
+- 实测手机空状态的「查看全部赛事」返回全部赛程，平板竖屏点击比赛直接进入单列详情，返回列表正常。真机深色和模拟器浅色截图已检查；没有将布局验证当作来源持续可用或视频播放验证。
+- 边界：曾额外把原本仅由模拟器使用的完整 `LayoutChecks` 移到 HyperOS 真机，旧球队赛程在模拟的 320dp / 大字号长英文名测量中失败。本轮未扩大修改球队页；真机改用本次界面对应的 `runSchedules`，原完整检查在模拟器通过。
+- APK：`artifacts/ui-refinement/MyScore-ui-refinement-4.3.3.apk`。截图：同目录 `phone-empty.png`、`phone-empty-light.png`、`tablet-portrait.png`、`tablet-landscape.png` 和 `tablet-detail.png`。
+
 # MyScore 4.3.3 · 双真机布局与状态同步修复（2026-10-29，发布验收）
 
 - 版本：`4.3.3` / versionCode `45`，发布标签 `v4.3.3`。新旧 APK 证书实际对比一致，SHA-256 均为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。

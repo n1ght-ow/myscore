@@ -23,6 +23,7 @@ final class ScoreAdapter extends BaseAdapter {
         void openWatch(Match match);
         WatchLinks.Link watchLink(Match match);
         void retryScores();
+        void resolveEmptySchedule();
         void showSourceStatus();
         boolean isSubscribed(String id);
     }
@@ -85,7 +86,7 @@ final class ScoreAdapter extends BaseAdapter {
                 Object tag=convertView==null?null:convertView.getTag();
                 EmptyHolder holder=tag instanceof EmptyHolder?(EmptyHolder)tag:new EmptyHolder();
                 holder.root.setTag(holder);
-                holder.title.setText(row.title);holder.message.setText(row.message);return holder.root;
+                holder.root.bind(row);return holder.root;
             }
             case ScoreRow.F1: {
                 Object tag=convertView==null?null:convertView.getTag();
@@ -102,7 +103,7 @@ final class ScoreAdapter extends BaseAdapter {
         }
     }
 
-    private TextView teamScore(String text){TextView score=ui.text(text,24,ui.text,true);score.setGravity(Gravity.END);score.setMinWidth(ui.dp(40));return score;}
+    private TextView teamScore(String text){return ui.fixtureScore(text,24,ui.text);}
     private String provenance(Match m){
         return (m.source.isBlank()?"":m.source+" · ")+Formats.updated(m.updated);
     }
@@ -170,7 +171,7 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-2,1);awayRow.addView(away,ap);
             awayScore=teamScore("—");
             LinearLayout.LayoutParams asp=new LinearLayout.LayoutParams(-2,-2);asp.setMarginStart(ui.dp(12));awayRow.addView(awayScore,asp);
-            card.addView(awayRow);ui.gap(card,8);card.addView(ui.divider());ui.gap(card,4);
+            card.addView(awayRow);ui.gap(card,8);
 
             LinearLayout footRow=ui.row();
             foot=ui.new MatchTime();footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
@@ -178,6 +179,7 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams watchParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));watchParams.setMarginStart(ui.dp(8));
             watch.setVisibility(View.GONE);
             sub=new FrameLayout(ui.c);
+            sub.setTag("fixture-calendar");
             subIcon=new Ui.Icon(ui.c,"calendar-add",ui.primary);
             sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.CENTER));
             ui.clickable(sub,Color.TRANSPARENT,24);sub.setFocusable(true);
@@ -208,6 +210,7 @@ final class ScoreAdapter extends BaseAdapter {
             teamSlot(awaySlot,m.awayId,m.away,false,m);
             WatchLinks.Link link=host.watchLink(m);
             watch.bind(link,m.live(),()->host.openWatch(m));
+            ui.alignFixtureActions(sub,watch,ui.scoreColumnWidth(24));
             subscription(subIcon,m,sub);
         }
     }
@@ -262,15 +265,9 @@ final class ScoreAdapter extends BaseAdapter {
     }
 
     private final class EmptyHolder {
-        final LinearLayout root;
-        final TextView title,message;
+        final Ui.ScheduleEmpty root;
         EmptyHolder() {
-            root=ui.column();root.setPadding(ui.dp(20),ui.dp(32),ui.dp(20),ui.dp(28));
-            root.setGravity(Gravity.CENTER_HORIZONTAL);root.setBackground(ui.panel());
-            FrameLayout symbol=new FrameLayout(ui.c);symbol.setBackground(ui.shape(ui.tonal,Ui.CARD_RADIUS));symbol.addView(new Ui.Icon(ui.c,"calendar",ui.primary),new FrameLayout.LayoutParams(ui.dp(28),ui.dp(28),Gravity.CENTER));root.addView(symbol,new LinearLayout.LayoutParams(ui.dp(64),ui.dp(64)));ui.gap(root,20);
-            title=ui.text("",20,ui.text,true);root.addView(title);ui.gap(root,10);
-            title.setGravity(Gravity.CENTER);message=ui.text("",14,ui.muted,false);message.setGravity(Gravity.CENTER);message.setLineSpacing(ui.dp(5),1);root.addView(message);ui.gap(root,20);
-            TextView retry=ui.button("重新获取",false,host::retryScores);root.addView(retry,new LinearLayout.LayoutParams(-2,-2));
+            root=ui.new ScheduleEmpty(host::resolveEmptySchedule);
         }
     }
 }

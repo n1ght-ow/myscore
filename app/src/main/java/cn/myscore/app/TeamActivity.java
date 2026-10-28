@@ -159,10 +159,6 @@ public final class TeamActivity extends Activity {
         padStatus=ui.text("正在读取球队赛程…",11,ui.muted,false);names.addView(padStatus);
         padError=ui.text("",12,ui.error,false);padError.setLineSpacing(ui.dp(3),1);padError.setVisibility(View.GONE);ui.gap(names,6);names.addView(padError);
         hero.addView(names,np);
-        LinearLayout summary=ui.row();hero.addView(summary,new LinearLayout.LayoutParams(-2,-2));
-        teamSummaryCounts=new TextView[4];
-        String[] summaryLabels={"接下来","已结束","其他","总场次"};
-        for(int i=0;i<4;i++){LinearLayout metric=padMetric(summaryLabels[i],"");summary.addView(metric,new LinearLayout.LayoutParams(ui.dp(88),-2));teamSummaryCounts[i]=(TextView)metric.getTag();}
         root.addView(hero);root.addView(ui.divider());
 
         LinearLayout columns=ui.row();
@@ -179,7 +175,7 @@ public final class TeamActivity extends Activity {
 
     private LinearLayout padColumn(String title,String subtitle,boolean upcoming){
         LinearLayout column=ui.column();
-        LinearLayout head=ui.row();head.setPadding(ui.dp(28),ui.dp(20),ui.dp(24),ui.dp(8));
+        LinearLayout head=ui.row();head.setPadding(ui.dp(36),ui.dp(20),ui.dp(36),ui.dp(8));
         LinearLayout words=ui.column();
         words.addView(ui.text(title,24,ui.text,true));
         ui.gap(words,3);words.addView(ui.text(subtitle,11,ui.muted,false));
@@ -189,7 +185,7 @@ public final class TeamActivity extends Activity {
         head.addView(count);
         column.addView(head);
         ScoreList list=new ScoreList(this);
-        list.setPadding(ui.dp(22),ui.dp(4),ui.dp(22),ui.dp(28));list.setClipToPadding(false);list.setVerticalScrollBarEnabled(false);
+        list.setPadding(ui.dp(20),ui.dp(4),ui.dp(20),ui.dp(28));list.setClipToPadding(false);list.setVerticalScrollBarEnabled(false);
         if(upcoming){padUpcomingList=list;padUpcomingAdapter=padScheduleAdapter();}
         else{padFinishedList=list;padFinishedAdapter=padScheduleAdapter();}
         column.addView(list,new LinearLayout.LayoutParams(-1,0,1));
@@ -203,14 +199,6 @@ public final class TeamActivity extends Activity {
             public void toggleSubscription(Match match){toggleCalendar(match);}
         });
     }
-    private LinearLayout padMetric(String label,String value){
-        LinearLayout block=ui.column();block.setPadding(ui.dp(10),0,ui.dp(10),0);
-        TextView number=ui.text(value,22,ui.text,true);block.addView(number);
-        block.addView(ui.text(label,10,ui.muted,false));
-        block.setTag(number);
-        return block;
-    }
-
     private void renderPad(){
         if(headerLogo.isBlank()&&result!=null){
             for(Match m:result.matches){
@@ -241,10 +229,8 @@ public final class TeamActivity extends Activity {
             for(Match m:result.matches){if(m.finalised())fin++;else if(m.live()||m.scheduled()||m.state.equals("delayed"))up++;else other++;}
             if(padUpcomingCount!=null)padUpcomingCount.setText(up+" 场");
             if(padFinishedCount!=null)padFinishedCount.setText(fin+" 场");
-            if(teamSummaryCounts!=null){teamSummaryCounts[0].setText(String.valueOf(up));teamSummaryCounts[1].setText(String.valueOf(fin));teamSummaryCounts[2].setText(String.valueOf(other));teamSummaryCounts[3].setText(String.valueOf(result.matches.size()));}
         }
     }
-    private TextView[] teamSummaryCounts;
     private List<TeamScheduleRow> padRows(boolean finished){
         List<TeamScheduleRow> rows=new ArrayList<>();
         if(result==null){rows.add(TeamScheduleRow.note(busy?"正在读取球队赛程":"尚未获取球队赛程",busy?"正在连接球队的数据来源。":"点右上角刷新重试。"));return rows;}

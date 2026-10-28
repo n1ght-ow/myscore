@@ -23,9 +23,10 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
     private int checks;
     private boolean network;
     private boolean rotate;
+    private boolean review;
     private String sourcesReport="";
     private String networkGroup="全部";
-    @Override public void onCreate(Bundle args){super.onCreate(args);network=args!=null&&"true".equals(args.getString("network"));rotate=args!=null&&"true".equals(args.getString("rotate"));if(args!=null)networkGroup=args.getString("networkGroup","全部");start();}
+    @Override public void onCreate(Bundle args){super.onCreate(args);network=args!=null&&"true".equals(args.getString("network"));rotate=args!=null&&"true".equals(args.getString("rotate"));review=args!=null&&"true".equals(args.getString("review"));if(args!=null)networkGroup=args.getString("networkGroup","全部");start();}
     @Override public void runOnMainSync(Runnable action){
         Throwable[] error={null};super.runOnMainSync(()->{try{action.run();}catch(Throwable e){error[0]=e;}});
         if(error[0]!=null)throw new AssertionError(error[0]);
@@ -33,6 +34,9 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
     @Override public void onStart(){
         Bundle report=new Bundle();int outcome=Activity.RESULT_OK;
         try{
+            checks+=LayoutChecks.runSchedules(this,getTargetContext());
+            checks+=SpaceUsageChecks.run(this,getTargetContext());
+            checks+=AlignmentChecks.run(this,getTargetContext());
             runOnMainSync(this::adapterTransition);
             runOnMainSync(this::lolLayouts);
             // HyperOS may reject an instrumented app's background activity start. Launch as
@@ -43,8 +47,11 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
             Activity activity=waitForMonitorWithTimeout(launch,10000);removeMonitor(launch);
             require(activity!=null,"main screen starts on the selected device");
             waitForIdleSync();Thread.sleep(700);waitForIdleSync();
-            tabletNavigation(activity);
+            if(review)SpaceReview.run(this,activity);
+            else tabletNavigation(activity);
             if(rotate&&Ui.isPad(activity)){
+                if(activity.getResources().getConfiguration().orientation==Configuration.ORIENTATION_PORTRAIT)
+                    activity=rotate(activity,android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
                 activity=rotate(activity,android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
                 tabletNavigation(activity);capture("portrait");
                 activity=rotate(activity,android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
@@ -69,7 +76,7 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
         PadScoreAdapter adapter=new PadScoreAdapter(ui,new PadScoreAdapter.Host(){
             public void selectMatch(Match m){}public void openMatch(Match m){}public void openTeam(Match m,boolean home){}
             public void toggleSubscription(Match m){}public void openWatch(Match m){}public WatchLinks.Link watchLink(Match m){return null;}
-            public boolean isSubscribed(String id){return false;}public void showSourceStatus(){}
+            public boolean isSubscribed(String id){return false;}public void showSourceStatus(){}public void resolveEmptySchedule(){}
         });
         adapter.attach(list);list.setAdapter(adapter);
         Match match=new Match();match.id="in-memory-only";match.group="NBA";match.league="nba";match.home="Home";match.away="Away";
@@ -138,6 +145,14 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
             }catch(Exception e){throw new AssertionError(e);}});
         }
         runOnMainSync(()->{try{select.invoke(activity,0,original,day);}catch(Exception e){throw new AssertionError(e);}});waitForIdleSync();Thread.sleep(600);waitForIdleSync();
+        if(activity.getResources().getConfiguration().screenWidthDp - 128 < 850){
+            runOnMainSync(()->{try{
+                require(field("padFocusScroll").get(activity)==null,"narrow tablet has one full-height schedule, without a second empty/detail pane");
+                View list=(View)field("padList").get(activity);
+                require(list.getHeight()>activity.getWindow().getDecorView().getHeight()/2,"portrait schedule uses more than half the screen");
+            }catch(Exception e){throw new AssertionError(e);}});
+            return;
+        }
         runOnMainSync(()->{try{
             ScrollView scroll=(ScrollView)field("padFocusScroll").get(activity);
             require(scroll!=null,"tablet reading pane exists");

@@ -25,7 +25,7 @@ final class LayoutChecks {
                 LinearLayout names=(LinearLayout)((ViewGroup)table).getChildAt(0);
                 ViewGroup metrics=(ViewGroup)((ViewGroup)((ViewGroup)table).getChildAt(2)).getChildAt(0);
                 for(int i=0;i<names.getChildCount();i++){require(names.getChildAt(i).getHeight()==metrics.getChildAt(i).getHeight(),"identity and statistics rows align");checks[0]++;}
-                ScoreAdapter adapter=new ScoreAdapter(ui,new ScoreAdapter.Host(){public void openMatch(Match m){}public void openTeam(Match m,boolean home){}public void toggleSubscription(Match m){}public void openWatch(Match m){}public WatchLinks.Link watchLink(Match m){return null;}public void retryScores(){}public void showSourceStatus(){}public boolean isSubscribed(String id){return false;}});
+                ScoreAdapter adapter=new ScoreAdapter(ui,new ScoreAdapter.Host(){public void openMatch(Match m){}public void openTeam(Match m,boolean home){}public void toggleSubscription(Match m){}public void openWatch(Match m){}public WatchLinks.Link watchLink(Match m){return null;}public void retryScores(){}public void resolveEmptySchedule(){}public void showSourceStatus(){}public boolean isSubscribed(String id){return false;}});
                 Match m=new Match();m.group="NBA";m.league="nba";m.home="这是非常长的球队名称 Los Angeles Basketball Association";m.away="另一支长名称球队 Minnesota Timberwolves";m.state="live";m.status="第 4 节 · 加时比赛进行中 · 来源计时 12:34";m.homeScore="123";m.awayScore="124";m.updated=System.currentTimeMillis();
                 adapter.updateRows(List.of(ScoreRow.match(m)));View row=adapter.getView(0,null,null);layout(row,ui.dp(width-32));inspect(row);checks[0]++;
                 Match teamMatch=new Match();teamMatch.group="NBA";teamMatch.league="nba";teamMatch.home="这是非常长的球队名称 Los Angeles Basketball Association";teamMatch.away="另一支长名称球队 Minnesota Timberwolves";teamMatch.homeId="13";teamMatch.awayId="9";teamMatch.state="live";teamMatch.status="第 4 节 · 12:34";teamMatch.homeScore="123";teamMatch.awayScore="124";teamMatch.updated=System.currentTimeMillis();
@@ -38,6 +38,39 @@ final class LayoutChecks {
                 teamAdapter.updateRows(List.of(TeamScheduleRow.match(teamMatch,home)));
                 teamRow=teamAdapter.getView(0,teamRow,null);layout(teamRow,ui.dp(width-32));inspect(teamRow);checks[0]++;
                 Ui.ScoreText score=ui.score("123","124",true,36);layout(score,ui.dp(100));inspect(score);checks[0]++;
+            }
+        });
+        return checks[0]+runSchedules(test,context)+SpaceUsageChecks.run(test,context)+AlignmentChecks.run(test,context);
+    }
+    /** Targeted checks also run on physical devices; the older full suite is emulator-only. */
+    static int runSchedules(Instrumentation test,Context context){
+        int[] checks={0};
+        test.runOnMainSync(()->{
+            for(int width:new int[]{320,360})for(float scale:new float[]{1f,1.3f,2f})for(boolean dark:new boolean[]{false,true}){
+                Configuration config=new Configuration(context.getResources().getConfiguration());config.fontScale=scale;config.screenWidthDp=width;
+                Ui ui=new Ui(context.createConfigurationContext(config),dark);
+                int[] actions={0};Ui.ScheduleEmpty empty=ui.new ScheduleEmpty(()->actions[0]++);
+                empty.bind(ScoreRow.empty("NFL 暂无赛程","10月29日 周四，暂无已确认的比赛。\n可以查看其他赛事，或切换日期。","查看全部赛事"));
+                layout(empty,ui.dp(width-32));inspect(empty);checks[0]++;
+                require(empty.getBackground()==null,"empty schedule has no enclosing card");checks[0]++;
+                require(empty.action.getMeasuredHeight()>=ui.dp(48),"empty-state action keeps a 48dp touch target");checks[0]++;
+                empty.action.performClick();require(actions[0]==1,"empty-state action reaches the host");checks[0]++;
+                empty.bind(ScoreRow.empty("赛程暂时无法获取","连接失败，暂时无法确认比赛安排。","重新获取"));
+                layout(empty,ui.dp(width-32));inspect(empty);checks[0]++;
+            }
+            for(float scale:new float[]{1f,1.3f,2f})for(boolean dark:new boolean[]{false,true}){
+                Configuration config=new Configuration(context.getResources().getConfiguration());config.fontScale=scale;config.screenWidthDp=813;
+                Ui ui=new Ui(context.createConfigurationContext(config),dark);
+                PadScoreAdapter adapter=new PadScoreAdapter(ui,new PadScoreAdapter.Host(){
+                    public void selectMatch(Match m){}public void openMatch(Match m){}public void openTeam(Match m,boolean home){}
+                    public void toggleSubscription(Match m){}public void openWatch(Match m){}public WatchLinks.Link watchLink(Match m){return null;}
+                    public boolean isSubscribed(String id){return false;}public void showSourceStatus(){}public void resolveEmptySchedule(){}
+                },true);
+                Match match=new Match();match.id="layout-only";match.group="NBA";match.league="nba";
+                match.home="Portland Trail Blazers 长球队名称";match.away="Minnesota Timberwolves 长球队名称";
+                match.homeScore="123";match.awayScore="124";match.state="live";match.source="ESPN";match.updated=System.currentTimeMillis();
+                adapter.updateRows(List.of(ScoreRow.match(match)));
+                View row=adapter.getView(0,null,null);layout(row,ui.dp(scale>=1.5f?589:653));inspect(row);checks[0]++;
             }
         });
         return checks[0];

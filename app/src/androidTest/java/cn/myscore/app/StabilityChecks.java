@@ -79,6 +79,7 @@ final class StabilityChecks {
             public void openWatch(Match value){}
             public WatchLinks.Link watchLink(Match value){return null;}
             public void retryScores(){}
+            public void resolveEmptySchedule(){}
             public void showSourceStatus(){}
             public boolean isSubscribed(String id){return false;}
         });

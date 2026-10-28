@@ -45,8 +45,9 @@ final class Sheet {
             LinearLayout row = ui.row();
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setMinimumHeight(ui.dp(56));
-            row.setPadding(ui.dp(14), ui.dp(10), ui.dp(10), ui.dp(10));
-            ui.clickable(row, on ? ui.tonal : Color.TRANSPARENT, Ui.CONTROL_RADIUS);
+            row.setPadding(0, ui.dp(10), 0, ui.dp(10));
+            ui.clickable(row, Color.TRANSPARENT, Ui.CONTROL_RADIUS);
+            row.setSelected(on);
             row.setFocusable(true);
             row.setContentDescription(item.title + (item.detail.isEmpty() ? "" : "，" + item.detail) + (on ? "，已选中" : ""));
             LinearLayout texts = ui.column();

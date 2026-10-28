@@ -12,6 +12,7 @@ final class ScoreRow {
     static ScoreRow section(String text){return new ScoreRow(SECTION,null,text,null,null);}
     static ScoreRow match(Match match){return new ScoreRow(match.group.equals("F1")?F1:MATCH,match,null,null,null);}
     static ScoreRow empty(String title,String message){return new ScoreRow(EMPTY,null,null,title,message);}
+    static ScoreRow empty(String title,String message,String action){return new ScoreRow(EMPTY,null,action,title,message);}
     /** Identity of the row's shape: equal keys let the adapter rebind text without a relayout. */
     String key(){
         if(type==MATCH||type==F1) {

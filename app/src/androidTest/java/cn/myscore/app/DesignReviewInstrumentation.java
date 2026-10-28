@@ -78,7 +78,7 @@ public final class DesignReviewInstrumentation extends Instrumentation {
         List<View> chips=findAll(activity.getWindow().getDecorView(),"cs2-map-chip");
         require(chips.size()==scope.size(),"one map button per map with data");
         require(chips.get(0).getContentDescription()!=null&&chips.get(0).getContentDescription().toString().contains("已选中"),"first map starts selected");
-        View title=findTag("cs2-map-title");require(title instanceof TextView&&((TextView)title).getText().toString().equals(scope.get(0)),"selected map title is the first map");
+        require(findTag("cs2-map-title")==null,"selected map name is not repeated below its switch");
         require(findAll(activity.getWindow().getDecorView(),"team-panel-header").size()==2,"selected map shows both teams");
         require(findAll(activity.getWindow().getDecorView(),"detail-data-table").size()==2,"selected map keeps only the two player tables");
         List<View> bands=findAll(activity.getWindow().getDecorView(),"team-map-score");
@@ -92,7 +92,7 @@ public final class DesignReviewInstrumentation extends Instrumentation {
         capture(theme+"-cs2-maps-top");
         main(()->{View chip=findText("Anubis");require(chip!=null,"Anubis button");while(!chip.isClickable()&&chip.getParent() instanceof View)chip=(View)chip.getParent();chip.performClick();});settle();
         require(field("mapFilter").equals("Anubis"),"map button changes the selected map");
-        View switched=findTag("cs2-map-title");require(switched instanceof TextView&&"Anubis".contentEquals(((TextView)switched).getText()),"another map switches score and player data");
+        require(findTag("cs2-map-title")==null,"changing map does not add a duplicate title");
         require(findAll(activity.getWindow().getDecorView(),"team-panel-header").size()==2&&findAll(activity.getWindow().getDecorView(),"detail-data-table").size()==2,"selected Anubis data replaces the previous map");
         List<View> anubis=findAll(activity.getWindow().getDecorView(),"team-map-score");
         require(anubis.get(0).getContentDescription().toString().startsWith(detail.match.home+"，CT 方 9")&&anubis.get(0).getContentDescription().toString().contains("T 方 4"),"Anubis home opens CT, score band switches");

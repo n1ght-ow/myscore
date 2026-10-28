@@ -88,7 +88,8 @@ final class TeamScheduleAdapter extends BaseAdapter {
 
     private final class MatchHolder {
         final LinearLayout root,card;
-        final TextView date,state,opponent,detail,score,result;
+        final TextView date,state,opponent,detail,result;
+        final Ui.ScoreText score;
         final Ui.MatchTime foot;
         final LinearLayout footer;
         final FrameLayout action;
@@ -114,14 +115,14 @@ final class TeamScheduleAdapter extends BaseAdapter {
             detail=ui.text("",11,ui.muted,false);detail.setPadding(0,ui.dp(4),0,0);middle.addView(detail);
             LinearLayout.LayoutParams middleParams=new LinearLayout.LayoutParams(0,-2,1);
             middleParams.setMarginStart(ui.dp(10));main.addView(middle,middleParams);
-            LinearLayout numbers=ui.column();numbers.setGravity(Gravity.END);
-            score=ui.text("",20,ui.text,true);score.setGravity(Gravity.END);numbers.addView(score);
-            result=ui.text("",11,ui.primary,true);result.setGravity(Gravity.END);result.setPadding(0,ui.dp(2),0,0);numbers.addView(result);
-            LinearLayout.LayoutParams numbersParams=new LinearLayout.LayoutParams(-2,-2);
+            LinearLayout numbers=ui.column();numbers.setGravity(Gravity.CENTER);
+            score=ui.score("","",false,20);numbers.addView(score,new LinearLayout.LayoutParams(-1,-2));
+            result=ui.text("",11,ui.primary,true);result.setGravity(Gravity.CENTER);result.setPadding(0,ui.dp(2),0,0);numbers.addView(result);
+            LinearLayout.LayoutParams numbersParams=new LinearLayout.LayoutParams(Math.max(ui.dp(96),ui.scoreColumnWidth(20)),-2);
             numbersParams.setMarginStart(ui.dp(10));main.addView(numbers,numbersParams);
             card.addView(main);
             ui.gap(card,12);
-            footer=ui.column();footer.addView(ui.divider());
+            footer=ui.column();
             LinearLayout controls=ui.row();
             foot=ui.new MatchTime();
             controls.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
@@ -130,7 +131,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
             action.addView(calendar,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
             action.setFocusable(true);ui.clickable(action,Color.TRANSPARENT,24);
             action.setOnClickListener(v->{if(row!=null)host.toggleSubscription(row.match);});
-            LinearLayout.LayoutParams actionParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));
+            LinearLayout.LayoutParams actionParams=new LinearLayout.LayoutParams(Math.max(ui.dp(96),ui.scoreColumnWidth(20)),ui.dp(48));
             actionParams.setMarginStart(ui.dp(8));controls.addView(action,actionParams);footer.addView(controls);card.addView(footer);
             root.addView(card,new LinearLayout.LayoutParams(-1,-2));
         }
@@ -143,15 +144,8 @@ final class TeamScheduleAdapter extends BaseAdapter {
             text(opponent,value.opponent);
             text(detail,value.side.isEmpty()?value.detail:value.side+" · "+value.detail);
             boolean scored=!value.score.isEmpty();
-            if(scored) {
-                score.setTextSize(20);score.setTextColor(ui.text);
-                String own=value.home?value.match.homeScore:value.match.awayScore,other=value.home?value.match.awayScore:value.match.homeScore;
-                android.text.SpannableString colored=new android.text.SpannableString(value.score);
-                int split=value.score.indexOf('–');if(split<0)split=value.score.indexOf(':');if(split<0)split=value.score.indexOf('-');
-                if(split>0){colored.setSpan(new android.text.style.ForegroundColorSpan(ui.scoreColor(own,other,value.match.finalised())),0,split,0);colored.setSpan(new android.text.style.ForegroundColorSpan(ui.scoreColor(other,own,value.match.finalised())),split+1,colored.length(),0);}score.setText(colored);
-            } else {
-                text(score,"VS");score.setTextSize(14);score.setTextColor(ui.muted);
-            }
+            String own=value.home?value.match.homeScore:value.match.awayScore,other=value.home?value.match.awayScore:value.match.homeScore;
+            score.setScore(own,other,scored);score.setResultColors(ui.scoreColor(own,other,value.match.finalised()),ui.scoreColor(other,own,value.match.finalised()));
             boolean subscribed=host.isSubscribed(value.match.id);
             boolean eligible=value.match.scheduled()&&value.match.timeConfirmed&&value.match.start>System.currentTimeMillis();
             action.setVisibility(subscribed||eligible?View.VISIBLE:View.INVISIBLE);

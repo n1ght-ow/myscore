@@ -62,6 +62,35 @@ final class Ui {
         action=text;onAction=bg;
     }
     int dp(float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
+    /** Scores and the last action share a center axis, including three digits at large font sizes. */
+    int scoreColumnWidth(int sp){return Math.max(dp(48),(int)Math.ceil(text("",sp,text,true).getPaint().measureText("888"))+dp(8));}
+    TextView fixtureScore(String value,int sp,int color){TextView score=text(value,sp,color,true);score.setGravity(Gravity.CENTER);score.setMinWidth(scoreColumnWidth(sp));score.setTag("fixture-score");return score;}
+    void alignFixtureActions(View calendar,View watch,int column){
+        boolean plays=watch!=null&&watch.getVisibility()!=View.GONE;
+        if(watch!=null&&watch.getLayoutParams().width!=column){watch.getLayoutParams().width=column;watch.requestLayout();}
+        int width=plays?dp(48):column;
+        if(calendar.getLayoutParams().width!=width){calendar.getLayoutParams().width=width;calendar.requestLayout();}
+    }
+    /** The measured pane, rather than the device width, owns its column breakpoint. */
+    LinearLayout columns(LinearLayout left,LinearLayout right,int minimumDp,int gapDp){
+        View gap=new View(c);
+        LinearLayout pair=new LinearLayout(c){
+            private int mode=-1;
+            @Override protected void onMeasure(int width,int height){
+                boolean hasLeft=left.getChildCount()>0,hasRight=right.getChildCount()>0;
+                boolean wide=MeasureSpec.getMode(width)!=MeasureSpec.UNSPECIFIED&&MeasureSpec.getSize(width)>=dp(2*minimumDp*Math.max(1,c.getResources().getConfiguration().fontScale)+gapDp);
+                int next=(wide?4:0)+(hasLeft?2:0)+(hasRight?1:0);
+                if(next!=mode){mode=next;setOrientation(wide?HORIZONTAL:VERTICAL);
+                    left.setVisibility(hasLeft?VISIBLE:GONE);right.setVisibility(hasRight?VISIBLE:GONE);gap.setVisibility(hasLeft&&hasRight?VISIBLE:GONE);
+                    left.setLayoutParams(new LinearLayout.LayoutParams(wide&&hasRight?0:-1,-2,wide&&hasRight?1:0));
+                    right.setLayoutParams(new LinearLayout.LayoutParams(wide&&hasLeft?0:-1,-2,wide&&hasLeft?1:0));
+                    gap.setLayoutParams(new LinearLayout.LayoutParams(wide?dp(gapDp):1,wide?1:dp(gapDp)));
+                }
+                super.onMeasure(width,height);
+            }
+        };
+        pair.setGravity(Gravity.TOP);pair.setTag("adaptive-columns");pair.addView(left);pair.addView(gap);pair.addView(right);return pair;
+    }
     /** A 12.4" tablet reports a smallest width far above any phone; this is the layout split. */
     static boolean isPad(Context context){
         android.content.res.Configuration cfg=context.getResources().getConfiguration();
@@ -188,6 +217,11 @@ final class Ui {
         b.setMinHeight(dp(48));b.setPadding(dp(20),dp(12),dp(20),dp(12));clickable(b,filled?this.action:tonal,CONTROL_RADIUS);
         b.setFocusable(true);b.setOnClickListener(v->action.run());return b;
     }
+    TextView textButton(String label,Runnable action) {
+        TextView b=button(label,false,action);clickable(b,Color.TRANSPARENT,12);
+        b.setPadding(0,dp(12),0,dp(12));
+        b.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);return b;
+    }
     /**
      * A media shortcut for dense score cards. Keep the full destination in its accessible name
      * and long-press tooltip; a bare icon sits in a transparent 48dp touch target.
@@ -217,7 +251,7 @@ final class Ui {
     }
     WatchPill watchPill(int targetHeightDp) {return new WatchPill(targetHeightDp);}
     /**
-     * One compact media control: provider, destination state and external-link mark. Match context
+     * One compact media control: one leading playback affordance, provider and destination state. Match context
      * already lives in the scoreboard. Rebinding preserves the row when a verified URL arrives.
      */
     final class WatchRow extends LinearLayout {
@@ -228,21 +262,19 @@ final class Ui {
             super(c);
             setOrientation(LinearLayout.HORIZONTAL);
             setGravity(Gravity.CENTER_VERTICAL);
-            setMinimumHeight(dp(56));setPadding(dp(10),dp(10),dp(14),dp(10));
+            setMinimumHeight(dp(48));setPadding(0,dp(8),0,dp(8));
             FrameLayout badge=new FrameLayout(c);
             play=new Icon(c,"play",muted);play.setAlpha(ACTION_ICON_ALPHA);
-            badge.addView(play,new FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER));
-            addView(badge,new LinearLayout.LayoutParams(dp(36),dp(36)));
+            badge.addView(play,new FrameLayout.LayoutParams(dp(24),dp(24),Gravity.START|Gravity.CENTER_VERTICAL));
+            addView(badge,new LinearLayout.LayoutParams(dp(36),dp(32)));
             provider=text("",14,text,true);
             provider.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-            LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,-2,1f);pp.setMarginStart(dp(12));
+            LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,-2,1f);pp.setMarginStart(dp(8));
             addView(provider,pp);
             state=text("",12,muted,false);state.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.setMarginStart(dp(12));
             addView(state,sp);
-            LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(dp(16),dp(16));ep.setMarginStart(dp(12));
-            addView(new Icon(c,"external",muted),ep);
-            clickable(this,tonal,16);setFocusable(true);setTag("watch-control");
+            clickable(this,Color.TRANSPARENT,12);setFocusable(true);setTag("watch-control");
         }
         void bind(WatchLinks.Link link,boolean live,Runnable action) {
             if(link==null){setVisibility(GONE);return;}
@@ -257,6 +289,30 @@ final class Ui {
         }
     }
     WatchRow watchRow() {return new WatchRow();}
+    /** Empty schedules belong to the page, with one next step and no nested surfaces. */
+    final class ScheduleEmpty extends LinearLayout {
+        final TextView title,message,action;
+        ScheduleEmpty(Runnable next) {
+            super(c);setOrientation(VERTICAL);setGravity(Gravity.START);
+            setPadding(dp(8),dp(64),dp(8),dp(40));
+            Icon calendar=new Icon(c,"calendar",muted);
+            calendar.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            addView(calendar,new LinearLayout.LayoutParams(dp(32),dp(32)));
+            gap(this,24);
+            title=text("",22,text,true);addView(title,new LinearLayout.LayoutParams(-1,-2));
+            gap(this,10);
+            message=text("",14,muted,false);message.setLineSpacing(dp(5),1);
+            addView(message,new LinearLayout.LayoutParams(-1,-2));
+            gap(this,20);
+            action=textButton("",next);
+            action.setPadding(0,dp(12),dp(20),dp(12));action.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
+            addView(action,new LinearLayout.LayoutParams(-2,-2));
+        }
+        void bind(ScoreRow row) {
+            title.setText(row.title);message.setText(row.message);
+            action.setText(row.text==null?"刷新赛程":row.text);
+        }
+    }
     View divider(){View d=new View(c);d.setBackgroundColor(line);d.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(1)));return d;}
     void gap(LinearLayout into,int h){View space=new View(c);into.addView(space,new LinearLayout.LayoutParams(1,dp(h)));}
     /** Match time leads; source freshness stays readable without competing with it. */

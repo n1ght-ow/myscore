@@ -1,7 +1,6 @@
 package cn.myscore.app;
 
 import android.content.Context;
-import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.view.View;
@@ -16,7 +15,7 @@ import android.widget.ListView;
 final class ScoreList extends ListView {
     interface OnScrollPixels { void onScroll(int deltaPixels); }
     private OnScrollPixels listener;
-    private int lastOffset=-1,lastFirst=-1,lastTop,lastHeight;
+    private final ScrollTracker scrollTracker=new ScrollTracker();
     private boolean fingerDown;
     private int scrollState=AbsListView.OnScrollListener.SCROLL_STATE_IDLE;
 
@@ -34,7 +33,13 @@ final class ScoreList extends ListView {
         setSoundEffectsEnabled(false);
         setOnScrollListener(new AbsListView.OnScrollListener(){
             @Override public void onScrollStateChanged(AbsListView view,int state){scrollState=state;}
-            @Override public void onScroll(AbsListView view,int first,int visible,int total){}
+            @Override public void onScroll(AbsListView view,int first,int visible,int total){
+                View child=getChildAt(0);
+                if(child==null){scrollTracker.reset();return;}
+                int delta=scrollTracker.update(first,child.getTop(),child.getHeight(),getHeight());
+                // Update the sibling header before drawing starts, never from dispatchDraw.
+                if(delta!=0&&listener!=null)listener.onScroll(delta);
+            }
         });
     }
 
@@ -49,25 +54,25 @@ final class ScoreList extends ListView {
 
     void setOnScrollPixels(OnScrollPixels listener){this.listener=listener;}
     /** Called before replacing items so the new layout cannot be mistaken for a user scroll. */
-    void resetScrollTracking(){lastOffset=-1;lastFirst=-1;lastHeight=0;}
+    void resetScrollTracking(){scrollTracker.reset();}
 
-    @Override protected void dispatchDraw(Canvas canvas) {
-        View child=getChildAt(0);
-        if(child!=null) {
-            int first=getFirstVisiblePosition(),top=child.getTop(),height=child.getHeight();
-            // Keep the offset incrementally: computeVerticalScrollOffset() folds every visible
-            // child into an estimate, which is unnecessary work on each scrolling frame.
-            int offset=lastOffset;
-            if(offset==-1)offset=computeVerticalScrollOffset();
-            if(lastOffset!=-1&&listener!=null) {
-                int delta;
+    static final class ScrollTracker {
+        private int lastFirst=-1,lastTop,lastHeight;
+
+        void reset(){lastFirst=-1;}
+
+        int update(int first,int top,int height,int viewportHeight) {
+            int delta=0;
+            if(lastFirst!=-1) {
                 if(first==lastFirst)delta=lastTop-top;
                 else if(first==lastFirst+1)delta=lastTop+lastHeight-top;
-                else {offset=computeVerticalScrollOffset();delta=offset-lastOffset;}
-                if(delta!=0){listener.onScroll(delta);offset=lastOffset+delta;}
+                else if(first==lastFirst-1)delta=lastTop-top-height;
+                // A jump without adjacent rows has no exact pixel distance. Use a viewport
+                // in its known direction; scrollbar estimates can reverse on unequal rows.
+                else delta=first>lastFirst?viewportHeight:-viewportHeight;
             }
-            lastFirst=first;lastTop=top;lastHeight=height;lastOffset=offset;
+            lastFirst=first;lastTop=top;lastHeight=height;
+            return delta;
         }
-        super.dispatchDraw(canvas);
     }
 }

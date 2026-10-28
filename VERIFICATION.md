@@ -1,3 +1,12 @@
+# MyScore 4.3.1 · 滚动顶栏闪烁修复（2026-10-28）
+
+- 版本：`4.3.1` / versionCode `43`，标签 `v4.3.1`。包名 `cn.myscore.app`，minSdk 28 / targetSdk 35；沿用 4.3.0 的个人 debug 签名，可覆盖安装并保留设置、缓存与日历关联。
+- 修复：列表改在原生滚动回调中更新顶栏，不再在 `dispatchDraw` 绘制途中修改相邻顶栏的位移。相邻卡片按实际高度计算双向滚动距离；快速跨多行时按行位置判断方向，避免不等高卡片导致滚动条估值反向、顶栏突然展开。
+- 回归：新增 4 项单元测试，覆盖不等高相邻行的双向滚动、重复回调、快速跨行方向及数据替换后的基线重置；全量 `testDebugUnitTest` 185 项，0 失败 / 错误 / 跳过。
+- 构建：`lintDebug` 0 错误 / 24 警告；`assembleDebug` 与 `assembleDebugAndroidTest` 通过。
+- 安装包：`artifacts/MyScore-4.3.1.apk`，1,113,627 字节；SHA-256 `9d1ec138bc7281a8a506ecd111cc12c2bab00fd84209744ff8cc461e584373e0`；校验附件 `artifacts/SHA256SUMS-4.3.1.txt`。`aapt` 已核对版本与包名，`apksigner verify` 通过；与 4.3.0 本地发布包实际对比，证书 SHA-256 均为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 边界：已分析用户提供的真机录屏；本轮 Mobile Dev 插件因 Windows 下 `/bin/sh` 路径不可用而启动失败，未完成修复后的模拟器或真机滚动复测，未运行 instrumentation。发布入口：[v4.3.1](https://github.com/n1ght-ow/myscore/releases/tag/v4.3.1)。
+
 # MyScore 4.3.0 · 全量复审、稳定性与刷新架构修复（2026-10-28 发布）
 
 - 版本：`4.3.0` / versionCode `42`，发布标签 `v4.3.0`。沿用既有个人 debug 签名，可直接覆盖 4.2.2 / 41，保留设置、缓存与日历关联。

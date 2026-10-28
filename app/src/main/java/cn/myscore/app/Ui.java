@@ -158,7 +158,15 @@ final class Ui {
         tab.setText(label);tab.setTextSize(14);tab.setTextColor(selected?text:muted);tab.setTypeface(selected?medium:regular);
         tab.setIncludeFontPadding(true);tab.setFallbackLineSpacing(true);tab.setGravity(Gravity.CENTER);
         tab.setMinHeight(dp(48));tab.setPadding(dp(14),dp(10),dp(14),dp(12));
+        // Reserve the wider weight so changing the selection cannot shift nearby tabs.
+        Paint measure=new Paint(tab.getPaint());
+        measure.setTypeface(regular);float regularWidth=measure.measureText(label);
+        measure.setTypeface(medium);
+        tab.setMinWidth((int)Math.ceil(Math.max(regularWidth,measure.measureText(label)))+dp(28));
         clickable(tab,Color.TRANSPARENT,0);tab.setSelected(selected);tab.setFocusable(true);tab.setOnClickListener(v->action.run());return tab;
+    }
+    void selectTab(TextView tab,boolean selected) {
+        tab.setSelected(selected);tab.setTextColor(selected?text:muted);tab.setTypeface(selected?medium:regular);
     }
     TextView button(String label,boolean filled,Runnable action) {
         TextView b=text(label,14,filled?onAction:text,true);b.setGravity(Gravity.CENTER);

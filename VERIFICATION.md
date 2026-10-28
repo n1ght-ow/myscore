@@ -1,3 +1,12 @@
+# MyScore 4.3.2 · 赛事切换顶栏稳定性修复（2026-10-28）
+
+- 版本：`4.3.2` / versionCode `44`，标签 `v4.3.2`。沿用既有个人 debug 签名，可覆盖安装 4.3.1，保留设置、缓存与日历关联。
+- 切换：赛事筛选原地更新选中状态，保留顶栏控件与筛选栏横向位置；日期变化只替换日期行。标签预留常规与加粗字体的最大宽度，避免切换选中态时相邻标签位移。
+- 滚动：切换赛事先停止旧列表惯性；列表重排、程序回顶与数据替换仅更新滚动基线，真实触摸滚动和惯性滚动才驱动顶栏收放，防止赛事切换时闪现与抖动。
+- 测试：新增短列表 / 空列表切换、惯性滚动期间重排 2 项回归；全量 `testDebugUnitTest` 187 项，0 失败 / 错误 / 跳过。clean 后 `lintDebug` 0 错误 / 24 警告，`assembleDebug` 与 `assembleDebugAndroidTest` 通过。
+- 安装包：`artifacts/MyScore-4.3.2.apk`，1,114,819 字节；SHA-256 `09859808d53f20b18322be156518bece394de4c877d216e82713a33ccea5177b`；校验附件 `artifacts/SHA256SUMS-4.3.2.txt`。`aapt` 核对包名 `cn.myscore.app`、版本 `4.3.2 / 44`、minSdk 28 / targetSdk 35；`apksigner verify` 通过，与 4.3.1 本地发布包实际对比，证书 SHA-256 均为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 边界：已逐帧分析用户提供的赛事切换真机录屏；Mobile Dev 插件启动路径问题仍阻止设备工具使用，本轮未完成修复后的模拟器或真机复测，未运行 instrumentation。发布入口：[v4.3.2](https://github.com/n1ght-ow/myscore/releases/tag/v4.3.2)。
+
 # MyScore 4.3.1 · 滚动顶栏闪烁修复（2026-10-28）
 
 - 版本：`4.3.1` / versionCode `43`，标签 `v4.3.1`。包名 `cn.myscore.app`，minSdk 28 / targetSdk 35；沿用 4.3.0 的个人 debug 签名，可覆盖安装并保留设置、缓存与日历关联。

@@ -17,6 +17,7 @@ final class ScoreList extends ListView {
     private OnScrollPixels listener;
     private final ScrollTracker scrollTracker=new ScrollTracker();
     private boolean fingerDown;
+    private boolean layingOut;
     private int scrollState=AbsListView.OnScrollListener.SCROLL_STATE_IDLE;
 
     ScoreList(Context context) {
@@ -36,7 +37,8 @@ final class ScoreList extends ListView {
             @Override public void onScroll(AbsListView view,int first,int visible,int total){
                 View child=getChildAt(0);
                 if(child==null){scrollTracker.reset();return;}
-                int delta=scrollTracker.update(first,child.getTop(),child.getHeight(),getHeight());
+                int delta=scrollTracker.update(first,child.getTop(),child.getHeight(),getHeight(),
+                        !layingOut&&scrollState!=AbsListView.OnScrollListener.SCROLL_STATE_IDLE);
                 // Update the sibling header before drawing starts, never from dispatchDraw.
                 if(delta!=0&&listener!=null)listener.onScroll(delta);
             }
@@ -52,6 +54,18 @@ final class ScoreList extends ListView {
     }
     @Override protected void onDetachedFromWindow(){fingerDown=false;scrollState=AbsListView.OnScrollListener.SCROLL_STATE_IDLE;super.onDetachedFromWindow();}
 
+    @Override protected void onLayout(boolean changed,int left,int top,int right,int bottom){
+        layingOut=true;
+        try{super.onLayout(changed,left,top,right,bottom);}finally{layingOut=false;}
+    }
+
+    void stopScrollForSelection(){
+        scrollState=AbsListView.OnScrollListener.SCROLL_STATE_IDLE;
+        fingerDown=false;
+        smoothScrollBy(0,0);
+        resetScrollTracking();
+    }
+
     void setOnScrollPixels(OnScrollPixels listener){this.listener=listener;}
     /** Called before replacing items so the new layout cannot be mistaken for a user scroll. */
     void resetScrollTracking(){scrollTracker.reset();}
@@ -61,9 +75,9 @@ final class ScoreList extends ListView {
 
         void reset(){lastFirst=-1;}
 
-        int update(int first,int top,int height,int viewportHeight) {
+        int update(int first,int top,int height,int viewportHeight,boolean userScrolling) {
             int delta=0;
-            if(lastFirst!=-1) {
+            if(userScrolling&&lastFirst!=-1) {
                 if(first==lastFirst)delta=lastTop-top;
                 else if(first==lastFirst+1)delta=lastTop+lastHeight-top;
                 else if(first==lastFirst-1)delta=lastTop-top-height;

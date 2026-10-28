@@ -95,6 +95,9 @@ implements ScoreAdapter.Host {
     private LinearLayout body;
     private LinearLayout nav;
     private LinearLayout headerView;
+    private LinearLayout filterTabs;
+    private LinearLayout dateSelectorView;
+    private LocalDate headerDay;
     private FrameLayout stage;
     private ScrollView scroll;
     private ScoreList scoreList;
@@ -443,6 +446,9 @@ implements ScoreAdapter.Host {
         }
         boolean inPlace = !this.pad && nextTab == 0 && this.tab == 0 && this.scoreList != null;
         boolean padInPlace = this.pad && nextTab == 0 && this.tab == 0 && this.padList != null && this.padAdapter != null;
+        if (inPlace) {
+            this.scoreList.stopScrollForSelection();
+        }
         boolean wasToday = this.dayOffset == 0;
         this.tab = nextTab;
         this.group = nextGroup;
@@ -724,17 +730,24 @@ implements ScoreAdapter.Host {
         if (this.headerView == null || this.isFinishing() || this.isDestroyed()) {
             return;
         }
-        this.headerView.removeAllViews();
-        this.header(this.headerView);
-        this.filters(this.headerView);
-        this.dateSelector(this.headerView);
-        this.headerView.addView(this.ui.divider());
-        this.headerHeight = this.measureHeader();
-        if (this.scoreList != null) {
-            this.scoreList.setPadding(this.ui.dp(16.0f), this.headerHeight, this.ui.dp(16.0f), this.ui.dp(24.0f));
+        // Keep the tapped controls and horizontal scroll position across sport changes.
+        for (int i = 0; i < this.filterTabs.getChildCount(); i++) {
+            TextView item = (TextView)this.filterTabs.getChildAt(i);
+            String group = GROUPS[i];
+            boolean selected = group.equals(this.group);
+            if (item.isSelected() != selected) {
+                this.ui.selectTab(item, selected);
+                item.setContentDescription(group + (selected ? "，已选中" : "，筛选赛事"));
+            }
+        }
+        if (!this.from().equals(this.headerDay)) {
+            int index = this.headerView.indexOfChild(this.dateSelectorView);
+            this.headerView.removeView(this.dateSelectorView);
+            this.dateSelectorView = this.dateSelector();
+            this.headerView.addView(this.dateSelectorView, index);
+            this.headerView.post(this::syncHeaderHeight);
         }
         this.headerView.setTranslationY(0.0f);
-        this.headerView.post(this::syncHeaderHeight);
     }
 
     private void render(boolean preserve) {
@@ -777,6 +790,9 @@ implements ScoreAdapter.Host {
         }
         boolean scores = this.tab == 0;
         this.root.removeAllViews();
+        this.filterTabs = null;
+        this.dateSelectorView = null;
+        this.headerDay = null;
         this.stage = new FrameLayout((Context)this);
         this.root.addView((View)this.stage, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, 0, 1.0f));
         if (scores) {
@@ -817,7 +833,8 @@ implements ScoreAdapter.Host {
         this.header(this.headerView);
         if (scores) {
             this.filters(this.headerView);
-            this.dateSelector(this.headerView);
+            this.dateSelectorView = this.dateSelector();
+            this.headerView.addView(this.dateSelectorView);
         }
         this.headerView.addView(this.ui.divider());
         this.stage.addView((View)this.headerView, (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(-1, -2, 48));
@@ -1073,6 +1090,7 @@ implements ScoreAdapter.Host {
         horizontal.setHorizontalScrollBarEnabled(false);
         horizontal.setClipToPadding(false);
         LinearLayout tabs = this.ui.row();
+        this.filterTabs = tabs;
         tabs.setPadding(this.ui.dp(6.0f), 0, this.ui.dp(6.0f), 0);
         for (String g : GROUPS) {
             TextView item = this.ui.tab(g, g.equals(this.group), () -> this.select(this.tab, g, this.dayOffset));
@@ -1096,9 +1114,10 @@ implements ScoreAdapter.Host {
         parent.addView(this.ui.divider());
     }
 
-    private void dateSelector(LinearLayout parent) {
+    private LinearLayout dateSelector() {
         LocalDate today = Match.today(System.currentTimeMillis());
         LocalDate selected = this.from();
+        this.headerDay = selected;
         LinearLayout bar = this.ui.row();
         bar.setPadding(this.ui.dp(20.0f), this.ui.dp(4.0f), this.ui.dp(12.0f), this.ui.dp(4.0f));
         boolean large = this.getResources().getConfiguration().fontScale >= 1.5f;
@@ -1128,7 +1147,7 @@ implements ScoreAdapter.Host {
         prev.getChildAt(0).setRotation(180.0f);
         bar.addView((View)prev);
         bar.addView((View)this.headerAction("chevron", "后一天", () -> this.selectDay(selected.plusDays(1L))));
-        parent.addView((View)bar);
+        return bar;
     }
 
     private void selectDay(LocalDate day) {

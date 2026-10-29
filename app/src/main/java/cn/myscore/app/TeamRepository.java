@@ -48,14 +48,14 @@ final class TeamRepository {
     Result fetch(Team team,boolean force) {
         Result cached=cached(team);
         long now=System.currentTimeMillis();
-        if(!force&&fresh(cached,now))return cached;
+        if(!force&&fresh(cached,now)){CalendarUpdates.observe(context,cached.matches);return cached;}
         try {
             TeamSchedule.Result fresh=TeamSchedule.fetch(team,now);
             if(fresh.fetched<=0)fresh.fetched=now;
             save(team,fresh);
             Result result=new Result();
             result.matches.addAll(fresh.matches);result.fetched=fresh.fetched;result.source=fresh.source;
-            return result;
+            CalendarUpdates.observe(context,result.matches);return result;
         } catch(Exception e) {
             cached.error=friendly(e);
             return cached;

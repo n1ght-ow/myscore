@@ -94,6 +94,38 @@ public final class SmokeInstrumentation extends Instrumentation {
         check(eventCount()==1&&reminderMinutes(id)==5,"missing source preserves existing subscription and reminder");
         m.start=movedStart+2*60*60_000L;check(sync.sync(List.of(m),now).updated==1,"rescheduled match updates the subscribed event");check(eventCount()==1,"reschedule keeps one event");
         try(Cursor event=context.getContentResolver().query(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,id),new String[]{CalendarContract.Events.DTSTART},null,null,null)){check(event!=null&&event.moveToFirst()&&event.getLong(0)==m.start,"rescheduled start persisted");}
+        // Reproduce the actual 01:00 -> 00:00 move before midnight, without an hourly resolver.
+        long beforeMidnight=Match.today(now).plusDays(1).atTime(23,40).atZone(Match.ZONE).toInstant().toEpochMilli();
+        Match advanced=Match.fromJson(m.json());advanced.start=Match.today(now).plusDays(2).atStartOfDay(Match.ZONE).toInstant().toEpochMilli();advanced.updated=now+10;
+        Match oldTime=Match.fromJson(advanced.json());oldTime.start+=3600_000;oldTime.updated=now;
+        sync.syncKnown(List.of(oldTime),beforeMidnight);
+        CalendarSync noNetwork=new CalendarSync(context,previous->{throw new AssertionError("known source update must not refetch any subscription");});
+        long fullCheck=context.getSharedPreferences("settings",0).getLong("calendar_checked",0);
+        check(noNetwork.syncKnown(List.of(advanced),beforeMidnight).updated==1,"advance to midnight updates immediately without waiting an hour");
+        check(eventStart(id)==advanced.start&&reminderMinutes(id)==5,"advanced event and five-minute reminder share the new midnight");
+        check(context.getSharedPreferences("settings",0).getLong("calendar_checked",0)==fullCheck,"partial source update does not postpone the full subscription audit");
+        noNetwork.syncKnown(List.of(oldTime),beforeMidnight);check(eventStart(id)==advanced.start,"an older source result cannot roll the event back to 01:00");
+        Match afterStart=Match.fromJson(advanced.json());afterStart.start-=3600_000;afterStart.updated=now+20;
+        noNetwork.syncKnown(List.of(afterStart),advanced.start+60_000);check(eventStart(id)==afterStart.start&&reminderMinutes(id)==-1,"an already-started advance still corrects calendar time without a stale reminder");
+        // Lost local links must reuse a demonstrably app-owned event, never insert a duplicate.
+        Match relinkOriginal=Match.fromJson(advanced.json());relinkOriginal.start+=3600_000;relinkOriginal.updated=now+30;sync.syncKnown(List.of(relinkOriginal),beforeMidnight);
+        context.getSharedPreferences("calendar-links",0).edit().remove("match:"+m.id).remove("record:"+m.id).remove("fingerprint:"+m.id).commit();
+        advanced.updated=now+40;
+        check(noNetwork.syncKnown(List.of(advanced),beforeMidnight).updated==1,"a lost link to an owned event with an existing reminder is recovered");
+        check(context.getSharedPreferences("calendar-links",0).getLong("match:"+m.id,-1)==id&&eventCount()==1&&eventStart(id)==advanced.start,"recovery reuses the original event and its identity");
+        Match finishedAdvanced=Match.fromJson(advanced.json());finishedAdvanced.state="final";finishedAdvanced.start-=30*60_000;finishedAdvanced.updated=now+50;
+        check(noNetwork.syncKnown(List.of(finishedAdvanced),beforeMidnight).completed==1,"completion is reconciled after a move");
+        check(eventStart(id)==finishedAdvanced.start&&reminderMinutes(id)==-1&&!sync.isSubscribed(m.id),"completion fixes historical start before removing subscription and reminders");
+        noNetwork.syncKnown(List.of(advanced),beforeMidnight);check(!sync.isSubscribed(m.id),"historical events with no reminder are not resurrected");
+        context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,id),null,null);
+        m.updated=now+60;sync.subscribe(m,now);id=context.getSharedPreferences("calendar-links",0).getLong("match:"+m.id,-1);
+        Match observed=Match.fromJson(m.json());observed.start-=3600_000;observed.updated=now+70;
+        CalendarUpdates.observe(context,List.of(observed));CalendarUpdates.awaitIdle();
+        check(eventStart(id)==observed.start,"source notification drains to CalendarProvider without opening settings");
+        check(eventCount()==1&&reminderMinutes(id)==5,"automatic source update keeps one event and one reminder");
+        context.getSharedPreferences("calendar-links",0).edit().remove("match:"+m.id).remove("record:"+m.id).remove("fingerprint:"+m.id).commit();
+        check(sync.subscribe(observed,now).updated==1&&context.getSharedPreferences("calendar-links",0).getLong("match:"+m.id,-1)==id&&eventCount()==1,"tapping subscribe after a lost link also reuses the owned event");
+        m=observed;
         m.state="delayed";sync.sync(List.of(m),now);check(reminderMinutes(id)==-1,"postponed match stops its old reminder");
         m.state="scheduled";sync.sync(List.of(m),now);check(reminderMinutes(id)==5,"resuming a postponed match restores the five-minute reminder");
         Match other=new Match();other.id="espn:epl:instrumentation:2";other.league="epl";other.group="足球";other.source="TEST ONLY";other.home="Other";other.away="Match";other.state="scheduled";other.timeConfirmed=true;other.start=m.start+3600_000;
@@ -150,6 +182,7 @@ public final class SmokeInstrumentation extends Instrumentation {
     private Uri syncUri(Uri uri){return uri.buildUpon().appendQueryParameter(CalendarContract.CALLER_IS_SYNCADAPTER,"true").appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME,"myscore-functional-tests").appendQueryParameter(CalendarContract.Calendars.ACCOUNT_TYPE,CalendarContract.ACCOUNT_TYPE_LOCAL).build();}
     private int eventCount(){try(Cursor c=context.getContentResolver().query(CalendarContract.Events.CONTENT_URI,new String[]{"_id"},"calendar_id=? AND deleted=0",new String[]{Long.toString(calendar)},null)){return c==null?0:c.getCount();}}
     private int reminderMinutes(long id){try(Cursor c=context.getContentResolver().query(CalendarContract.Reminders.CONTENT_URI,new String[]{CalendarContract.Reminders.MINUTES},"event_id=?",new String[]{Long.toString(id)},null)){return c!=null&&c.moveToFirst()?c.getInt(0):-1;}}
+    private long eventStart(long id){try(Cursor c=context.getContentResolver().query(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,id),new String[]{CalendarContract.Events.DTSTART},null,null,null)){return c!=null&&c.moveToFirst()?c.getLong(0):-1;}}
     private View findText(View root,String text){if(root instanceof TextView && ((TextView)root).getText().toString().equals(text))return root;if(root instanceof ViewGroup){ViewGroup g=(ViewGroup)root;for(int i=0;i<g.getChildCount();i++){View found=findText(g.getChildAt(i),text);if(found!=null)return found;}}return null;}
     private void click(String label){runOnMainSync(()->{View target=findText(activity.getWindow().getDecorView(),label);check(target!=null,"control exists: "+label);while(target!=null&&!target.isClickable())target=target.getParent() instanceof View?(View)target.getParent():null;check(target!=null&&target.performClick(),"control works: "+label);});waitForIdleSync();}
 }

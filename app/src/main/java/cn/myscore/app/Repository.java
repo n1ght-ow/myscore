@@ -112,6 +112,7 @@ public final class Repository {
                 catch(ExecutionException e){batch=load(c,from,to);batch.error="来源暂不可用，请稍后重试";batch.retryAt=recordFailure(c.id+":"+from+":"+to,failures.get(c.id+":"+from+":"+to),batch.error).until();android.util.Log.w("MyScore","Source task failed",e.getCause());}
                 catch(CancellationException e){batch=load(c,from,to);batch.error="来源响应超时";batch.retryAt=recordFailure(c.id+":"+from+":"+to,failures.get(c.id+":"+from+":"+to),batch.error).until();}
                 added.add(c.id);result.batches.add(batch);
+                if(batch.error.isEmpty())CalendarUpdates.observe(context,batch.matches);
                 if(onBatch!=null)onBatch.accept(batch);
             }
         } finally {
@@ -133,6 +134,7 @@ public final class Repository {
                 String key=c.id+":"+from+":"+to;batch.retryAt=recordFailure(key,failures.get(key),batch.error).until();
             }
             added.add(c.id);result.batches.add(batch);
+            if(batch.error.isEmpty())CalendarUpdates.observe(context,batch.matches);
             if(onBatch!=null)onBatch.accept(batch);
         }
     }

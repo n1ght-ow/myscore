@@ -132,6 +132,10 @@ public final class CalendarSync {
         synchronized(LOCK) {
             String key="match:"+m.id;
             try {
+                if(!links.contains(key)) {
+                    recoverOwnedEvents(Map.of(m.id,m),result);
+                    if(result.failed>0)return result;
+                }
                 long eventId=links.getLong(key,-1);
                 boolean owns=eventId>0&&ownsEvent(eventId,m.id);
                 if(eventId>0&&!owns) {removeLink(m.id);eventId=-1;}
@@ -172,6 +176,11 @@ public final class CalendarSync {
     }
     /** Updates only already-subscribed matches. It never creates events for unsubscribed matches. */
     public Result sync(List<Match> current,long now) {
+        return sync(current,now,true);
+    }
+    /** Apply source data already obtained by the app, without resolving other subscriptions. */
+    Result syncKnown(List<Match> current,long now) {return sync(current,now,false);}
+    private Result sync(List<Match> current,long now,boolean resolveMissing) {
         Result result=new Result();
         if(!permitted(context)) {result.failed=1;result.error="未开启日历权限";return result;}
         if(Thread.currentThread().isInterrupted()){result.failed=1;result.error="请求已取消";return result;}
@@ -179,14 +188,17 @@ public final class CalendarSync {
         if(current!=null)for(Match m:current)byId.put(m.id,m);
         List<Subscription> pending=new ArrayList<>();
         synchronized(LOCK) {
+            recoverOwnedEvents(byId,result);
             for(String key:new ArrayList<>(links.getAll().keySet())) {
                 if(!key.startsWith("match:"))continue;
                 String id=key.substring(6);
+                if(!resolveMissing&&!byId.containsKey(id))continue;
                 long eventId=links.getLong("match:"+id,-1);
                 if(eventId<=0) {removeLink(id);continue;}
                 try {if(!ownsEvent(eventId,id)) {removeLink(id);continue;}}
                 catch(RuntimeException e) {result.failed++;continue;}
                 String record=links.getString("record:"+id,"");
+                if(record.isEmpty()&&byId.containsKey(id)) {record=byId.get(id).json().toString();if(!links.edit().putString("record:"+id,record).commit()){result.failed++;continue;}}
                 if(record.isEmpty()) {result.failed++;continue;}
                 pending.add(new Subscription(id,eventId,record));
             }
@@ -195,8 +207,8 @@ public final class CalendarSync {
         // user tapping subscribe/unsubscribe. A single sync runs at a time via SYNC_LOCK.
         Map<String,Match> resolved=new HashMap<>();
         boolean interrupted=false;
-        if(!pending.isEmpty()) synchronized(SYNC_LOCK) {
-            try {resolver.beginSync();}
+        if(!pending.isEmpty()) synchronized(resolveMissing?SYNC_LOCK:resolved) {
+            try {if(resolveMissing)resolver.beginSync();}
             catch(RuntimeException e) {android.util.Log.w("MyScore","Cannot prepare calendar resolver",e);}
             for(Subscription sub:pending) {
                 try {
@@ -206,6 +218,8 @@ public final class CalendarSync {
                         m=previous.finalised()?previous:resolver.resolve(previous);
                     }
                     if(m==null||!sub.id.equals(m.id)) {result.failed++;continue;}
+                    Match previous=Match.fromJson(new org.json.JSONObject(sub.record));
+                    if(m.updated>0&&previous.updated>m.updated)continue;
                     resolved.put(sub.id,m);
                 } catch(InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -226,13 +240,14 @@ public final class CalendarSync {
                     if(links.getLong("match:"+sub.id,-1)!=sub.eventId)continue;
                     if(!sub.record.equals(links.getString("record:"+sub.id,"")))continue;
                     if(!ownsEvent(sub.eventId,sub.id)) {removeLink(sub.id);continue;}
+                    long calendar=eventCalendar(sub.eventId);
+                    if(calendar<0)calendar=calendarId();
                     if(m.finalised()) {
                         // Keep the historical calendar event, but stop tracking a completed match.
+                        if(m.timeConfirmed&&m.start>0)updateEvent(sub.eventId,m,calendar,false);
                         deleteReminders(sub.eventId);
                         removeLink(sub.id);result.completed++;continue;
                     }
-                    long calendar=eventCalendar(sub.eventId);
-                    if(calendar<0)calendar=calendarId();
                     if(m.cancelled()) {
                         context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,sub.eventId),null,null);
                         removeLink(sub.id);result.cancelled++;continue;
@@ -240,10 +255,11 @@ public final class CalendarSync {
                     if(m.live()) {
                         deleteReminders(sub.eventId);
                         links.edit().remove("fingerprint:"+sub.id).apply();
-                        if(m.timeConfirmed&&m.start>0)updateEvent(sub.eventId,m,calendar);
+                        if(m.timeConfirmed&&m.start>0)updateEvent(sub.eventId,m,calendar,false);
                         saveRecord(sub.id,m);result.updated++;continue;
                     }
                     if(!m.timeConfirmed||!m.scheduled()||m.start<=now) {
+                        if(m.timeConfirmed&&m.start>0)updateEvent(sub.eventId,m,calendar,false);
                         deleteReminders(sub.eventId);
                         links.edit().remove("fingerprint:"+sub.id).apply();
                         saveRecord(sub.id,m);continue;
@@ -260,7 +276,7 @@ public final class CalendarSync {
                     android.util.Log.w("MyScore","Calendar apply failed: "+e.getClass().getSimpleName());
                 }
             }
-            if(!interrupted) preferences.edit().putLong("calendar_checked",now).putString("calendar_result",result.message()).apply();
+            if(resolveMissing&&!interrupted) preferences.edit().putLong("calendar_checked",now).putString("calendar_result",result.message()).apply();
         }
         return result;
     }
@@ -270,7 +286,31 @@ public final class CalendarSync {
         return inserted==null?-1:ContentUris.parseId(inserted);
     }
     private void updateEvent(long eventId,Match m,long calendar) {
-        context.getContentResolver().update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),eventValues(m,calendar),null,null);
+        updateEvent(eventId,m,calendar,true);
+    }
+    private void updateEvent(long eventId,Match m,long calendar,boolean alarm) {
+        ContentValues values=eventValues(m,calendar);values.put(CalendarContract.Events.HAS_ALARM,alarm?1:0);
+        if(context.getContentResolver().update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),values,null,null)!=1)
+            throw new IllegalStateException("日历事件未更新，请稍后重试");
+    }
+    /** Reuse an orphan only when all installation markers and an existing reminder agree. */
+    private void recoverOwnedEvents(Map<String,Match> known,Result result) {
+        if(known.isEmpty())return;
+        try(Cursor rows=context.getContentResolver().query(CalendarContract.Events.CONTENT_URI,
+            new String[]{CalendarContract.Events._ID,CalendarContract.Events.DESCRIPTION,CalendarContract.Events.CUSTOM_APP_URI},
+            CalendarContract.Events.CUSTOM_APP_PACKAGE+"=? AND "+CalendarContract.Events.DELETED+"=0",new String[]{context.getPackageName()},null)) {
+            if(rows==null)throw new IllegalStateException("无法读取日历事件");
+            while(rows.moveToNext()) {
+                String description=rows.getString(1);if(description==null||!description.startsWith("MyScore:"))continue;
+                int newline=description.indexOf('\n');if(newline<0)continue;
+                String id=description.substring(8,newline);Match match=known.get(id);
+                if(match==null||links.contains("match:"+id)||!description.startsWith("MyScore:"+match.id+"\n"))continue;
+                if(!("myscore://match/"+Uri.encode(id)).equals(rows.getString(2)))continue;
+                long event=rows.getLong(0);if(!hasReminder(event)||!ownsEvent(event,id))continue;
+                if(!links.edit().putLong("match:"+id,event).putString("record:"+id,match.json().toString()).remove("fingerprint:"+id).commit())
+                    throw new IllegalStateException("无法恢复日历关联");
+            }
+        } catch(RuntimeException e) {result.failed++;result.error=readable(e);}
     }
     private ContentValues eventValues(Match m,long calendar) {
         Competition c=Competition.find(m.league);
@@ -303,8 +343,9 @@ public final class CalendarSync {
     private boolean hasReminder(long eventId) {
         try(Cursor cur=context.getContentResolver().query(CalendarContract.Reminders.CONTENT_URI,
             new String[]{"_id"},"event_id=?",new String[]{Long.toString(eventId)},null)) {
-            return cur!=null&&cur.moveToFirst();
-        } catch(RuntimeException e) {return false;}
+            if(cur==null)throw new IllegalStateException("无法读取日历提醒");
+            return cur.moveToFirst();
+        }
     }
     private long tryReminder(long eventId,int method) {
         ContentValues reminder=new ContentValues();

@@ -34,13 +34,14 @@ final class DetailRepository {
         // After SETTLED_RECHECK it is re-read once so a source correction can still land.
         boolean frozen=old!=null&&old.fetched>0&&RefreshPolicy.frozenDetail(m,old.match)
             && now-old.fetched>=0&&now-old.fetched<RefreshPolicy.SETTLED_RECHECK;
-        if(!force&&old!=null&&!migration&&(frozen||RefreshPolicy.freshDetail(m,old.match,old.fetched,now)))return old;
+        if(!force&&old!=null&&!migration&&(frozen||RefreshPolicy.freshDetail(m,old.match,old.fetched,now)))return observed(old);
         MatchDetail next=DetailSources.fetch(m);retainGames(old,next);
         if(m.group.equals("足球")&&next.facts.stream().noneMatch(f->f.label().equals("阵容资料版本")))next.fact("阵容资料版本","0");
         next.bodySignature();
         if(Thread.currentThread().isInterrupted())throw new InterruptedException();
-        return write(next);
+        return observed(write(next));
     }
+    private MatchDetail observed(MatchDetail detail){CalendarUpdates.observe(context,List.of(detail.match));return detail;}
     /** Add expensive football profile data after the base detail is already visible. */
     void enrichProfiles(MatchDetail detail,Consumer<MatchDetail> done) {
         if(detail==null||!"足球".equals(detail.match.group)||hasProfiles(detail)) {done.accept(detail);return;}

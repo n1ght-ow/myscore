@@ -28,7 +28,7 @@ final class DetailRepository {
     MatchDetail cached(Match m){synchronized(CACHE_LOCK){try{File f=file(m);if(!f.exists())return null;MatchDetail d=MatchDetail.fromJson(new JSONObject(new String(new AtomicFile(f).readFully(),StandardCharsets.UTF_8)));if(!d.match.id.equals(m.id))return null;DetailParsers.restrictPregame(d);d.bodySignature();return d;}catch(Exception e){return null;}}}
     MatchDetail fetch(Match m,boolean force)throws Exception {
         MatchDetail old=cached(m);
-        boolean migration=old!=null&&(needsSideRefresh(m,old)||(m.group.equals("足球")&&old.facts.stream().noneMatch(f->f.label().equals("阵容资料版本"))));
+        boolean migration=old!=null&&(old.match.needsScoreRefresh()||needsSideRefresh(m,old)||(m.group.equals("足球")&&old.facts.stream().noneMatch(f->f.label().equals("阵容资料版本"))));
         long now=System.currentTimeMillis();
         // A detail already fetched after both sides reached a terminal state is the final record.
         // After SETTLED_RECHECK it is re-read once so a source correction can still land.

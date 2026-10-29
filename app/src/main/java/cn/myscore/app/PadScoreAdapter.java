@@ -233,7 +233,7 @@ final class PadScoreAdapter extends BaseAdapter {
             state.setTextColor(value.live()?ui.primary:value.cancelled()?ui.error:ui.muted);
             league.setText(competition==null?value.group:competition.name);
             home.setText(value.home);away.setText(value.away);
-            homeScore.setText(value.hasScore()?value.homeScore:"—");awayScore.setText(value.hasScore()?value.awayScore:"—");
+            homeScore.setText(value.displayScore(true));awayScore.setText(value.displayScore(false));
             homeScore.setTextColor(ui.scoreColor(value,true));awayScore.setTextColor(ui.scoreColor(value,false));
             provenance.setText(value.source+" · "+updated(value));
             selected(card,active);
@@ -241,7 +241,9 @@ final class PadScoreAdapter extends BaseAdapter {
             bindTeam(homeSlot,value,true);bindTeam(awaySlot,value,false);
             WatchLinks.Link link=host.watchLink(value);
             watch.bind(link,value.live(),()->host.openWatch(value));
-            ui.alignFixtureActions(calendar,watch,ui.scoreColumnWidth(21));
+            int scoreWidth=ui.scoreColumnWidth(21,value);
+            homeScore.setMinWidth(scoreWidth);awayScore.setMinWidth(scoreWidth);
+            ui.alignFixtureActions(calendar,watch,scoreWidth);
             bindCalendar(value,active);
             card.setContentDescription(value.displayTitle()+"，"+state.getText()+"，"+provenance.getText()+(active?"，已选中":""));
         }
@@ -259,6 +261,7 @@ final class PadScoreAdapter extends BaseAdapter {
         private void bindCalendar(Match m,boolean selected){
             boolean subscribed=host.isSubscribed(m.id);
             boolean canSubscribe=m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis();
+            calendar.setVisibility(canSubscribe?View.VISIBLE:View.GONE);
             calendar.setSelected(subscribed);calendar.setAlpha(subscribed?1f:Ui.ACTION_ICON_ALPHA);
             calendarIcon.set(subscribed?"calendar-check":"calendar-add",subscribed?ui.primary:ui.muted);
             calendar.setContentDescription(subscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");

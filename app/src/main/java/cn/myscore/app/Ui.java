@@ -64,6 +64,7 @@ final class Ui {
     int dp(float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
     /** Scores and the last action share a center axis, including three digits at large font sizes. */
     int scoreColumnWidth(int sp){return Math.max(dp(48),(int)Math.ceil(text("",sp,text,true).getPaint().measureText("888"))+dp(8));}
+    int scoreColumnWidth(int sp,Match match){Paint p=text("",sp,text,true).getPaint();return Math.max(scoreColumnWidth(sp),(int)Math.ceil(Math.max(p.measureText(match.displayScore(true)),p.measureText(match.displayScore(false))))+dp(8));}
     TextView fixtureScore(String value,int sp,int color){TextView score=text(value,sp,color,true);score.setGravity(Gravity.CENTER);score.setMinWidth(scoreColumnWidth(sp));score.setTag("fixture-score");return score;}
     void alignFixtureActions(View calendar,View watch,int column){
         boolean plays=watch!=null&&watch.getVisibility()!=View.GONE;
@@ -132,7 +133,7 @@ final class Ui {
         return v;
     }
     ScoreText score(String home,String away,boolean available,int maxSp){return new ScoreText(home,away,available,maxSp);}
-    int scoreColor(Match match,boolean home){return scoreColor(home?match.homeScore:match.awayScore,home?match.awayScore:match.homeScore,match.finalised());}
+    int scoreColor(Match match,boolean home){int result=match.outcome(home);return result>0?primary:result<0?error:text;}
     int scoreColor(String own,String other,boolean finished){int result=DetailFormat.outcome(own,other,finished);return result>0?primary:result<0?error:text;}
     /** Preserve a readable minimum: narrow scoreboards stack the two scores instead of clipping. */
     final class ScoreText extends TextView {

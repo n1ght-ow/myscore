@@ -1,21 +1,19 @@
 package cn.myscore.app;
 
-import java.time.format.DateTimeFormatter;
-import java.util.Locale;
-
 /**
  * Watch destinations for the four configured competitions.
  *
  * <p>Migu league zones are the safe fallback; {@code WatchRepository} upgrades a league zone to
  * the exact match page when its public search returns a verified fixture. Worlds finished matches
  * upgrade from the Huya room to Bilibili's official full-series recording, with a "pending" Bilibili
- * card while the recording has not been published yet. F1, NFL and the cup competitions stay
- * unconfigured.</p>
+ * card while the recording has not been published yet. Finished Spirit matches use the configured
+ * CS2 account with the same replay/pending states. Manchester City's finished cup matches use
+ * official highlights; other cup teams, F1 and NFL stay unconfigured.</p>
  */
 final class WatchLinks {
     enum Kind {
         ZONE("专区", "play"), ROOM("直播间", "play"), LIVE("直播", "play"),
-        REPLAY("回放", "play"), PENDING("待发布", "clock");
+        REPLAY("回放", "play"), HIGHLIGHTS("集锦", "play"), PENDING("待发布", "clock");
 
         final String label, icon;
         Kind(String label, String icon) { this.label = label; this.icon = icon; }
@@ -50,12 +48,12 @@ final class WatchLinks {
     private static final Link BILI_PENDING = new Link(
         "哔哩哔哩", "B站", "录像待发布", "2026全球总决赛 · 稍后更新",
         BilibiliVods.SPACE, Kind.PENDING);
-    private static final DateTimeFormatter BILI_DAY = DateTimeFormatter.ofPattern("M月d日", Locale.CHINA);
 
     private WatchLinks() {}
 
     static Link of(Match match) {
         if (match == null) return null;
+        if (ManCityHighlights.supports(match)) return biliPending(match);
         switch (match.league) {
             case "epl": return EPL;
             case "nba": return NBA;
@@ -69,10 +67,20 @@ final class WatchLinks {
         return BILI_PENDING;
     }
 
+    static Link biliPending(Match match) {
+        if (ManCityHighlights.supports(match)) return new Link("哔哩哔哩", "B站", "集锦待发布",
+            "曼城 · 赛后集锦稍后更新", BilibiliVods.Source.CITY_HIGHLIGHTS.space(), Kind.PENDING);
+        if (BilibiliVods.source(match) != BilibiliVods.Source.SPIRIT) return BILI_PENDING;
+        return new Link("哔哩哔哩", "B站", "录像待发布", "CS2 · Spirit · 稍后更新",
+            BilibiliVods.Source.SPIRIT.space(), Kind.PENDING);
+    }
+
     static Link biliVideo(String bvid, Match match) {
-        String day = match == null || match.day() == null ? "" : BILI_DAY.format(match.day());
+        if (ManCityHighlights.supports(match)) return new Link("哔哩哔哩", "B站", "观看本场集锦",
+            Competition.find(match.league).name + " · " + match.home + " vs " + match.away,
+            "https://www.bilibili.com/video/" + bvid, Kind.HIGHLIGHTS);
         return new Link("哔哩哔哩", "B站", "观看全场录像",
-            "2026全球总决赛" + (day.isEmpty() ? "" : " · " + day),
+            match == null ? BilibiliVods.SERIES_NAME : BilibiliVods.note(match),
             "https://www.bilibili.com/video/" + bvid, Kind.REPLAY);
     }
 

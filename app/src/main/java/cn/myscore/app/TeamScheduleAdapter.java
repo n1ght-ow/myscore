@@ -144,11 +144,11 @@ final class TeamScheduleAdapter extends BaseAdapter {
             text(opponent,value.opponent);
             text(detail,value.side.isEmpty()?value.detail:value.side+" · "+value.detail);
             boolean scored=!value.score.isEmpty();
-            String own=value.home?value.match.homeScore:value.match.awayScore,other=value.home?value.match.awayScore:value.match.homeScore;
-            score.setScore(own,other,scored);score.setResultColors(ui.scoreColor(own,other,value.match.finalised()),ui.scoreColor(other,own,value.match.finalised()));
+            String own=value.match.displayScore(value.home),other=value.match.displayScore(!value.home);
+            score.setScore(own,other,scored);score.setResultColors(ui.scoreColor(value.match,value.home),ui.scoreColor(value.match,!value.home));
             boolean subscribed=host.isSubscribed(value.match.id);
             boolean eligible=value.match.scheduled()&&value.match.timeConfirmed&&value.match.start>System.currentTimeMillis();
-            action.setVisibility(subscribed||eligible?View.VISIBLE:View.INVISIBLE);
+            action.setVisibility(eligible?View.VISIBLE:View.GONE);
             action.setEnabled(!host.isBusy());action.setAlpha(host.isBusy()?0.5f:1f);
             foot.bind(value.time,value.match.source);
             calendar.set(subscribed?"calendar-check":"calendar-add",ui.primary);

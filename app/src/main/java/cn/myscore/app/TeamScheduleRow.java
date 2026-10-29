@@ -32,9 +32,9 @@ final class TeamScheduleRow {
         String side=m.group.equals("CS2")||m.group.equals("LOL")?"":home?"主场":"客场";
         String score="",result="";
         if(m.hasScore()) {
-            String own=home?m.homeScore:m.awayScore,other=home?m.awayScore:m.homeScore;
+            String own=m.displayScore(home),other=m.displayScore(!home);
             score=own+"–"+other;
-            if(m.finalised())result=result(own,other);
+            if(m.finalised()&&m.homeScore.matches("\\d+")&&m.awayScore.matches("\\d+"))result=m.outcome(home)>0?"胜":m.outcome(home)<0?"负":"平";
         }
         return new TeamScheduleRow(MATCH,"m:"+m.id,null,null,m,date,time,opponent,detail,state,score,result,side,home);
     }

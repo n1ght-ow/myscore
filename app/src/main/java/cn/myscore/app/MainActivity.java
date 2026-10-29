@@ -975,7 +975,7 @@ implements ScoreAdapter.Host {
             key.append('|').append(batch.competition.id).append(':').append(batch.error);
         }
         for (Match m : all) {
-            key.append('|').append(m.id).append(',').append(m.league).append(',').append(m.group).append(',').append(m.home).append(',').append(m.away).append(',').append(m.homeScore).append(',').append(m.awayScore).append(',').append(m.state).append(',').append(m.status).append(',').append(m.start).append(',').append(m.timeConfirmed).append(',').append(m.title).append(',').append(m.homeId).append(',').append(m.awayId).append(',').append(m.homeLogo).append(',').append(m.awayLogo).append(',').append(this.subscribed.contains(m.id)).append(',').append(m.live() && now - m.updated > 120000L).append(',').append(m.source).append(',').append(m.updated / 60000L);
+            key.append('|').append(m.id).append(',').append(m.league).append(',').append(m.group).append(',').append(m.home).append(',').append(m.away).append(',').append(m.displayScore(true)).append(',').append(m.displayScore(false)).append(',').append(m.state).append(',').append(m.status).append(',').append(m.start).append(',').append(m.timeConfirmed).append(',').append(m.title).append(',').append(m.homeId).append(',').append(m.awayId).append(',').append(m.homeLogo).append(',').append(m.awayLogo).append(',').append(this.subscribed.contains(m.id)).append(',').append(m.live() && now - m.updated > 120000L).append(',').append(m.source).append(',').append(m.updated / 60000L);
             WatchLinks.Link watch = this.watches.link(m);
             key.append(',').append(watch == null ? "" : watch.url).append(',').append(watch == null ? "" : watch.title);
             for (String result : m.results) {
@@ -2142,7 +2142,7 @@ implements ScoreAdapter.Host {
             return key.append("|none|").append(this.snapshot.matches().isEmpty()).append('|').append(this.busy || this.selectionLoading).append('|').append(this.snapshot.failed()).toString();
         }
         boolean canSubscribe = m.scheduled() && m.timeConfirmed && m.start > System.currentTimeMillis();
-        key.append('|').append(m.id).append(',').append(m.state).append(',').append(m.homeScore).append(',').append(m.awayScore)
+        key.append('|').append(m.id).append(',').append(m.state).append(',').append(m.displayScore(true)).append(',').append(m.displayScore(false))
             .append(',').append(m.start).append(',').append(m.timeConfirmed)
             .append(',').append(m.source)
             .append(',').append(m.home).append(',').append(m.away).append(',').append(m.title).append(',').append(m.url)
@@ -2162,8 +2162,8 @@ implements ScoreAdapter.Host {
         for (Match other : all) {
             if (other.id.equals(m.id)) continue;
             if (shown++ >= 4) break;
-            key.append(';').append(other.id).append(',').append(other.state).append(',').append(other.homeScore)
-                .append(',').append(other.awayScore).append(',').append(other.start);
+            key.append(';').append(other.id).append(',').append(other.state).append(',').append(other.displayScore(true))
+                .append(',').append(other.displayScore(false)).append(',').append(other.start);
         }
         return key.toString();
     }
@@ -2300,7 +2300,7 @@ implements ScoreAdapter.Host {
             row.addView((View)this.padHeroTeam(m, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             LinearLayout center = this.ui.column();
             center.setGravity(17);
-            Ui.ScoreText score = this.ui.score(m.homeScore, m.awayScore, m.hasScore(), 64);
+            Ui.ScoreText score = this.ui.score(m.displayScore(true), m.displayScore(false), m.hasScore(), 64);
             score.setResultColors(this.ui.scoreColor(m, true), this.ui.scoreColor(m, false));
             center.addView((View)score, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(center, 10);
@@ -2332,7 +2332,7 @@ implements ScoreAdapter.Host {
         actions.addView((View)open, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.3f));
         boolean isSubscribed = this.subscribed.contains(m.id);
         canSubscribe = m.scheduled() && m.timeConfirmed && m.start > System.currentTimeMillis();
-        if (isSubscribed || canSubscribe) {
+        if (canSubscribe) {
             View gap = new View((Context)this);
             actions.addView(gap, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(10.0f), 1));
             FrameLayout subscribe = this.padIconAction(isSubscribed ? "calendar-check" : "calendar-add", isSubscribed ? "取消比赛提醒" : "订阅比赛提醒", () -> this.toggleSubscription(m));
@@ -2343,7 +2343,7 @@ implements ScoreAdapter.Host {
         }
         View gap2 = new View((Context)this);
         actions.addView(gap2, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(10.0f), 1));
-        actions.addView(this.padIconAction("refresh", "刷新比赛数据", () -> this.loadPadDetail(m, true)), new LinearLayout.LayoutParams(this.ui.scoreColumnWidth(34), this.ui.dp(48)));
+        actions.addView(this.padIconAction("refresh", "刷新比赛数据", () -> this.loadPadDetail(m, true)), new LinearLayout.LayoutParams(this.ui.scoreColumnWidth(34,m), this.ui.dp(48)));
         card.addView((View)actions);
         return card;
     }
@@ -2367,11 +2367,12 @@ implements ScoreAdapter.Host {
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         labelParams.setMarginStart(this.ui.dp(8.0f));
         row.addView((View)label, (ViewGroup.LayoutParams)labelParams);
-        TextView score = this.ui.fixtureScore(m.hasScore() ? (home ? m.homeScore : m.awayScore) : "—", 34, this.ui.scoreColor(m, home));
+        TextView score = this.ui.fixtureScore(m.hasScore() ? m.displayScore(home) : "—", 34, this.ui.scoreColor(m, home));
+        score.setMinWidth(this.ui.scoreColumnWidth(34,m));
         score.setGravity(Gravity.CENTER);
         score.setIncludeFontPadding(false);
         row.addView((View)score);
-        row.setContentDescription((CharSequence)(name + (m.hasScore() ? "，比分 " + (home ? m.homeScore : m.awayScore) : "，比分尚未提供")));
+        row.setContentDescription((CharSequence)(name + (m.hasScore() ? "，比分 " + m.displayScore(home) : "，比分尚未提供")));
         return row;
     }
 

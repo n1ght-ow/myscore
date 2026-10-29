@@ -675,11 +675,12 @@ extends Activity {
         TextView team = this.ui.text(name, 17, this.ui.text, true);
         team.setPadding(this.ui.dp(8.0f), 0, this.ui.dp(8.0f), 0);
         row.addView((View)team, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        TextView score = this.ui.text(this.match.hasScore() ? (home ? this.match.homeScore : this.match.awayScore) : "—", 38, this.ui.scoreColor(this.match, home), true);
+        TextView score = this.ui.text(this.match.hasScore() ? this.match.displayScore(home) : "—", 38, this.ui.scoreColor(this.match, home), true);
+        score.setMinWidth(this.ui.scoreColumnWidth(38,this.match));
         score.setGravity(0x800005);
         score.setIncludeFontPadding(false);
         row.addView((View)score);
-        row.setContentDescription((CharSequence)(name + (this.match.hasScore() ? "，比分 " + (home ? this.match.homeScore : this.match.awayScore) : "，比分尚未提供")));
+        row.setContentDescription((CharSequence)(name + (this.match.hasScore() ? "，比分 " + this.match.displayScore(home) : "，比分尚未提供")));
         return row;
     }
 
@@ -1035,7 +1036,7 @@ extends Activity {
             row.addView((View)homeSide, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             LinearLayout center = this.ui.column();
             center.setGravity(17);
-            this.headerScore = this.ui.score(this.match.homeScore, this.match.awayScore, this.match.hasScore(), 34);
+            this.headerScore = this.ui.score(this.match.displayScore(true), this.match.displayScore(false), this.match.hasScore(), 34);
             this.headerScore.setResultColors(this.ui.scoreColor(this.match, true), this.ui.scoreColor(this.match, false));
             center.addView((View)this.headerScore, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(center, 8);
@@ -1077,7 +1078,7 @@ extends Activity {
         side.removeView(crest);
         LinearLayout line = this.ui.row();
         line.addView(crest, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(56.0f), this.ui.dp(56.0f)));
-        TextView score = this.ui.text(this.match.hasScore() ? (home ? this.match.homeScore : this.match.awayScore) : "—", 26, this.ui.scoreColor(this.match, home), true);
+        TextView score = this.ui.text(this.match.hasScore() ? this.match.displayScore(home) : "—", 26, this.ui.scoreColor(this.match, home), true);
         score.setGravity(0x800005);
         line.addView((View)score, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         card.addView((View)line);
@@ -1097,11 +1098,11 @@ extends Activity {
             this.headerHome.setText((CharSequence)this.match.home);
             this.headerAway.setText((CharSequence)this.match.away);
             if (this.headerScore != null) {
-                this.headerScore.setScore(this.match.homeScore, this.match.awayScore, this.match.hasScore());
+                this.headerScore.setScore(this.match.displayScore(true), this.match.displayScore(false), this.match.hasScore());
                 this.headerScore.setResultColors(this.ui.scoreColor(this.match, true), this.ui.scoreColor(this.match, false));
             } else {
-                this.headerHomeScore.setText((CharSequence)(this.match.hasScore() ? this.match.homeScore : "—"));
-                this.headerAwayScore.setText((CharSequence)(this.match.hasScore() ? this.match.awayScore : "—"));
+                this.headerHomeScore.setText((CharSequence)this.match.displayScore(true));
+                this.headerAwayScore.setText((CharSequence)this.match.displayScore(false));
                 this.headerHomeScore.setTextColor(this.ui.scoreColor(this.match, true));
                 this.headerAwayScore.setTextColor(this.ui.scoreColor(this.match, false));
             }

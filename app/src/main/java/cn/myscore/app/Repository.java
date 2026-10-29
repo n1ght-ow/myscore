@@ -140,10 +140,11 @@ public final class Repository {
     }
     private Batch fetchOne(Competition c,LocalDate from,LocalDate to,boolean force) {
         Batch b=load(c,from,to);long now=System.currentTimeMillis();
+        boolean scoreMigration=b.matches.stream().anyMatch(Match::needsScoreRefresh);
         String key=c.id+":"+from+":"+to;Failure previous=failures.get(key);
         // A settled view is re-read only after a long interval, so a later reschedule or a
         // source correction can still reach an open page without polling every ten seconds.
-        if(!force && b.error.isEmpty() && b.fetched>0 && RefreshPolicy.settled(b.matches)
+        if(!force && !scoreMigration && b.error.isEmpty() && b.fetched>0 && RefreshPolicy.settled(b.matches)
             && now-b.fetched>=0 && now-b.fetched<RefreshPolicy.SETTLED_RECHECK) {
             android.util.Log.i("MyScorePerf","skip settled view source="+c.id);
             return b;
@@ -155,7 +156,7 @@ public final class Repository {
         long ttl=to.isAfter(from)?300_000:RefreshPolicy.cacheTtl(b.matches,from,Match.today(now),now);
         // A previous failure must be retried for real after its backoff, not hidden by a fresh TTL.
         boolean retry=previous!=null||!b.error.isEmpty();
-        if(!force && !retry && b.error.isEmpty() && b.fetched>0 && now-b.fetched>=0 && now-b.fetched<ttl) return b;
+        if(!force && !scoreMigration && !retry && b.error.isEmpty() && b.fetched>0 && now-b.fetched>=0 && now-b.fetched<ttl) return b;
         try {
             if(Thread.currentThread().isInterrupted())throw new InterruptedException();
             b.error="";
@@ -205,15 +206,16 @@ public final class Repository {
     }
     private Batch fetchSourceDay(Competition c,LocalDate day,long now,boolean force,boolean retry)throws InterruptedException {
         Batch cached=load(c,day,day,"day_");
+        boolean scoreMigration=cached.matches.stream().anyMatch(Match::needsScoreRefresh);
         LocalDate utc=InstantNow.utcDay(now);
         // Every match on this source date is final/cancelled and the last read succeeded.
-        if(!force && cached.error.isEmpty() && cached.fetched>0 && RefreshPolicy.settled(cached.matches)
+        if(!force && !scoreMigration && cached.error.isEmpty() && cached.fetched>0 && RefreshPolicy.settled(cached.matches)
             && now-cached.fetched>=0 && now-cached.fetched<RefreshPolicy.SETTLED_RECHECK) {
             android.util.Log.i("MyScorePerf","skip settled source="+c.id+" day="+day);
             return cached;
         }
         long ttl=RefreshPolicy.cacheTtl(cached.matches,day,utc,now);
-        if(!force && !retry && cached.fetched>0 && now-cached.fetched>=0 && now-cached.fetched<ttl)return cached;
+        if(!force && !scoreMigration && !retry && cached.fetched>0 && now-cached.fetched>=0 && now-cached.fetched<ttl)return cached;
         String url="https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/scoreboard?dates="+day.format(DateTimeFormatter.BASIC_ISO_DATE)+"&limit=1000";
         try{
             List<Match> parsed=Parsers.espn(new JSONObject(get(url)),c,System.currentTimeMillis());
@@ -253,7 +255,7 @@ public final class Repository {
         List<Match> merged=new ArrayList<>();Set<String> seen=new HashSet<>();
         if(fresh!=null)for(Match m:fresh) {
             if(m==null)continue;Match use=locked.get(m.id);
-            if(seen.add(m.id))merged.add(allowTerminalUpdate?m:(use==null?m:use));
+            if(seen.add(m.id))merged.add(allowTerminalUpdate||(use!=null&&use.needsScoreRefresh()&&!m.needsScoreRefresh())?m:(use==null?m:use));
         }
         for(Match m:locked.values())if(seen.add(m.id))merged.add(m);
         return merged;

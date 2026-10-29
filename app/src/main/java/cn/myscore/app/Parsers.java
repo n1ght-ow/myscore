@@ -82,6 +82,13 @@ public final class Parsers {
                     m.homeId=DetailParsers.text(obj(home,"team"),"id");m.awayId=DetailParsers.text(obj(away,"team"),"id");
                     m.homeLogo=logo(obj(home,"team"));m.awayLogo=logo(obj(away,"team"));
                     if(!m.scheduled()) { m.homeScore=value(home,"score"); m.awayScore=value(away,"score"); }
+                    if(c.group.equals("足球")) {
+                        m.scoreDataVersion=1;
+                        if(!m.scheduled() && raw.contains("PEN")) {
+                            m.homeShootout=shootout(home);m.awayShootout=shootout(away);
+                            if(m.live())m.status="点球大战";
+                        }
+                    }
                     JSONArray hs=arr(home,"linescores"), as=arr(away,"linescores");
                     for(int k=0;k<Math.min(hs.length(), as.length());k++) {
                         JSONObject h=hs.optJSONObject(k),a=as.optJSONObject(k); if(h==null || a==null) continue;
@@ -100,6 +107,15 @@ public final class Parsers {
     public static String logo(JSONObject team) {
         String direct=team.optString("logo");if(direct.startsWith("https://"))return direct;
         JSONArray logos=arr(team,"logos");for(int i=0;i<logos.length();i++){JSONObject l=logos.optJSONObject(i);if(l!=null&&l.optString("href").startsWith("https://"))return l.optString("href");}return "";
+    }
+
+    private static String shootout(JSONObject competitor) {
+        try {
+            String raw=value(competitor,"shootoutScore");
+            if(raw.isBlank())raw=value(obj(competitor,"score"),"shootoutScore");
+            java.math.BigDecimal score=new java.math.BigDecimal(raw).stripTrailingZeros();
+            return score.signum()>=0 && score.scale()<=0 ? score.toPlainString() : "";
+        } catch(RuntimeException e) { return ""; }
     }
 
 }

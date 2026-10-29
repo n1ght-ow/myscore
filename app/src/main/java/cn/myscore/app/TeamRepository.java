@@ -63,6 +63,7 @@ final class TeamRepository {
     }
     static boolean fresh(Result result,long now) {
         if(result==null||!result.error.isEmpty()||result.fetched<=0)return false;
+        if(result.matches.stream().anyMatch(Match::needsScoreRefresh))return false;
         long age=now-result.fetched;
         return age>=0&&age<RefreshPolicy.teamCacheTtl(result.matches,now);
     }

@@ -116,6 +116,7 @@ final class ScoreAdapter extends BaseAdapter {
     private void subscription(Ui.Icon icon,Match m,FrameLayout sub) {
         boolean isSubscribed=host.isSubscribed(m.id);
         boolean canSubscribe=m.scheduled()&&m.timeConfirmed&&m.start>System.currentTimeMillis();
+        sub.setVisibility(canSubscribe?View.VISIBLE:View.GONE);
         icon.set(isSubscribed?"calendar-check":"calendar-add",isSubscribed?ui.primary:ui.muted);
         sub.setSelected(isSubscribed);sub.setAlpha(isSubscribed?1f:Ui.ACTION_ICON_ALPHA);
         sub.setContentDescription(isSubscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
@@ -198,8 +199,8 @@ final class ScoreAdapter extends BaseAdapter {
             state(state,m);
             text(home,m.home);
             text(away,m.away);
-            text(homeScore,m.hasScore()?m.homeScore:"—");
-            text(awayScore,m.hasScore()?m.awayScore:"—");
+            text(homeScore,m.displayScore(true));
+            text(awayScore,m.displayScore(false));
             homeScore.setTextColor(ui.scoreColor(m,true));awayScore.setTextColor(ui.scoreColor(m,false));
             foot.bind(m.timeConfirmed?m.time():"时间待定",provenance(m));
             boolean staleNow=m.live()&&System.currentTimeMillis()-m.updated>120_000;
@@ -210,7 +211,9 @@ final class ScoreAdapter extends BaseAdapter {
             teamSlot(awaySlot,m.awayId,m.away,false,m);
             WatchLinks.Link link=host.watchLink(m);
             watch.bind(link,m.live(),()->host.openWatch(m));
-            ui.alignFixtureActions(sub,watch,ui.scoreColumnWidth(24));
+            int scoreWidth=ui.scoreColumnWidth(24,m);
+            homeScore.setMinWidth(scoreWidth);awayScore.setMinWidth(scoreWidth);
+            ui.alignFixtureActions(sub,watch,scoreWidth);
             subscription(subIcon,m,sub);
         }
     }

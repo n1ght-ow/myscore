@@ -13,6 +13,8 @@ public final class Match {
     public static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     public String id = "", league = "", group = "", source = "", title = "";
     public String home = "", away = "", homeScore = "", awayScore = "";
+    public String homeShootout = "", awayShootout = "";
+    public int scoreDataVersion = 0;
     public String homeId="", awayId="", homeLogo="", awayLogo="";
     public String state = "unknown", status = "状态待确认", detail = "", url = "";
     public long start = 0, updated = 0;
@@ -27,7 +29,29 @@ public final class Match {
     public LocalDate day() { return start > 0 ? Instant.ofEpochMilli(start).atZone(ZONE).toLocalDate() : null; }
     public String time() { return Formats.kickoff(start, "时间待定"); }
     public String displayTitle() { return !title.isEmpty() ? title : home + " vs " + away; }
-    public String score() { return hasScore() ? homeScore + " : " + awayScore : "—"; }
+    public boolean hasShootout() {
+        Competition c = Competition.find(league);
+        return c != null && c.group.equals("足球") && homeScore.matches("\\d+") && awayScore.matches("\\d+")
+            && DetailFormat.outcome(homeScore, awayScore, true) == 0
+            && homeShootout.matches("\\d+") && awayShootout.matches("\\d+");
+    }
+    public String displayScore(boolean home) {
+        if (!hasScore()) return "—";
+        String value = home ? homeScore : awayScore;
+        return hasShootout() ? value + "(" + (home ? homeShootout : awayShootout) + ")" : value;
+    }
+    public int outcome(boolean home) {
+        int result = DetailFormat.outcome(homeScore, awayScore, finalised());
+        if (result == 0 && hasShootout()) result = DetailFormat.outcome(homeShootout, awayShootout, finalised());
+        return home ? result : -result;
+    }
+    public boolean needsScoreRefresh() {
+        Competition c = Competition.find(league);
+        return scoreDataVersion < 1 && c != null && c.group.equals("足球") && finalised()
+            && homeScore.matches("\\d+") && awayScore.matches("\\d+")
+            && DetailFormat.outcome(homeScore, awayScore, true) == 0 && !hasShootout();
+    }
+    public String score() { return hasScore() ? displayScore(true) + " : " + displayScore(false) : "—"; }
     public static long parseTime(String value) {
         try { return java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli(); }
         catch (RuntimeException e) { return 0; }
@@ -38,6 +62,7 @@ public final class Match {
         try {
             o.put("id", id).put("league", league).put("group", group).put("source", source).put("title", title)
                 .put("home", home).put("away", away).put("homeScore", homeScore).put("awayScore", awayScore)
+                .put("homeShootout", homeShootout).put("awayShootout", awayShootout).put("scoreDataVersion", scoreDataVersion)
                 .put("homeId",homeId).put("awayId",awayId).put("homeLogo",homeLogo).put("awayLogo",awayLogo)
                 .put("state", state).put("status", status).put("detail", detail).put("url", url)
                 .put("start", start).put("updated", updated).put("timeConfirmed", timeConfirmed)
@@ -50,6 +75,7 @@ public final class Match {
         m.id=text(o,"id"); m.league=text(o,"league"); m.group=text(o,"group");
         m.source=text(o,"source"); m.title=text(o,"title"); m.home=text(o,"home"); m.away=text(o,"away");
         m.homeScore=text(o,"homeScore"); m.awayScore=text(o,"awayScore"); m.state=text(o,"state","unknown");
+        m.homeShootout=text(o,"homeShootout");m.awayShootout=text(o,"awayShootout");m.scoreDataVersion=o.optInt("scoreDataVersion");
         m.homeId=text(o,"homeId");m.awayId=text(o,"awayId");m.homeLogo=text(o,"homeLogo");m.awayLogo=text(o,"awayLogo");
         m.status=text(o,"status","状态待确认"); m.detail=text(o,"detail"); m.url=text(o,"url");
         m.start=o.optLong("start"); m.updated=o.optLong("updated"); m.timeConfirmed=o.optBoolean("timeConfirmed");

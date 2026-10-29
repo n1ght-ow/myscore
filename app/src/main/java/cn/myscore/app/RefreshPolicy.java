@@ -119,7 +119,8 @@ final class RefreshPolicy {
 
     private static boolean sameDetailState(Match requested,Match cached) {
         return requested.id.equals(cached.id) && requested.state.equals(cached.state)
-            && requested.homeScore.equals(cached.homeScore) && requested.awayScore.equals(cached.awayScore);
+            && requested.homeScore.equals(cached.homeScore) && requested.awayScore.equals(cached.awayScore)
+            && requested.homeShootout.equals(cached.homeShootout) && requested.awayShootout.equals(cached.awayShootout);
     }
 
     static long teamCacheTtl(List<Match> matches,long now) {

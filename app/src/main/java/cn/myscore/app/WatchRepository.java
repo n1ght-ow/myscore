@@ -36,7 +36,7 @@ import java.util.concurrent.Executors;
  *
  * <p>Static destinations (Douyu / Huya / Migu league zones) are always available immediately.
  * This repository upgrades them in the background: Bilibili full-series recordings for finished
- * Worlds matches, and exact Migu match pages when both Chinese team names and kickoff time agree.
+ * Worlds and Spirit matches, and exact Migu match pages when both Chinese team names and kickoff time agree.
  * Everything is cached and every network failure falls back to the previous safe destination.</p>
  */
 final class WatchRepository {
@@ -54,7 +54,6 @@ final class WatchRepository {
         + "1015815,1015816,1015817,1015820,1015819,1015821,1015837,1015836";
     private static final String UA = "Mozilla/5.0 (Linux; Android 14; 23127PN0CC) "
         + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
-    private static final String REFERER = "https://space.bilibili.com/" + BilibiliVods.MID;
     private static volatile WatchRepository instance;
 
     private record BiliState(long fetched, List<BilibiliVods.Episode> episodes) {}
@@ -69,10 +68,9 @@ final class WatchRepository {
     private final Map<String, List<Runnable>> miguWaiters = new LinkedHashMap<>();
 
     private final Object biliLock = new Object();
-    private final List<Runnable> biliWaiters = new ArrayList<>();
-    private volatile BiliState bili;
-    private volatile boolean biliLoading;
-    private volatile long biliFailedUntil;
+    private final Map<BilibiliVods.Source, List<Runnable>> biliWaiters = new LinkedHashMap<>();
+    private final Map<BilibiliVods.Source, BiliState> bili = new ConcurrentHashMap<>();
+    private final Map<BilibiliVods.Source, Long> biliFailedUntil = new ConcurrentHashMap<>();
 
     private volatile String packId;
     private volatile long packFetched;
@@ -81,7 +79,7 @@ final class WatchRepository {
         this.context = context.getApplicationContext();
         this.dir = new File(this.context.getCacheDir(), "watch-v1");
         if (!dir.exists()) dir.mkdirs();
-        loadBili();
+        for (BilibiliVods.Source source : BilibiliVods.Source.values()) loadBili(source);
         loadMigu();
     }
 
@@ -99,10 +97,11 @@ final class WatchRepository {
     /** Always safe to call on the UI thread. Returns the best cached destination. */
     WatchLinks.Link link(Match match) {
         if (match == null) return null;
-        if ("lol".equals(match.league) && match.finalised()) {
-            BiliState state = bili;
+        BilibiliVods.Source source = BilibiliVods.source(match);
+        if (source != null) {
+            BiliState state = bili.get(source);
             BilibiliVods.Episode episode = state == null ? null : BilibiliVods.find(state.episodes, match);
-            return episode == null ? WatchLinks.biliPending() : WatchLinks.biliVideo(episode.bvid(), match);
+            return episode == null ? WatchLinks.biliPending(match) : WatchLinks.biliVideo(episode.bvid(), match);
         }
         if ("epl".equals(match.league) || "nba".equals(match.league)) {
             MiguMatches.Hit hit = miguHits.get(key(match));
@@ -123,21 +122,22 @@ final class WatchRepository {
         return link == null ? "" : link.url + "|" + link.title + "|" + link.note;
     }
 
-    /** Fetch the Bilibili series once when the list contains any finished Worlds match. */
+    /** Each recording source is shared by all its finished matches. */
     void prepare(List<Match> matches, Runnable changed) {
         if (matches == null) return;
+        java.util.Set<BilibiliVods.Source> sources = new java.util.HashSet<>();
         for (Match match : matches) {
-            if ("lol".equals(match.league) && match.finalised()) {
-                ensureBili(changed);
-                return;
-            }
+            BilibiliVods.Source source = BilibiliVods.source(match);
+            if (source != null) sources.add(source);
         }
+        for (BilibiliVods.Source source : sources) ensureBili(source, changed);
     }
 
     void resolve(Match match, Runnable changed) {
         if (match == null) return;
-        if ("lol".equals(match.league) && match.finalised()) {
-            ensureBili(changed);
+        BilibiliVods.Source source = BilibiliVods.source(match);
+        if (source != null) {
+            ensureBili(source, changed);
         } else if ("epl".equals(match.league) || "nba".equals(match.league)) {
             resolveMigu(match, changed, false);
         }
@@ -153,27 +153,48 @@ final class WatchRepository {
         }
     }
 
-    private void ensureBili(Runnable changed) {
+    private void ensureBili(BilibiliVods.Source source, Runnable changed) {
         long now = System.currentTimeMillis();
-        if (bili != null && now - bili.fetched() < BILI_TTL) return;
+        BiliState state = bili.get(source);
+        if (state != null && now - state.fetched() < BILI_TTL) return;
         synchronized (biliLock) {
-            if (bili != null && now - bili.fetched() < BILI_TTL) return;
-            if (biliFailedUntil > now) return;
-            if (changed != null) biliWaiters.add(changed);
-            if (biliLoading) return;
-            biliLoading = true;
+            state = bili.get(source);
+            if (state != null && now - state.fetched() < BILI_TTL) return;
+            if (biliFailedUntil.getOrDefault(source, 0L) > now) return;
+            List<Runnable> waiters = biliWaiters.get(source);
+            if (waiters != null) {
+                if (changed != null) waiters.add(changed);
+                return;
+            }
+            waiters = new ArrayList<>();
+            if (changed != null) waiters.add(changed);
+            biliWaiters.put(source, waiters);
         }
         worker.execute(() -> {
             List<BilibiliVods.Episode> episodes = null;
-            Log.i(TAG, "Bilibili fetch start");
+            boolean complete = false;
+            Log.i(TAG, "Bilibili fetch start " + source);
             try {
                 Map<String, String> headers = new LinkedHashMap<>();
-                headers.put("Referer", REFERER);
-                headers.put("User-Agent", UA);
-                JSONObject root = new JSONObject(httpGet(BilibiliVods.API, headers));
-                if (root.optInt("code", -1) != 0) throw new IOException("Bilibili code " + root.optInt("code"));
-                episodes = BilibiliVods.parse(root);
-                if (episodes.isEmpty()) throw new IOException("Bilibili series empty");
+                headers.put("Referer", source.space());
+                headers.put("User-Agent", source != BilibiliVods.Source.WORLDS ? "Mozilla/5.0" : UA);
+                List<BilibiliVods.Episode> fetched = new ArrayList<>();
+                for (int page = 1; page <= 20; page++) {
+                    JSONObject root = new JSONObject(httpGet(source.api(page), headers, source != BilibiliVods.Source.WORLDS));
+                    if (root.optInt("code", -1) != 0) throw new IOException("Bilibili code " + root.optInt("code"));
+                    fetched.addAll(BilibiliVods.parse(root, source));
+                    if (!fetched.isEmpty()) episodes = fetched;
+                    if (source == BilibiliVods.Source.WORLDS) break;
+                    JSONObject data = root.optJSONObject("data");
+                    JSONObject pagination = data == null ? null : data.optJSONObject("page");
+                    if (pagination == null || pagination.optInt("num") != page || pagination.optInt("size") <= 0)
+                        throw new IOException("Bilibili pagination missing");
+                    if ((long) page * pagination.optInt("size") >= pagination.optInt("total")) break;
+                    if (page == 20) throw new IOException("Bilibili pagination limit");
+                }
+                if (fetched.isEmpty()) throw new IOException("Bilibili recordings empty");
+                episodes = fetched;
+                complete = true;
                 Log.i(TAG, "Bilibili fetch episodes=" + episodes.size());
             } catch (Exception e) {
                 Log.i(TAG, "Bilibili series unavailable: " + e.getMessage());
@@ -181,15 +202,23 @@ final class WatchRepository {
             List<Runnable> waiters;
             synchronized (biliLock) {
                 if (episodes != null) {
-                    bili = new BiliState(System.currentTimeMillis(), episodes);
-                    biliFailedUntil = 0;
-                    saveBili();
+                    // Keep verified older hits if a later page is temporarily blocked.
+                    if (!complete) {
+                        Map<String, BilibiliVods.Episode> merged = new LinkedHashMap<>();
+                        BiliState previous = bili.get(source);
+                        if (previous != null) for (BilibiliVods.Episode e : previous.episodes()) merged.put(e.bvid(), e);
+                        for (BilibiliVods.Episode e : episodes) merged.put(e.bvid(), e);
+                        episodes = new ArrayList<>(merged.values());
+                    }
+                    long fetchedAt = System.currentTimeMillis();
+                    bili.put(source, new BiliState(complete ? fetchedAt : fetchedAt - BILI_TTL + BILI_FAIL, episodes));
+                    if (complete) biliFailedUntil.remove(source);
+                    else biliFailedUntil.put(source, System.currentTimeMillis() + BILI_FAIL);
+                    saveBili(source);
                 } else {
-                    biliFailedUntil = System.currentTimeMillis() + BILI_FAIL;
+                    biliFailedUntil.put(source, System.currentTimeMillis() + BILI_FAIL);
                 }
-                biliLoading = false;
-                waiters = new ArrayList<>(biliWaiters);
-                biliWaiters.clear();
+                waiters = biliWaiters.remove(source);
             }
             if (!waiters.isEmpty()) main.post(() -> {
                 for (Runnable waiter : waiters) {
@@ -313,12 +342,19 @@ final class WatchRepository {
     }
 
     private static String httpGet(String url, Map<String, String> headers) throws Exception {
+        return httpGet(url, headers, false);
+    }
+
+    private static String httpGet(String url, Map<String, String> headers, boolean minimalHeaders) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         try {
             connection.setConnectTimeout(6_000);
             connection.setReadTimeout(10_000);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
+            // The account archive endpoint accepts the same minimal headers as the public space.
+            if (!minimalHeaders) {
+                connection.setRequestProperty("Accept", "application/json");
+                connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
+            }
             connection.setRequestProperty("User-Agent", UA);
             for (Map.Entry<String, String> h : headers.entrySet()) connection.setRequestProperty(h.getKey(), h.getValue());
             if (connection.getResponseCode() != 200) throw new IOException("HTTP " + connection.getResponseCode());
@@ -368,8 +404,8 @@ final class WatchRepository {
         return match.id + "|" + match.start + "|" + match.home + "|" + match.away;
     }
 
-    private void loadBili() {
-        File file = new File(dir, "bilibili.json");
+    private void loadBili(BilibiliVods.Source source) {
+        File file = new File(dir, source.cache);
         if (!file.exists()) return;
         try {
             JSONObject root = new JSONObject(new String(new AtomicFile(file).readFully(), StandardCharsets.UTF_8));
@@ -382,18 +418,18 @@ final class WatchRepository {
                 String bvid = a.optString("bvid");
                 String title = a.optString("title");
                 long duration = a.optLong("duration");
-                if (!bvid.isBlank() && !title.isBlank() && duration >= 900) {
+                if (!bvid.isBlank() && !title.isBlank() && duration >= source.minDuration()) {
                     episodes.add(new BilibiliVods.Episode(bvid, title, duration, a.optLong("pubdate")));
                 }
             }
-            if (!episodes.isEmpty()) bili = new BiliState(root.optLong("fetched"), episodes);
+            if (!episodes.isEmpty()) bili.put(source, new BiliState(root.optLong("fetched"), episodes));
         } catch (Exception e) {
             Log.i(TAG, "Ignoring Bilibili watch cache");
         }
     }
 
-    private synchronized void saveBili() {
-        BiliState state = bili;
+    private synchronized void saveBili(BilibiliVods.Source source) {
+        BiliState state = bili.get(source);
         if (state == null) return;
         try {
             JSONArray archives = new JSONArray();
@@ -402,7 +438,7 @@ final class WatchRepository {
                     .put("duration", e.duration()).put("pubdate", e.pubdate()));
             }
             JSONObject root = new JSONObject().put("fetched", state.fetched()).put("archives", archives);
-            write("bilibili.json", root);
+            write(source.cache, root);
         } catch (Exception e) {
             Log.w(TAG, "Cannot persist Bilibili watch cache", e);
         }

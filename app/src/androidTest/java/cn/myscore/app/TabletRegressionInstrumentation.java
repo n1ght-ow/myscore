@@ -37,6 +37,7 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
             checks+=LayoutChecks.runSchedules(this,getTargetContext());
             checks+=SpaceUsageChecks.run(this,getTargetContext());
             checks+=AlignmentChecks.run(this,getTargetContext());
+            checks+=CrestChecks.run(this,getTargetContext());
             runOnMainSync(this::adapterTransition);
             runOnMainSync(this::lolLayouts);
             // HyperOS may reject an instrumented app's background activity start. Launch as

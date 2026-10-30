@@ -181,13 +181,17 @@ final class Logos {
         Context app=ui.c.getApplicationContext();
         int target=targetPixels(ui,size),foreground=ui.text;
         for(String url:urls) {
+            if(Thread.currentThread().isInterrupted())return;
             if(!allowed(url))continue;
+            Long failed=FAILED.get(url);
+            if(failed!=null&&System.currentTimeMillis()-failed<30_000)continue;
             String key=url+"@"+target+":crest:"+foreground;
             if(MEMORY.get(key)!=null)continue;
             CompletableFuture<Bitmap> created=new CompletableFuture<>(),running=IN_FLIGHT.putIfAbsent(key,created);
             if(running!=null)continue;
             POOL.submit(()-> {
                 try {
+                    if(Thread.currentThread().isInterrupted())throw new InterruptedIOException("Image warm cancelled");
                     Bitmap bitmap=crestBitmap(app,url,target,foreground,null);
                     MEMORY.put(key,bitmap);
                     created.complete(bitmap);
@@ -317,6 +321,11 @@ final class Logos {
     private static Bitmap prepared(Context c,String url,int edge,int foreground) {
         try {
             File file=preparedFile(c,url,edge,foreground);if(!file.exists())return null;
+            // Validate the small prepared asset before allocating pixels, even if the disk
+            // cache was truncated or replaced with a full-size source image.
+            BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;
+            BitmapFactory.decodeFile(file.getAbsolutePath(),bounds);
+            if(bounds.outWidth!=edge||bounds.outHeight!=edge){file.delete();return null;}
             BitmapFactory.Options options=new BitmapFactory.Options();options.inPreferredConfig=Bitmap.Config.ARGB_8888;
             Bitmap bitmap=BitmapFactory.decodeFile(file.getAbsolutePath(),options);
             if(bitmap==null)return null;

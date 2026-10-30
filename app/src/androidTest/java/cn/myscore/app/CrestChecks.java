@@ -8,11 +8,12 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 
-/** Pixel regressions for transparent, optically fitted team marks. Fixtures stay in memory. */
+/** Pixel/cache regressions for team marks. Cache fixtures use an isolated URL and are removed. */
 final class CrestChecks {
     private static int checks;
     static int run(Instrumentation test,Context context)throws Exception {
         checks=0;
+        preparedCache(context);
         test.runOnMainSync(()->{
             for(boolean dark:new boolean[]{false,true}){
                 Ui ui=new Ui(context,dark);
@@ -70,6 +71,23 @@ final class CrestChecks {
         Bitmap bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);Paint paint=new Paint();paint.setColor(colour);
         if(open){paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2);bounds=new Rect(bounds);bounds.inset(1,1);}
         new Canvas(bitmap).drawRect(bounds,paint);return bitmap;
+    }
+    private static void preparedCache(Context context)throws Exception{
+        String url="https://a.espncdn.com/myscore-instrumentation-only-462.png";
+        java.lang.reflect.Method fileMethod=Logos.class.getDeclaredMethod("preparedFile",Context.class,String.class,int.class,int.class);
+        java.lang.reflect.Method read=Logos.class.getDeclaredMethod("prepared",Context.class,String.class,int.class,int.class);
+        fileMethod.setAccessible(true);read.setAccessible(true);
+        java.io.File file=(java.io.File)fileMethod.invoke(null,context,url,32,Color.WHITE);
+        try{
+            Bitmap wrong=Bitmap.createBitmap(128,128,Bitmap.Config.ARGB_8888);
+            try(java.io.OutputStream out=new java.io.FileOutputStream(file)){wrong.compress(Bitmap.CompressFormat.PNG,100,out);}finally{wrong.recycle();}
+            check(read.invoke(null,context,url,32,Color.WHITE)==null,"wrong-size prepared cache falls back before pixel decode");
+            check(!file.exists(),"invalid prepared cache is removed instead of retried every bind");
+            Bitmap valid=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888);
+            try(java.io.OutputStream out=new java.io.FileOutputStream(file)){valid.compress(Bitmap.CompressFormat.PNG,100,out);}finally{valid.recycle();}
+            Bitmap restored=(Bitmap)read.invoke(null,context,url,32,Color.WHITE);
+            check(restored!=null&&restored.getWidth()==32,"valid prepared cache still decodes");if(restored!=null)restored.recycle();
+        }finally{file.delete();}
     }
     private static Bitmap variants(){
         Bitmap bitmap=Bitmap.createBitmap(128,64,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint paint=new Paint();

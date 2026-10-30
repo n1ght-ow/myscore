@@ -24,7 +24,9 @@ final class SingleFlight<K,V> {
             Throwable cause=e.getCause();
             // A superseded screen may own the shared read. Its cancellation must not cancel
             // another screen that still needs the same URL.
-            if(!owner&&cause instanceof InterruptedException&&!Thread.currentThread().isInterrupted()){
+            if(!owner&&(cause instanceof InterruptedException
+                || cause instanceof java.io.InterruptedIOException && !(cause instanceof java.net.SocketTimeoutException))
+                &&!Thread.currentThread().isInterrupted()){
                 requests.remove(key,running);
                 if(retries>=MAX_CANCEL_RETRIES)throw new InterruptedException("Shared request cancelled repeatedly");
                 return execute(key,read,retries+1);

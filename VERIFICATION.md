@@ -1257,3 +1257,16 @@
 - 沿用原签名：证书 SHA-256 e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646。保留设置、缓存及日历关联的覆盖安装成功。
 - 最终发布 APK 在两端分别停止虎牙后，通过生产共用 launch 路径再执行一次冷启动检查；两端前台均到达 com.duowan.kiwi/.liveroom.ChannelPage。修改版本号前同一生产逻辑已各连续 3 次冷启动到达房间，并核对解说米勒/149361 及视频画面。未扩大到其他虎牙版本或全应用 UI 验收。
 - 本版没有修复或重新验证斗鱼 -113；第三方登录、会员和内容权限仍由平台决定。4.6.0 发布记录保留作为历史证据，不覆写旧版本发布资产。
+
+
+## 4.6.2 文档同步、图片请求与缓存稳定性（2026-10-30）
+
+- 版本 4.6.2 / versionCode 51。按当前源码修正 README、PRODUCT 与 DESIGN 的播放图标、客户端直达、虎牙冷启动、曼城集锦、Spirit 录像、点球比分、缓存及下载续传说明；既有验收记录仍按日期保留，不作为当前全部功能通过的证明。
+- SingleFlight：旧读取方以 InterruptedIOException 取消时，仍需要该图片的新读取方可独立重试；SocketTimeoutException 不触发立即重试，保留正常超时边界。新增两项并发 JVM 回归。
+- 图片预取：收到中断即停止继续提交 URL，已知失败 URL 在 30 秒内不再通过预取反复排队；前台手动刷新仍可清除失败退避。准备好的队徽磁盘缓存先检查尺寸，再分配像素；异常尺寸删除并回退，避免错误大图分配像素和重复失败解码。新增原生缓存错误尺寸、清理与正常读取三项断言。
+- testDebugUnitTest / lintDebug / assembleDebug / assembleDebugAndroidTest 通过：222 项 JVM 测试，0 失败；lint 0 错误 / 24 条既有警告。Android 测试包使用 TabletRegressionInstrumentation，新增 CrestChecks 也在两端运行。
+- 同一 APK 已保留数据覆盖安装到 USB 平板 24018RPACC（b34f6efa）和无线手机 24122RKC7C。两端包管理器均确认 4.6.2 / 51，已安装 base.apk 的 SHA-256 均与发布包一致：c6551e1b9d023f50eb65b6dcb71c380952d497fc061aeff96231ea960d5e06b7。
+- 手机 831 项、平板 875 项 Android 运行断言通过；涵盖回收列表、各赛事筛选同步、布局/空间/对齐及图片处理，平板另验证旋转与阅读区手势期间延后更新。平板纵向测试实际窗口为系统 letterbox 666dp，横向为 1219dp，不能冒充全宽竖屏验收。未执行写日历的模拟器 SmokeInstrumentation。
+- 双端实际往返滚动并检查深色模式截图；18:45 后本轮检查窗口内的 crash buffer 未发现新增崩溃。截图与输出：本机 %TEMP%/myscore-462/，phone.png / tablet.png 与双端 instrumentation 文本。未进行全应用逐路由视觉验收、全部详情标签、浅色/大字号、长时间后台、热状态与运营商网络回归。
+- Mobile Dev 面板打开误报 Mac/Xcode 要求，Android 安装、启动、截图、输入和性能工具仍可用。CPU/内存各采样 20 秒；有效采样主要为前台停留，之后另执行滚动，因此不用于滚动前后性能比较。双端 FPS 均因 Invalid Perfetto trace stream 失败，frameStats 为 null；没有获得 FPS、逐帧卡顿或长期内存稳定性结论。记录 ID：平板 b966e53e-62f1-41b3-a66f-3e6b059e23e4；手机 02a4f86c-0eab-4690-9433-07e017d3d75d。首次在 instrumentation 退出后过早启动的两条采集因应用未运行失败，不计入验收。
+- 本版不改变第三方播放路由；虎牙 4.6.1 的实际版本/系统确认边界继续适用，斗鱼 -113 未修复，也未重新宣称其他平台播放全部通过。

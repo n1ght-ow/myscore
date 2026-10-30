@@ -36,5 +36,28 @@ public class SingleFlightTest {
             assertEquals("source",owner.get(3,TimeUnit.SECONDS));
         }finally{release.countDown();pool.shutdownNow();}
     }
+    @Test public void interruptedIoOwnerDoesNotFailCurrentReader()throws Exception{
+        SingleFlight<String,String> gate=new SingleFlight<>();ExecutorService pool=Executors.newFixedThreadPool(2);
+        CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1),joining=new CountDownLatch(1);Thread[] waiter=new Thread[1];
+        try{
+            Future<String> old=pool.submit(()->gate.execute("image",()->{entered.countDown();try{release.await();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new java.io.InterruptedIOException("cancelled image");}return "old";}));
+            assertTrue(entered.await(3,TimeUnit.SECONDS));
+            Future<String> current=pool.submit(()->{waiter[0]=Thread.currentThread();joining.countDown();return gate.execute("image",()->"current");});
+            assertTrue(joining.await(3,TimeUnit.SECONDS));awaitWaiting(waiter[0]);old.cancel(true);
+            assertEquals("current",current.get(3,TimeUnit.SECONDS));
+        }finally{release.countDown();pool.shutdownNow();}
+    }
+    @Test public void sharedSocketTimeoutDoesNotStartImmediateRetry()throws Exception{
+        SingleFlight<String,String> gate=new SingleFlight<>();ExecutorService pool=Executors.newFixedThreadPool(2);
+        CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1),joining=new CountDownLatch(1);Thread[] waiter=new Thread[1];
+        java.net.SocketTimeoutException timeout=new java.net.SocketTimeoutException("slow source");
+        try{
+            Future<String> owner=pool.submit(()->gate.execute("image",()->{entered.countDown();release.await();throw timeout;}));
+            assertTrue(entered.await(3,TimeUnit.SECONDS));
+            Future<String> current=pool.submit(()->{waiter[0]=Thread.currentThread();joining.countDown();return gate.execute("image",()->{fail("timeout must retain backoff");return "";});});
+            assertTrue(joining.await(3,TimeUnit.SECONDS));awaitWaiting(waiter[0]);release.countDown();
+            for(Future<String> request:java.util.List.of(owner,current))try{request.get(3,TimeUnit.SECONDS);fail();}catch(ExecutionException e){assertSame(timeout,e.getCause());}
+        }finally{release.countDown();pool.shutdownNow();}
+    }
     private void awaitWaiting(Thread thread){long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(3);while(thread.getState()!=Thread.State.WAITING&&System.nanoTime()<end)Thread.yield();assertEquals(Thread.State.WAITING,thread.getState());}
 }

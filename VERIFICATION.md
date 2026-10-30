@@ -1236,3 +1236,24 @@
 - APK SHA-256：b662825e107ba5fcebb713c0980fd3bd3a675bf1abd2ac469d59ca7f58aac8cb。
 - 签名证书 SHA-256：e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646。
 - 发布已知限制：斗鱼 6657 房间可到达，但双端播放器出现 -113；虎牙 149361 已启动状态可直达，强制停止后的冷启动不稳定。没有把这些问题标为修复或完整通过。详细运行边界见上一节。
+
+## 虎牙冷启动后保留直播间目标（2026-10-30，本地未提交、未发布）
+
+- 4.6.0 的直接 ACTION_VIEW 首页路由在虎牙初始化时可能丢失房间；仅给启动页设置 data 也只到首页。检查两端实际安装版本的导出启动页后，确认启动链路支持 key_redirect_intent。
+- 共用 WatchLauncher 对虎牙从 PackageManager 获取实际 Launcher Intent，并以 key_redirect_intent 携带原来的限定包名 ACTION_VIEW 房间 Intent。没有硬编码启动 Activity 名称；获取不到 Launcher 时沿用直接路由，启动失败时仍保留原网页回退。Manifest 只增加 com.duowan.kiwi 的包可见性查询，不增加权限或生产依赖。
+- 设备与平台版本：USB 平板 24018RPACC / 虎牙 13.5.33；无线手机 24122RKC7C / 虎牙 13.5.26。两端已覆盖安装本地修复测试包，versionName / versionCode 暂仍为 4.6.0 / 49；它的字节与已发布 4.6.0 不同，正式发布资产保持原样。
+- 初次探查手机冷启动直达成功；平板先遇到系统跨应用启动确认，允许后还有平台通知引导，关闭后重新验证，不能把首次弹窗流程算成无交互通过。
+- 最终从生产共用 launch 方法发起：每端先 force-stop 虎牙并用 pidof 确认主进程不存在，然后执行独立 instrumentation。每端连续 3 次，共 6/6 次到达 com.duowan.kiwi/.liveroom.ChannelPage；从开始启动 instrumentation 到页面确认约 8.6–9.9 秒，包含测试启动 MyScore 和固定观察等待，并非纯虎牙启动耗时。
+- 截图核对：最终手机显示“解说米勒”、房间水印 149361 和视频画面；平板显示 149361 水印及同一赛事视频。已运行状态也再次到达同一播放页。5 秒时首页仍可能正在过渡，最终验证追加最长 20 秒观察，没有加入生产延时或自动重复跳转。
+- testDebugUnitTest、lintDebug、assembleDebug、assembleDebugAndroidTest 通过：220 项 JVM 测试，lint 0 错误 / 24 条既有警告。仅验证上述已安装虎牙版本，第三方更新后的兼容性不能由本次测试保证。没有重新验收其他平台播放或全应用布局。
+- 证据：本机 %TEMP%/myscore-huya-cold-fix-20261030/results.json 与 phone/tablet-confirmed-cold1/2/3.png。未修改 4.6.0 标签、Release 或远端代码。
+
+## 4.6.1 发布构建核对（2026-10-30）
+
+- 将 versionName 升为 4.6.1、versionCode 升为 50；发布虎牙通过正常启动入口携带 key_redirect_intent 的冷启动修复，保留原路由及网页回退。此前测试中的系统确认/第三方版本边界仍以先前记录为准。
+- 最终 testDebugUnitTest、lintDebug、assembleDebug、assembleDebugAndroidTest 通过：220 项测试，0 失败/错误/跳过；lint 0 错误 / 24 条既有警告。
+- 同一份 MyScore-4.6.1.apk 已覆盖安装到平板 b34f6efa 与无线手机 24122RKC7C。两端包管理器确认 4.6.1 / 50；实际 base.apk SHA-256 均与本地发布包一致。
+- APK SHA-256：d0af51a0195a3b0039bc0d2913b3a152c61ada9049ed9e62a6aa4dcb5cc6f91e。
+- 沿用原签名：证书 SHA-256 e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646。保留设置、缓存及日历关联的覆盖安装成功。
+- 最终发布 APK 在两端分别停止虎牙后，通过生产共用 launch 路径再执行一次冷启动检查；两端前台均到达 com.duowan.kiwi/.liveroom.ChannelPage。修改版本号前同一生产逻辑已各连续 3 次冷启动到达房间，并核对解说米勒/149361 及视频画面。未扩大到其他虎牙版本或全应用 UI 验收。
+- 本版没有修复或重新验证斗鱼 -113；第三方登录、会员和内容权限仍由平台决定。4.6.0 发布记录保留作为历史证据，不覆写旧版本发布资产。

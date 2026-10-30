@@ -48,8 +48,16 @@ final class WatchLauncher {
         lastLaunch = SystemClock.elapsedRealtime();
         for (WatchAppLinks.Target target : WatchAppLinks.targets(link.url)) {
             try {
-                activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(target.url()))
-                    .setPackage(target.packageName()));
+                Intent destination = new Intent(Intent.ACTION_VIEW, Uri.parse(target.url()))
+                    .setPackage(target.packageName());
+                Intent launch = null;
+                if ("com.duowan.kiwi".equals(target.packageName())) {
+                    // Huya's cold-start splash preserves this pending destination. Opening its
+                    // Homepage directly can lose the room while the app initializes.
+                    launch = activity.getPackageManager().getLaunchIntentForPackage(target.packageName());
+                    if (launch != null) launch.putExtra("key_redirect_intent", destination);
+                }
+                activity.startActivity(launch != null ? launch : destination);
                 return;
             } catch (android.content.ActivityNotFoundException | SecurityException ignored) {
                 // Try the other supported edition, then preserve the original web destination.

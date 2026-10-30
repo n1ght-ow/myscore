@@ -1214,3 +1214,25 @@
 - `:app:assembleDebug`、`:app:assembleDebugAndroidTest`：通过；clean 重建后 APK 1,113,167 字节，仍为 4.2.2 / 41，自适应图标（`mipmap-anydpi`）与 `assets/fonts/Inter.ttf` 均在包内，旧密度 PNG 不再存在。
 - 在 API 35 手机模拟器安装最终 APK 并启动；打开已缓存的 Carabao Cup 详情与统计页，详情/表格渲染正常，无崩溃。过程中也实际打开过日期 Sheet。后台资料补齐链路未在慢网或全新缓存上做完整运行验收。
 - 本轮未验证平板真实窗口、旋转、分屏、慢网/断网与真机；未运行无人值守 instrumentation。未提交、推送或发布。
+
+## 平台 App 播放跳转（2026-10-30，本地未提交）
+
+- 共用 WatchLauncher 优先使用限定包名的 App 路由，缺少应用或路由被系统拒绝时再尝试原网页；B 站依次兼容普通版和 HD 版。没有增加生产依赖，没有修改比赛匹配、订阅和 UI。
+- 咪咕使用官方体育页二维码的 JUMP_INNER_NEW_PAGE / WORLDCUP_DETAIL / extra.mgdbID 参数，单场直播与回放均保留原赛事 ID；专区使用独立 pageID。斗鱼使用官方移动页 douyuapp://room?liveType=0&rid=6657。虎牙使用官方移动页 banneraction 路由和 149361 房间公开资料的 UID 1690094984；其他虎牙房间不会套用此 UID。B 站向目标包发送原视频 HTTPS 地址。
+- 设备：平板 24018RPACC / b34f6efa（USB，B 站 HD），手机 24122RKC7C（无线 ADB，B 站普通版）。最终调试 APK 已覆盖安装到两端；仍为 4.5.0 / 48，未发布。
+- 实际运行：WatchAppInstrumentation 调用生产共用 launch 方法，再用前台 Activity 和截图核对；另在手机 MyScore 的 10 月 31 日 LOL 列表实际点击播放按钮。自动测试曾因后台启动、系统跨应用确认和 UIAutomation 冲突失败，不能仅凭 dispatched 文本当作跳转通过。
+- 双端咪咕：进入 120000588291 对应的 10 月 27 日森林狼 125–127 骑士赛事页，看到视频播放。付费全场回放由咪咕原有权限决定，本次未开通或购买。手机 NBA 专区、平板英超专区也执行了 App 路由，其中手机 NBA 专区截图确认到达；平板英超专区没有完成稳定视觉验收。
+- B 站：普通版和 HD 版均实际到达 BV1uUnf6TEch，核对为 10 月 27 日 CFO vs T1 录像页面；HD 版截图看到录像画面。没有验证所有视频分 P 和账号主页路径。
+- 斗鱼：双端进入原 6657 房间，截图显示“直播加载失败 -113”；平板另有连接服务器失败 402000204。房间定位通过，视频播放未通过；未确认是房间状态、账号还是网络问题。
+- 虎牙：两端已运行状态下的官方路由可到 ChannelPage，平板截图核对 149361 房间及播放画面。强制停止后的冷启动复测出现首页、空白或退回原界面；替换官方 App Link、原生 channel 路径和启动分类仍未解决。此项是已知限制，不能宣称双端冷启动完全通过。
+- 构建检查：220 项 JVM 测试通过（新增 4 项路由回归）；lintDebug 为 0 错误 / 24 条既有警告；assembleDebug 与自定义 runner 的 assembleDebugAndroidTest 通过。已修正 UTF-8 URL 编码 API 对 Android 28 的兼容性。未实际卸载平台应用验证网页回退，未做全应用 UI、字号、旋转或性能验收。
+- 路由依据：咪咕 /mgs/website/prd/v_20261019174829_a773c85f/dist/sportLive.js、/mgs/common/migugotoapp/prd/v_20250312124443_2d1d51ce/dist/index.js；斗鱼移动房间页当前 Room JS；虎牙移动房间页 505.bc8a7305f4da37d2e25d.js 和设备已安装包的路由声明。临时截图在本机 %TEMP%/myscore-app-links-20261030，部分早期截图包含系统确认弹窗，不作为播放通过证据。
+
+## 4.6.0 发布构建核对（2026-10-30）
+
+- 将 versionName 升为 4.6.0、versionCode 升为 49，沿用 cn.myscore.app 和原签名。提交范围为本次平台 App 跳转、相应测试、版本号及验收记录。
+- 最终 testDebugUnitTest、lintDebug、assembleDebug、assembleDebugAndroidTest 通过：220 项测试，0 失败、错误或跳过；lint 0 错误 / 24 条既有警告。
+- 同一份 MyScore-4.6.0.apk 已覆盖安装到 USB 平板 b34f6efa 和无线手机 24122RKC7C，并启动 MyScore。两端 dumpsys package 都报告 4.6.0 / 49；两端实际 base.apk 的 SHA-256 与本地发布文件相同。
+- APK SHA-256：b662825e107ba5fcebb713c0980fd3bd3a675bf1abd2ac469d59ca7f58aac8cb。
+- 签名证书 SHA-256：e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646。
+- 发布已知限制：斗鱼 6657 房间可到达，但双端播放器出现 -113；虎牙 149361 已启动状态可直达，强制停止后的冷启动不稳定。没有把这些问题标为修复或完整通过。详细运行边界见上一节。

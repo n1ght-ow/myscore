@@ -44,12 +44,21 @@ final class WatchLauncher {
         });
     }
 
-    private void launch(WatchLinks.Link link) {
+    void launch(WatchLinks.Link link) {
         lastLaunch = SystemClock.elapsedRealtime();
+        for (WatchAppLinks.Target target : WatchAppLinks.targets(link.url)) {
+            try {
+                activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(target.url()))
+                    .setPackage(target.packageName()));
+                return;
+            } catch (android.content.ActivityNotFoundException | SecurityException ignored) {
+                // Try the other supported edition, then preserve the original web destination.
+            }
+        }
         try {
             activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link.url)));
         } catch (RuntimeException e) {
-            Sheet.message(activity, "无法打开直播", "手机没有可用的浏览器。");
+            Sheet.message(activity, "无法打开播放页面", "未找到可用的平台 App 或浏览器。");
         }
     }
 }

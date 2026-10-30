@@ -174,7 +174,7 @@ public final class WatchPlaybackInstrumentation extends Instrumentation {
             });
             require(opened.await(60, TimeUnit.SECONDS), "play opens an external destination");
             waitForIdleSync();
-            require(urls.equals(List.of("https://www.miguvideo.com/p/live/" + id)),
+            require(urls.equals(List.of(WatchAppLinks.targets("https://www.miguvideo.com/p/live/" + id).get(0).url())),
                 "double play tap opens the fixture once from " + (useDetail ? "detail" : "list"));
         } finally { removeMonitor(monitor); }
     }

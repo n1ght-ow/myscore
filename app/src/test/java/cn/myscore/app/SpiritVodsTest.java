@@ -62,18 +62,32 @@ public class SpiritVodsTest {
         assertEquals("BVdelayed", BilibiliVods.find(List.of(delayed), match("NAVI", "2026-10-29")).bvid());
     }
 
-    @Test public void onlyFinishedFirstTeamMatchesUseTheSpiritSource() {
+    @Test public void onlyFinishedTierOneOrSpiritMatchesUseTheCs2Source() {
         Match m = match("NAVI", "2026-10-29");
-        assertEquals(BilibiliVods.Source.SPIRIT, BilibiliVods.source(m));
-        for (String state : List.of("scheduled", "live", "postponed", "cancelled", "unknown")) {
+        assertEquals(BilibiliVods.Source.CS2, BilibiliVods.source(m));
+        for (String state : List.of("scheduled", "live", "postponed", "unknown")) {
             m.state = state; assertNull(BilibiliVods.source(m));
             assertEquals(WatchLinks.Kind.ROOM, WatchLinks.of(m).kind);
         }
+        m.state = "cancelled"; assertNull(WatchLinks.of(m));
         m.state = "final"; m.homeId = "academy-id"; m.home = "Spirit Academy";
         assertNull(BilibiliVods.source(m));
         m.home = "Spirit"; assertNull(BilibiliVods.source(m));
         m.homeId = ""; m.home = "Spirit Academy"; assertNull(BilibiliVods.source(m));
-        m.home = "Team Spirit"; assertEquals(BilibiliVods.Source.SPIRIT, BilibiliVods.source(m));
+        m.home = "Team Spirit"; assertEquals(BilibiliVods.Source.CS2, BilibiliVods.source(m));
+        Match tierOne = new Match(); tierOne.league = "cs2"; tierOne.home = "NAVI"; tierOne.away = "FURIA";
+        tierOne.state = "final"; tierOne.tierOne = true;
+        assertEquals(BilibiliVods.Source.CS2, BilibiliVods.source(tierOne));
+        tierOne.tierOne = false; assertNull(BilibiliVods.source(tierOne));
+    }
+
+    @Test public void matchesNonSpiritTierOneRecordingsFromTheSameAccount() {
+        Match m = new Match(); m.league = "cs2"; m.home = "NAVI"; m.away = "FURIA"; m.state = "final"; m.tierOne = true;
+        m.start = Match.parseTime("2026-10-30T00:00:00+08:00");
+        long published = Match.parseTime("2026-10-30T08:00:00+08:00") / 1000;
+        var episode = new BilibiliVods.Episode("BVtier", "【PGL】NAVI vs FURIA 10月30日 淘汰赛", 7200, published);
+        assertEquals("BVtier", BilibiliVods.find(List.of(episode), m).bvid());
+        m.tierOne = false; assertNull(BilibiliVods.find(List.of(episode), m));
     }
 
     @Test public void pendingAndReplayUseCs2ContextAndSeparateAccountAndCache() {
@@ -87,8 +101,8 @@ public class SpiritVodsTest {
         assertTrue(replay.note.contains("Spirit vs NAVI"));
         assertTrue(replay.note.contains("10月29日"));
         assertFalse(replay.note.contains("全球总决赛"));
-        assertNotEquals(BilibiliVods.Source.WORLDS.cache, BilibiliVods.Source.SPIRIT.cache);
-        assertTrue(BilibiliVods.Source.SPIRIT.api(2).endsWith("&pn=2"));
+        assertNotEquals(BilibiliVods.Source.WORLDS.cache, BilibiliVods.Source.CS2.cache);
+        assertTrue(BilibiliVods.Source.CS2.api(2).endsWith("&pn=2"));
         assertEquals(BilibiliVods.API, BilibiliVods.Source.WORLDS.api(1));
     }
 

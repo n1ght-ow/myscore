@@ -52,6 +52,17 @@ public class WatchLinksTest {
         assertEquals(WatchLinks.Kind.REPLAY,WatchLinks.miguMatch("123","nba","骑士","森林狼",true).kind);
     }
 
+    @Test public void finishedCs2MatchesWithoutAVerifiedReplayHaveNoEntry(){
+        Match finished=match("cs2");finished.state="final";assertNull(WatchLinks.of(finished));
+        Match cancelled=match("cs2");cancelled.state="cancelled";assertNull(WatchLinks.of(cancelled));
+        Match scheduled=match("cs2");scheduled.state="scheduled";assertEquals("https://www.douyu.com/6657",WatchLinks.of(scheduled).url);
+    }
+
+    @Test public void pendingRecordingUsesTheRightSeries(){
+        Match lol=match("lol");lol.state="final";assertEquals(BilibiliVods.SPACE,WatchLinks.biliPending(lol).url);
+        Match cs2=match("cs2");cs2.state="final";assertNull(WatchLinks.biliPending(cs2));
+    }
+
     @Test public void unpublishedRecordingsUseWaitingStateInsteadOfPlay(){
         assertEquals(WatchLinks.Kind.PENDING,WatchLinks.biliPending().kind);
         assertEquals("clock",WatchLinks.biliPending().kind.icon);

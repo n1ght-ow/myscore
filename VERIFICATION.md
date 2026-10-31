@@ -1,3 +1,46 @@
+# MyScore 4.7.0 队伍赛程订阅即时更新、跨端日历恢复（2026-10-31）
+
+- 版本 4.7.0 / versionCode 52；发布 APK `MyScore-4.7.0.apk`，大小 1,149,375 bytes，SHA-256 `e82f78bf34601437d5b7269bdd3de95f9ceae279f24a40e062eb1c7aa132da39`。将提交到 `origin/main`，打 `v4.7.0` tag，并创建 GitHub release 上传同一 APK 与 `SHA256SUMS-4.7.0.txt`；最终以远端 asset digest 和双端 `base.apk` 哈希核对为准。
+- 即时更新：球队赛程写入/取消日历后只重排了行，但可见行被列表优化复用，未重新绑定订阅图标；现已在校验完成后对手机、平板两块列表强制 `notifyDataSetChanged`。手机实测取消后立即变灰、重新订阅后立即变绿勾，无需退出页面。
+- 命名：CS2 / LOL 的队伍页标题、刷新说明和状态文案改为「队伍赛程」；足球、NBA、NFL 仍为「球队赛程」。
+- 跨端自动恢复：新增 `CalendarSync.adopt`，扫描本机日历中 `customAppPackage=cn.myscore.app` 的事件，按 `MyScore:<matchId>`/`myscore://match/...` 恢复 `match:`/`record:` 关联；已删除或重建的事件会先清掉旧关联，未来比赛缺提醒时补 5 分钟提醒。队伍页加载缓存/来源结果后调用；主列表的现有 sync 也复用该逻辑。
+- 实测：平板创建 NAVI vs Falcons（11 月 2 日）订阅后，手机日历同步到该事件，手机打开 NAVI 队伍页自动显示绿色勾、`calendar-links` 自动写入 `match:five:cs2:csgo_mc_2399858`（事件 ID 277），全程未在手机点订阅。反向测试：手机取消/重新订阅后，平板重新加载 NAVI 队伍页自动恢复绿色勾。
+- 测试：`testDebugUnitTest` 244 项，0 失败 / 错误；`lintDebug` 0 错误 / 25 项警告（含两处为保证关联落盘后不删除事件而保留的 `commit`）；`assembleDebug`、`assembleDebugAndroidTest` 通过；此前 `SubscriptionVisibilityInstrumentation` 1092 项颜色/可见性检查仍通过。`CalendarSync.adopt` 依赖真实日历 Provider，本轮用双端真实事件和 `calendar-links` 记录验证，不伪装为 JVM 测试。
+- 双端截图：手机 `artifacts/phone-navi-adopted.png`（自动恢复绿色勾）、`artifacts/phone-navi-unsubscribed-immediate.png`（取消后立即灰）、`artifacts/phone-navi-subscribed-immediate.png`（重新订阅后立即绿）；平板 `artifacts/pad-navi-final.png`（队伍赛程标题与自动恢复绿色勾）。
+- 设备：Redmi K80 Pro（`24122RKC7C`，无线）与 Xiaomi Pad 6S Pro（`24018RPACC`，有线）均覆盖安装 4.7.0 / 52，安装后 `base.apk` SHA-256 均为 `e82f78bf34601437d5b7269bdd3de95f9ceae279f24a40e062eb1c7aa132da39`，与发布包一致。测试中误加的 MOUZ vs TYLOO、NBA 订阅已清理；清理后重开队伍页由日历事件重新恢复真实订阅。
+- 限制：跨端显示依赖小米日历账户自身的同步时间，App 只在对应赛程加载时恢复；未做全应用逐路由、平板物理竖屏、1.3/2 倍字号和运营商网络。
+
+# CS2 球队赛程订阅图标颜色修复（2026-10-31，本地调试）
+
+- 问题：`TeamScheduleAdapter` 的未订阅日历图标固定使用 `ui.primary`，与已订阅的绿色无法区分；手机 NAVI 球队页「接下来」卡片复现。
+- 修复：未订阅使用 `ui.muted` + `Ui.ACTION_ICON_ALPHA`，已订阅使用 `ui.primary` 且不透明；构造时也先设 muted。同步排查同类：`ScoreAdapter` 初始图标从 primary 改为 muted（绑定原本正确）；平板详情 `MainActivity` 的未订阅图标从 `ui.text` 改为 `ui.muted`；`PadScoreAdapter` 原本正确；没有其他 `calendar-add` / `calendar-check` 监听使用 primary。
+- 回归：`SubscriptionVisibilityInstrumentation` 增加图标颜色断言，覆盖手机卡 / 平板卡 / 平板账本 / 球队页 × 已订阅 / 未订阅 × scheduled / live / final / past-start / unknown-time / cancelled；在 Xiaomi Pad 6S Pro 通过 **1092 项**，未写日历。`testDebugUnitTest` 244 项，0 失败 / 错误；Lint 0 错误 / 24 项既有警告；构建通过。
+- 视觉：未订阅为灰色（`artifacts/pad-navi-team-color-fixed.png`）；在平板上实际订阅 NAVI vs Falcons 后变为绿色勾，同一页 MOUZ vs TYLOO 的测试中误加订阅已取消并回到灰色（`artifacts/pad-navi-subscribed-final.png`）。
+- 说明：`calendar-links` 只记录本机日历关联；手机与平板各自独立。旧版未订阅使用绿色是显示 bug，不代表已订阅；如遇到真实的已订阅比赛仍为灰色，需按具体比赛追踪关联丢失。
+- 未改版本号，未提交、未推送、未发布。
+
+# CS2 一线赛事 B 站回放与球队“接下来”（2026-10-31，本地调试）
+
+- 回放：配置的 B 站账号 `474595627` 的索引从 `keywords=Spirit` 改为 `keywords=vs`，缓存改为 `bilibili-cs2.json`；已结束的一线赛事（`Match.tierOne`）和 Spirit 比赛都匹配该账号的全场录像，其他非一线、非 Spirit 比赛仍无入口。标题仍按日期 + 双方队名 + 时长过滤，不把集锦/单图当全场。
+- 实测：平板 10 月 29 日非 Spirit 的 FUT–Nemiga（PGL S 级）在阅读页显示「哔哩哔哩 · 回放」；同一轮缓存用 `ps=100` 取得 100 条最新全场录像，其中 87 条不含 Spirit，含 FUT vs Nemiga、Vitality vs NAVI、MOUZ vs FURIA 以及 10 月 11 日 EPL S24 总决赛 Vitality vs MOUZ 等；Spirit–NAVI 仍匹配 `BV1TisR6eEY7`。
+- 球队赛程：`TeamSchedule.five` 在战队接口的已结束/未来列表之外，用 `DomesticEsports.tierOneMatches(今天, +60 天)` 补齐该队接下来的一线比赛；`TeamRepository` CS2 缓存 `schema=1` 使旧缓存一次失效。Spirit 球队页实测从「已结束 · 30」变为「接下来 · 1 场（11 月 11 日 FUT，BLAST对抗赛 2026 S2，BO3，小组赛胜者组首轮，15:00）+ 已结束 · 30 场」，来源显示「5EPlay · 战队赛程 + 一线赛程」。
+- 数据/测试：`testDebugUnitTest` 244 项，0 失败 / 错误；新增非 Spirit 一线回放匹配、球队赛程只追加本队未来一线比赛等回归；`lintDebug` 0 错误 / 24 项既有警告；`assembleDebug`、`assembleDebugAndroidTest`、`verifyLiveSources` 通过，CS2 33 场。B 站 API 对宿主/原始 curl 有 412 风控；本轮由 App 自身请求取得 100 条并保留部分成功缓存，分页失败仍保留已确认录像、5 分钟后可重试。
+- 设备与截图：Xiaomi Pad 6S Pro（有线 `b34f6efa`）实际显示；Spirit 球队页 `artifacts/pad-spirit-team-upcoming.png`，非 Spirit 回放 `artifacts/pad-cs2-tierone-replay.png`，一线列表与回放 `artifacts/pad-cs2-1029.png`；手机 Redmi K80 Pro（无线）安装同一最终 APK，保留此前 CS2 卡片/详情验证。手机本轮被用户切换至其他应用，未继续自动化点击。
+- 限制：B 站风控可能导致索引只取得第一页 100 条，较早赛事需等待后续重试；未做全应用逐路由、平板物理竖屏、1.3/2 倍字号和运营商网络；未改版本号，未提交、未推送、未发布。
+
+# CS2 一线赛事与卡片抬头（2026-10-31，本地调试）
+
+- 一线定义：5EPlay `tt_info.grade` 的 1（Major）、7（S+赛事）、2（S级赛事）为一线；3/4/5（A/B/C）、6/9/10（资格赛）、8（表演赛）不计。`session_list` 使用 `game_status=0&grades=1%2C2%2C7&limit=100`，最多 8 页（约最近一年）；更早日期显示明确分页上限，不伪装成空。
+- 主列表为一线 ∪ Spirit 全部比赛；一线赛事卡片和详情头部显示 `tt_info.disp_name`（如 PGL 布加勒斯特大师赛 2026），Spirit 的非一线比赛显示 `CS2 · Team Spirit`；详情总览新增“级别”。Spirit 的 A/B/C 级比赛仍保留，其他队伍的 A/B/C/资格赛/表演赛不显示。
+- 代码：新增 `Match.event/tierOne`、`MatchLabel`、`DomesticEsports.tierOneMatches/merge/cs2`；`MatchResolver` 改为可复核非 Spirit 比赛；`WatchLinks` 对已结束的非 Spirit CS2 不再显示直播间入口；旧 CS2 列表缓存用 `schema=3` 忽略并重取，避免旧 Spirit-only 缓存或终局锁定挡住一线。
+- `testDebugUnitTest` 242 项，0 失败 / 错误；`lintDebug` 0 错误 / 24 项既有警告；`assembleDebug` / `assembleDebugAndroidTest` 通过。新增测试覆盖 10 个 grade、日期分页/上限/去重、TBD/`null.png`、`Match` 缓存往返、Spirit/一线标签、非 Spirit 详情复核、B 站/直播入口。
+- 真实来源：`verifyLiveSources` 九类来源全部成功，CS2 33 场（Spirit 全部 + 今日一线）。
+- 设备：Redmi K80 Pro（`24122RKC7C`，无线 `adb-bfcfd1bf-3TaXoz._adb-tls-connect._tcp`）与 Xiaomi Pad 6S Pro（`24018RPACC`，有线 `b34f6efa`）安装同一 debug APK。手机 10 月 31 日 CS2 列表显示 PGL 布加勒斯特大师赛 2026 的 Nemiga–FURIA（进行中）和 Vitality–MOUZ（已结束）；10 月 29 日 Spirit–NAVI 卡片在缓存迁移后由旧的 `CS2 · Team Spirit` 变为 PGL 赛事名并刷新于 21:30。详情头部为赛事名，总览显示“级别 S级赛事”。
+- Spirit 球队页真实赛程显示 7 月 24/27 日的 BLAST 赏金赛 2026 S2（A 级）比赛；打开 7 月 27 日 100 Thieves 的详情，头部为 `CS2 · Team Spirit`，级别为 A 级赛事。平板在 7 月 27 日主列表同样显示该场卡片抬头 `CS2 · Team Spirit`，同一页的 PGL 卡片仍为赛事名，阅读页显示 BLAST / A 级，证明次级比赛保留且不冒充一线。
+- 平板 CS2 筛选、赛程轨和阅读页显示同一 PGL 赛事名与级别；手机/平板无新增 FATAL/ANR。
+- 截图：`artifacts/phone-cs2-tab-today-wait.png`（10 月 31 日 CS2 列表）、`artifacts/phone-cs2-1029-fixed2.png`（10 月 29 日缓存迁移后的 PGL 卡片）、`artifacts/phone-spirit-team-scroll5.png`（Spirit 球队页的 BLAST 赏金赛）、`artifacts/phone-spirit-blast-detail.png`（A 级详情）、`artifacts/pad-cs2-selected.png`（平板 10 月 31 日 CS2 阅读页）、`artifacts/pad-cs2-0727.png`（平板 7 月 27 日 `CS2 · Team Spirit` 卡片与 PGL 对照）。
+- 限制：只在上述两台真机和当前日期、10 月 29 日及 Spirit 球队页真实数据上验收；未做全应用逐路由、平板物理竖屏、1.3/2 倍字号矩阵和运营商移动网络；B 站历史分页仍可能 412。未修改 versionCode/versionName，未提交、未推送、未发布。
+
 # MyScore 4.5.0 · 点球比分与赛事视频（2026-10-29，发布包验收）
 
 - 版本统一为 `4.5.0 / versionCode 48`，包名 `cn.myscore.app`，minSdk 28 / targetSdk 35。包含本页后续专项记录的 Spirit 回放、曼城非英超官方集锦和订阅按钮显示规则。

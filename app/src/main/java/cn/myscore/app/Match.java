@@ -12,6 +12,8 @@ import java.util.List;
 public final class Match {
     public static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     public String id = "", league = "", group = "", source = "", title = "";
+    public String event = "";
+    public boolean tierOne = false;
     public String home = "", away = "", homeScore = "", awayScore = "";
     public String homeShootout = "", awayShootout = "";
     public int scoreDataVersion = 0;
@@ -61,6 +63,7 @@ public final class Match {
         JSONObject o = new JSONObject();
         try {
             o.put("id", id).put("league", league).put("group", group).put("source", source).put("title", title)
+                .put("event", event).put("tierOne", tierOne)
                 .put("home", home).put("away", away).put("homeScore", homeScore).put("awayScore", awayScore)
                 .put("homeShootout", homeShootout).put("awayShootout", awayShootout).put("scoreDataVersion", scoreDataVersion)
                 .put("homeId",homeId).put("awayId",awayId).put("homeLogo",homeLogo).put("awayLogo",awayLogo)
@@ -74,6 +77,7 @@ public final class Match {
         Match m = new Match();
         m.id=text(o,"id"); m.league=text(o,"league"); m.group=text(o,"group");
         m.source=text(o,"source"); m.title=text(o,"title"); m.home=text(o,"home"); m.away=text(o,"away");
+        m.event=text(o,"event"); m.tierOne=o.optBoolean("tierOne");
         m.homeScore=text(o,"homeScore"); m.awayScore=text(o,"awayScore"); m.state=text(o,"state","unknown");
         m.homeShootout=text(o,"homeShootout");m.awayShootout=text(o,"awayShootout");m.scoreDataVersion=o.optInt("scoreDataVersion");
         m.homeId=text(o,"homeId");m.awayId=text(o,"awayId");m.homeLogo=text(o,"homeLogo");m.awayLogo=text(o,"awayLogo");

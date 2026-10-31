@@ -50,7 +50,7 @@ public class ManCityHighlightsTest {
         assertEquals("集锦待发布", pending.title); assertEquals(WatchLinks.Kind.PENDING, pending.kind);
         assertEquals("观看本场集锦", highlight.title); assertEquals(WatchLinks.Kind.HIGHLIGHTS, highlight.kind);
         assertEquals("集锦", highlight.kind.label); assertFalse(highlight.title.contains("全场"));
-        assertNotEquals(BilibiliVods.Source.SPIRIT.cache, BilibiliVods.Source.CITY_HIGHLIGHTS.cache);
+        assertNotEquals(BilibiliVods.Source.CS2.cache, BilibiliVods.Source.CITY_HIGHLIGHTS.cache);
         assertNotEquals(BilibiliVods.Source.WORLDS.cache, BilibiliVods.Source.CITY_HIGHLIGHTS.cache);
     }
     @Test public void rejectsWomenYouthPreviewWrongResultOldAndFutureVideos() {

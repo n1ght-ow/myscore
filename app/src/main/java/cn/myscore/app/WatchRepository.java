@@ -36,7 +36,8 @@ import java.util.concurrent.Executors;
  *
  * <p>Static destinations (Douyu / Huya / Migu league zones) are always available immediately.
  * This repository upgrades them in the background: Bilibili full-series recordings for finished
- * Worlds and Spirit matches, and exact Migu match pages when both Chinese team names and kickoff time agree.
+ * Worlds, CS2 tier-one events and Spirit matches, and exact Migu match pages when both Chinese team names and kickoff time agree.
+ * A finished CS2 match outside tier-one events and without Spirit keeps no entry rather than an unrelated live room.
  * Everything is cached and every network failure falls back to the previous safe destination.</p>
  */
 final class WatchRepository {

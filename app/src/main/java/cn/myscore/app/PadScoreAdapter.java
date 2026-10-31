@@ -227,11 +227,10 @@ final class PadScoreAdapter extends BaseAdapter {
         void bind(Match value){
             match=value;
             boolean active=value.id.equals(selectedId);
-            Competition competition=Competition.find(value.league);
             time.setText(value.timeConfirmed?value.time():"待定");
             state.setText(value.live()&&!value.status.isBlank()?value.status:Rules.stateLabel(value.state));
             state.setTextColor(value.live()?ui.primary:value.cancelled()?ui.error:ui.muted);
-            league.setText(competition==null?value.group:competition.name);
+            league.setText(MatchLabel.of(value));
             home.setText(value.home);away.setText(value.away);
             homeScore.setText(value.displayScore(true));awayScore.setText(value.displayScore(false));
             homeScore.setTextColor(ui.scoreColor(value,true));awayScore.setTextColor(ui.scoreColor(value,false));

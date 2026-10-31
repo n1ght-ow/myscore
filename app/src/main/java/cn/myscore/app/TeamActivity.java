@@ -92,9 +92,9 @@ public final class TeamActivity extends Activity {
         LinearLayout appbar=ui.row();
         appbar.setPadding(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(2));
         appbar.addView(iconButton("back","返回",this::finish));
-        TextView title=ui.text("球队赛程",16,ui.text,true);title.setGravity(Gravity.CENTER);
+        TextView title=ui.text(pageName(),16,ui.text,true);title.setGravity(Gravity.CENTER);
         appbar.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        appbar.addView(iconButton("refresh","刷新球队赛程",()->load(true)));
+        appbar.addView(iconButton("refresh","刷新"+pageName(),()->load(true)));
         root.addView(appbar);
 
         LinearLayout card=ui.row();card.setBackgroundColor(ui.bg);
@@ -113,7 +113,7 @@ public final class TeamActivity extends Activity {
         LinearLayout.LayoutParams cardParams=new LinearLayout.LayoutParams(-1,-2);
         cardParams.setMargins(ui.dp(16),ui.dp(2),ui.dp(16),ui.dp(6));root.addView(card,cardParams);
 
-        status=ui.text("正在读取球队赛程…",12,ui.muted,false);status.setPadding(ui.dp(20),ui.dp(2),ui.dp(20),ui.dp(10));root.addView(status);
+        status=ui.text("正在读取"+pageName()+"…",12,ui.muted,false);status.setPadding(ui.dp(20),ui.dp(2),ui.dp(20),ui.dp(10));root.addView(status);
         error=ui.text("",13,ui.error,false);error.setLineSpacing(ui.dp(4),1);
         error.setBackground(ui.shape(ui.tonal,Ui.CONTROL_RADIUS));error.setPadding(ui.dp(14),ui.dp(12),ui.dp(14),ui.dp(12));
         LinearLayout.LayoutParams errorParams=new LinearLayout.LayoutParams(-1,-2);errorParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(10));
@@ -143,8 +143,8 @@ public final class TeamActivity extends Activity {
     private void buildPad(){
         LinearLayout bar=ui.row();bar.setPadding(ui.dp(12),ui.dp(10),ui.dp(16),ui.dp(10));
         bar.addView(iconButton("back","返回比赛列表",this::finish));
-        TextView title=ui.text("球队赛程",17,ui.text,true);LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,-2,1);tp.setMarginStart(ui.dp(6));bar.addView(title,tp);
-        bar.addView(iconButton("refresh","刷新球队赛程",()->load(true)));
+        TextView title=ui.text(pageName(),17,ui.text,true);LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,-2,1);tp.setMarginStart(ui.dp(6));bar.addView(title,tp);
+        bar.addView(iconButton("refresh","刷新"+pageName(),()->load(true)));
         root.addView(bar);root.addView(ui.divider());
 
         LinearLayout hero=ui.row();hero.setPadding(ui.dp(36),ui.dp(24),ui.dp(36),ui.dp(22));
@@ -156,7 +156,7 @@ public final class TeamActivity extends Activity {
         String competition=team.league.equals("cs2")?"CS2":team.competitionName();
         names.addView(ui.text(competition+" · 北京时间",12,ui.muted,false));
         ui.gap(names,8);
-        padStatus=ui.text("正在读取球队赛程…",11,ui.muted,false);names.addView(padStatus);
+        padStatus=ui.text("正在读取"+pageName()+"…",11,ui.muted,false);names.addView(padStatus);
         padError=ui.text("",12,ui.error,false);padError.setLineSpacing(ui.dp(3),1);padError.setVisibility(View.GONE);ui.gap(names,6);names.addView(padError);
         hero.addView(names,np);
         root.addView(hero);root.addView(ui.divider());
@@ -292,7 +292,7 @@ public final class TeamActivity extends Activity {
             CalendarSync.Result completed=outcome;
             handler.post(()-> {
                 calendarBusy=false;if(isDestroyed())return;
-                render();CalendarJob.schedule(this);
+                render();refreshSubscriptionViews();CalendarJob.schedule(this);
                 if(completed.failed>0)Sheet.message(this,remove?"未能取消订阅":"未能加入日历",completed.error);
                 else android.widget.Toast.makeText(this,remove?"已取消订阅":"已加入日历 · 提前 5 分钟提醒",android.widget.Toast.LENGTH_SHORT).show();
             });
@@ -317,13 +317,14 @@ public final class TeamActivity extends Activity {
         worker.submit(()-> {
             if(readCache) {
                 TeamRepository.Result cached=repository.cached(requested);
-                if(cached.fetched>0)handler.post(()->{if(isDestroyed())return;result=cached;render();});
+                if(cached.fetched>0){int adopted=calendarSync.adopt(cached.matches);handler.post(()->{if(isDestroyed())return;result=cached;render();if(adopted>0)refreshSubscriptionViews();});}
             }
             TeamRepository.Result next=repository.fetch(requested,forced);
+            int adopted=calendarSync.adopt(next.matches);
             handler.post(()-> {
                 if(isDestroyed())return;
                 busy=false;result=next;
-                if(active){render();if(pendingForce)load(false);else schedule();}
+                if(active){render();if(adopted>0)refreshSubscriptionViews();if(pendingForce)load(false);else schedule();}
             });
         });
     }
@@ -355,26 +356,36 @@ public final class TeamActivity extends Activity {
         if(relaid&&pendingPosition>=0){int position=pendingPosition;pendingPosition=-1;list.post(()->list.setSelection(position));}
     }
 
+    private String pageName() {
+        return team.league.equals("cs2")||team.league.equals("lol")?"队伍赛程":"球队赛程";
+    }
+
+    private void refreshSubscriptionViews() {
+        if(adapter!=null)adapter.refreshSubscriptions();
+        if(padUpcomingAdapter!=null)padUpcomingAdapter.refreshSubscriptions();
+        if(padFinishedAdapter!=null)padFinishedAdapter.refreshSubscriptions();
+    }
+
     private void updateStatus() {
         if(status==null||error==null)return;
         if(result==null) {
-            status.setText(busy?"正在读取球队赛程…":"尚未获取球队赛程");
+            status.setText(busy?"正在读取"+pageName()+"…":"尚未获取"+pageName());
             error.setVisibility(View.GONE);
             return;
         }
         String fetched=result.fetched>0?format(result.fetched,"M月d日 HH:mm")+" 获取":"尚未成功获取";
         if(result.error.isEmpty())status.setText(result.source+" · 共 "+result.matches.size()+" 场 · "+fetched+(busy?" · 更新中":""));
         else if(result.fetched>0)status.setText(result.source+" · 显示 "+format(result.fetched,"M月d日 HH:mm")+" 的记录");
-        else status.setText("球队赛程暂不可用");
+        else status.setText(pageName()+"暂不可用");
         boolean failed=!result.error.isEmpty();
         error.setVisibility(failed?View.VISIBLE:View.GONE);
-        if(failed)error.setText((result.fetched>0?"球队赛程未更新 · ":"无法获取球队赛程 · ")+result.error+(result.fetched>0?"\n下方保留上次成功获取的赛程。":""));
+        if(failed)error.setText((result.fetched>0?pageName()+"未更新 · ":"无法获取"+pageName()+" · ")+result.error+(result.fetched>0?"\n下方保留上次成功获取的赛程。":""));
     }
 
     private List<TeamScheduleRow> buildRows() {
         List<TeamScheduleRow> rows=new ArrayList<>();
         if(result==null) {
-            rows.add(TeamScheduleRow.note(busy?"正在读取球队赛程":"尚未获取球队赛程",busy?"正在连接球队的数据来源。":"点右上角刷新重试。"));
+            rows.add(TeamScheduleRow.note(busy?"正在读取"+pageName():"尚未获取"+pageName(),busy?"正在连接"+pageName()+"的数据来源。":"点右上角刷新重试。"));
             return rows;
         }
         if(result.matches.isEmpty()) {
@@ -446,7 +457,7 @@ public final class TeamActivity extends Activity {
     }
     private String footnote() {
         String coverage=switch(team.league) {
-            case "cs2" -> "5EPlay 战队赛程，最多显示 30 场近期已结束的比赛与接下来已发布的比赛。";
+            case "cs2" -> "5EPlay 战队赛程与一线赛程：最多显示 30 场近期已结束的比赛，以及接下来已发布的一线赛事。";
             case "lol" -> "只显示本应用覆盖的 Worlds 赛程，不包含其他联赛。";
             default -> "ESPN 本赛季球队赛程，合并已结束的比赛与接下来已发布的赛程。";
         };

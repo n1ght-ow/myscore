@@ -17,6 +17,8 @@ import java.util.List;
 final class TeamRepository {
     private static final Object LOCK=new Object();
     private static final java.util.concurrent.atomic.AtomicLong WRITES=new java.util.concurrent.atomic.AtomicLong();
+    // Older CS2 team caches predate the tier-one "接下来" enrichment; read them once, then refresh.
+    private static final int CS2_TEAM_SCHEMA=1;
     static final class Result {
         final List<Match> matches=new ArrayList<>();
         long fetched=0;
@@ -34,10 +36,13 @@ final class TeamRepository {
                 if(!file.exists())return result;
                 JSONObject root=new JSONObject(new String(new AtomicFile(file).readFully(),StandardCharsets.UTF_8));
                 if(!key(team).equals(root.optString("team")))return result;
+                boolean reset=team.league.equals("cs2")&&root.optInt("schema",0)<CS2_TEAM_SCHEMA;
                 result.fetched=root.optLong("fetched");
                 result.source=root.optString("source");
                 JSONArray matches=root.optJSONArray("matches");
                 if(matches!=null)for(int i=0;i<matches.length();i++)if(matches.optJSONObject(i)!=null)result.matches.add(Match.fromJson(matches.optJSONObject(i)));
+                // Keep the last real list for a failed refresh, but never let it satisfy the freshness check.
+                if(reset)result.fetched=0;
             } catch(Exception e) {
                 android.util.Log.w("MyScore","Ignoring unreadable team cache");
             }
@@ -86,7 +91,7 @@ final class TeamRepository {
             try {
                 JSONArray matches=new JSONArray();
                 for(Match m:value.matches)matches.put(m.json());
-                JSONObject root=new JSONObject().put("team",key(team)).put("fetched",value.fetched).put("source",value.source).put("matches",matches);
+                JSONObject root=new JSONObject().put("team",key(team)).put("fetched",value.fetched).put("source",value.source).put("schema",team.league.equals("cs2")?CS2_TEAM_SCHEMA:0).put("matches",matches);
                 out=file.startWrite();out.write(root.toString().getBytes(StandardCharsets.UTF_8));file.finishWrite(out);
             } catch(Exception e) {
                 if(out!=null)file.failWrite(out);

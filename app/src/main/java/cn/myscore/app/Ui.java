@@ -343,6 +343,7 @@ final class Ui {
             if(glyph!=null)glyph.setTint(color);
         }
         void set(String kind,int color){if(kind.equals(this.kind)&&color==this.color)return;boolean changed=!kind.equals(this.kind);this.kind=kind;this.color=color;if(changed)loadGlyph();else if(glyph!=null)glyph.setTint(color);invalidate();}
+        int color(){return color;}
         @Override protected void onDraw(Canvas canvas){
             super.onDraw(canvas);
             if(glyph!=null){

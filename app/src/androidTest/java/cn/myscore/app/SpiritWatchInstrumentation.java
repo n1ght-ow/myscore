@@ -32,7 +32,7 @@ public final class SpiritWatchInstrumentation extends Instrumentation {
             require(watches.signature(match).contains("BV1TisR6eEY7"), "tablet signature upgrades with replay");
             match.away = "Unknown opponent";
             require(watches.link(match).kind == WatchLinks.Kind.PENDING, "unmatched fixture stays pending");
-            require(watches.link(match).url.equals(BilibiliVods.Source.SPIRIT.space()), "pending opens configured account");
+            require(watches.link(match).url.equals(BilibiliVods.Source.CS2.space()), "pending opens configured account");
             for (String state : new String[]{"live", "scheduled"}) {
                 match.state = state;
                 require(watches.link(match).url.equals("https://www.douyu.com/6657"), state + " retains live room");

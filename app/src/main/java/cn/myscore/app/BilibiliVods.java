@@ -13,11 +13,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Public Bilibili match-video indexes for Worlds, Spirit and Manchester City.
+ * Public Bilibili match-video indexes for Worlds, CS2 and Manchester City.
  *
  * <p>The account 50329118 publishes one full-series recording per match in the
- * "2026全球总决赛" series. Titles are stable: {@code 「2026全球总决赛」10月27日 CFO vs T1}. We only
- * parse public metadata; playback stays on Bilibili.</p>
+ * "2026全球总决赛" series. Titles are stable: {@code 「2026全球总决赛」10月27日 CFO vs T1}. The
+ * configured CS2 account publishes full-series event recordings; tier-one matches and Team Spirit
+ * are matched there. We only parse public metadata; playback stays on Bilibili.</p>
  */
 final class BilibiliVods {
     static final String MID = "50329118";
@@ -27,15 +28,17 @@ final class BilibiliVods {
     static final String API = "https://api.bilibili.com/x/series/archives?mid=" + MID
         + "&series_id=" + SERIES_ID + "&only_normal=true&sort=desc&pn=1&ps=100";
     enum Source {
-        WORLDS(MID, "bilibili.json"), SPIRIT("474595627", "bilibili-spirit.json"),
+        WORLDS(MID, "bilibili.json"), CS2("474595627", "bilibili-cs2.json"),
         CITY_HIGHLIGHTS("1832904916", "bilibili-city-highlights.json");
         final String mid, cache;
         Source(String mid, String cache) { this.mid = mid; this.cache = cache; }
         String space() { return "https://space.bilibili.com/" + mid; }
         int minDuration() { return this == CITY_HIGHLIGHTS ? 30 : 900; }
         String api(int page) {
+            // "vs" is shared by the account's full-match titles; the old "Spirit" keyword hid every
+            // other team's recording.
             return this == WORLDS ? API : "https://api.bilibili.com/x/series/recArchivesByKeywords?mid="
-                + mid + "&keywords=" + (this == CITY_HIGHLIGHTS ? "%E9%9B%86%E9%94%A6" : "Spirit")
+                + mid + "&keywords=" + (this == CITY_HIGHLIGHTS ? "%E9%9B%86%E9%94%A6" : "vs") + "&ps=100"
                 + (page == 1 ? "" : "&pn=" + page);
         }
     }
@@ -57,12 +60,9 @@ final class BilibiliVods {
         if (ManCityHighlights.supports(match)) return Source.CITY_HIGHLIGHTS;
         if ("lol".equals(match.league)) return Source.WORLDS;
         if (!"cs2".equals(match.league)) return null;
-        if (!match.homeId.isEmpty() || !match.awayId.isEmpty()) {
-            return "csgo_tm_7020".equals(match.homeId) || "csgo_tm_7020".equals(match.awayId)
-                ? Source.SPIRIT : null;
-        }
-        return "SPIRIT".equals(cs2Team(match.home)) || "SPIRIT".equals(cs2Team(match.away))
-            ? Source.SPIRIT : null;
+        // Every tier-one event final is published by the same CS2 account; Spirit's lower-tier
+        // matches keep their existing replay coverage.
+        return match.tierOne || DomesticEsports.spiritMatch(match) ? Source.CS2 : null;
     }
 
     static List<Episode> parse(JSONObject root) {
@@ -90,7 +90,7 @@ final class BilibiliVods {
     static Episode find(List<Episode> episodes, Match match) {
         if (episodes == null || match == null || match.day() == null) return null;
         if (ManCityHighlights.supports(match)) return ManCityHighlights.find(episodes, match);
-        if ("cs2".equals(match.league)) return findSpirit(episodes, match);
+        if ("cs2".equals(match.league)) return findCs2(episodes, match);
         String home = team(match.home), away = team(match.away);
         if (home.isEmpty() || away.isEmpty() || home.equals(away)) return null;
         Set<String> wanted = Set.of(home, away);
@@ -114,8 +114,8 @@ final class BilibiliVods {
         return best;
     }
 
-    private static Episode findSpirit(List<Episode> episodes, Match match) {
-        if (source(match) != Source.SPIRIT) return null;
+    private static Episode findCs2(List<Episode> episodes, Match match) {
+        if (source(match) != Source.CS2) return null;
         String home = cs2Team(match.home), away = cs2Team(match.away);
         if (home.isEmpty() || away.isEmpty() || home.equals(away)) return null;
         Set<String> wanted = Set.of(home, away);

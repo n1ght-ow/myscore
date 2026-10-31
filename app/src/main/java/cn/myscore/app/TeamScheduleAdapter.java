@@ -22,6 +22,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
 
     TeamScheduleAdapter(Ui ui,Host host){this.ui=ui;this.host=host;}
     void attach(ListView list){this.list=list;}
+    void refreshSubscriptions(){notifyDataSetChanged();}
 
     boolean updateRows(List<TeamScheduleRow> next) {
         boolean same=next.size()==rows.size();
@@ -127,7 +128,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
             foot=ui.new MatchTime();
             controls.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             action=new FrameLayout(ui.c);
-            calendar=new Ui.Icon(ui.c,"calendar-add",ui.primary);
+            calendar=new Ui.Icon(ui.c,"calendar-add",ui.muted);
             action.addView(calendar,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
             action.setFocusable(true);ui.clickable(action,Color.TRANSPARENT,24);
             action.setOnClickListener(v->{if(row!=null)host.toggleSubscription(row.match);});
@@ -149,9 +150,9 @@ final class TeamScheduleAdapter extends BaseAdapter {
             boolean subscribed=host.isSubscribed(value.match.id);
             boolean eligible=value.match.scheduled()&&value.match.timeConfirmed&&value.match.start>System.currentTimeMillis();
             action.setVisibility(eligible?View.VISIBLE:View.GONE);
-            action.setEnabled(!host.isBusy());action.setAlpha(host.isBusy()?0.5f:1f);
+            action.setEnabled(!host.isBusy());action.setAlpha(host.isBusy()?0.5f:subscribed?1f:Ui.ACTION_ICON_ALPHA);
             foot.bind(value.time,value.match.source);
-            calendar.set(subscribed?"calendar-check":"calendar-add",ui.primary);
+            calendar.set(subscribed?"calendar-check":"calendar-add",subscribed?ui.primary:ui.muted);
             action.setContentDescription((subscribed?"取消订阅":"订阅")+"对阵"+value.opponent+"的比赛");
             score.setVisibility(scored?View.VISIBLE:View.GONE);
             text(result,value.result);

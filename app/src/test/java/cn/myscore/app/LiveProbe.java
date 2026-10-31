@@ -19,7 +19,7 @@ public final class LiveProbe {
                 if(!c.esports())url="https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/scoreboard?dates="+(c.id.equals("f1")?from.minusDays(7).format(DateTimeFormatter.BASIC_ISO_DATE)+"-"+from.plusDays(2).format(DateTimeFormatter.BASIC_ISO_DATE):from.format(DateTimeFormatter.BASIC_ISO_DATE))+"&limit=1000";
                 else url=c.id.equals("lol")?DomesticEsports.LOL:"";
                 List<Match> matches;
-                if(c.id.equals("cs2"))matches=DomesticEsports.spirit(from,System.currentTimeMillis());
+                if(c.id.equals("cs2"))matches=DomesticEsports.cs2(from,from,System.currentTimeMillis());
                 else {JSONObject root=new JSONObject(Repository.get(url));matches=c.id.equals("lol")?DomesticEsports.worlds(root,System.currentTimeMillis()):Parsers.espn(root,c,System.currentTimeMillis());}
                 record.put("ok",true).put("matches",matches.size());
                 if(!matches.isEmpty())record.put("sample",matches.get(0).json());

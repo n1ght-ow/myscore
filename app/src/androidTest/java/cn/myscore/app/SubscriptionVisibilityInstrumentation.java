@@ -45,6 +45,11 @@ public final class SubscriptionVisibilityInstrumentation extends Instrumentation
                                 require(action != null, "calendar view exists for recycling");
                                 require(action.getVisibility() == (state.equals("scheduled") ? View.VISIBLE : View.GONE),
                                     league + " " + state + " subscribed=" + subscribed + " visibility");
+                                View icon = ((ViewGroup) action).getChildAt(0);
+                                require(icon instanceof Ui.Icon, "calendar icon child");
+                                int expected = subscribed ? ui.primary : ui.muted;
+                                require(((Ui.Icon) icon).color() == expected,
+                                    league + " " + state + " subscribed=" + subscribed + " unsubscribed color");
                             }
                         }
                     }

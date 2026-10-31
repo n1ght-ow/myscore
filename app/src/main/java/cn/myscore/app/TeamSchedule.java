@@ -2,6 +2,7 @@ package cn.myscore.app;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -26,7 +27,7 @@ final class TeamSchedule {
         if(c==null)throw new Exception("未知赛事");
         if(c.id.equals("f1"))throw new Exception("F1 没有球队赛程");
         Result result=new Result();
-        if(c.id.equals("cs2")) {result.source="5EPlay · 战队赛程";result.matches.addAll(five(team,now));}
+        if(c.id.equals("cs2")) {result.source="5EPlay · 战队赛程 + 一线赛程";result.matches.addAll(five(team,now));}
         else if(c.id.equals("lol")) {result.source="英雄联盟赛事官网 · Worlds";result.matches.addAll(worlds(team,now));}
         else {result.source="ESPN · 球队赛程";result.matches.addAll(espn(team,c,now));}
         result.fetched=System.currentTimeMillis();
@@ -76,6 +77,23 @@ final class TeamSchedule {
             if(!root.optBoolean("success"))throw new Exception("5EPlay 暂未返回该队赛程，请稍后刷新重试");
             for(Match m:parseFive(team,root,now))unique.put(m.id,m);
         }
+        // The team feed's future page is often empty even when the team has a published tier-one
+        // match; fill "接下来" from the same global tier-one list used by the main schedule.
+        List<Match> enrichment=new ArrayList<>();
+        try {
+            LocalDate today=Match.today(now);
+            for(Match m:DomesticEsports.tierOneMatches(today,today.plusDays(60),now)) {
+                if(team.id.equals(m.homeId)||team.id.equals(m.awayId))enrichment.add(m);
+            }
+        } catch(Exception e) {
+            android.util.Log.i("MyScore","CS2 team upcoming enrichment unavailable: "+e.getMessage());
+        }
+        return merge(new ArrayList<>(unique.values()),enrichment);
+    }
+    static List<Match> merge(List<Match> feed,List<Match> tierOne) {
+        Map<String,Match> unique=new LinkedHashMap<>();
+        if(feed!=null)for(Match m:feed)if(m!=null)unique.put(m.id,m);
+        if(tierOne!=null)for(Match m:tierOne)if(m!=null)unique.putIfAbsent(m.id,m);
         return new ArrayList<>(unique.values());
     }
     static List<Match> parseFive(Team team,JSONObject root,long now)throws Exception {
@@ -94,9 +112,9 @@ final class TeamSchedule {
             if(!id.matches("csgo_mc_[0-9]+"))continue;
             Match m=new Match();
             m.id="five:cs2:"+id;m.league="cs2";m.group="CS2";m.source="5EPlay";m.updated=now;
-            m.home=DetailParsers.text(home,"disp_name","对阵待定");m.away=DetailParsers.text(away,"disp_name","对阵待定");
+            m.home=DomesticEsports.teamName(home);m.away=DomesticEsports.teamName(away);
             m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");
-            m.homeLogo=DetailSources.https(DetailParsers.text(home,"logo"));m.awayLogo=DetailSources.https(DetailParsers.text(away,"logo"));
+            m.homeLogo=DomesticEsports.crest(home);m.awayLogo=DomesticEsports.crest(away);
             m.start=seconds(mc.optString("ts"));if(m.start==0)m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
             String status=mc.optString("match_status");
             m.state=switch(status) {
@@ -111,8 +129,10 @@ final class TeamSchedule {
                 if(!homeScore.isEmpty()&&!awayScore.isEmpty()&&!"null".equals(homeScore)&&!"null".equals(awayScore)) {m.homeScore=homeScore;m.awayScore=awayScore;}
             }
             JSONObject tournament=obj(row,"tt_info");
+            m.event=DetailParsers.text(tournament,"disp_name").trim();
+            m.tierOne=DomesticEsports.tierOne(row);
             String format=DetailParsers.text(mc,"format"),stage=DetailParsers.text(mc,"tt_stage_desc");
-            m.detail=(DetailParsers.text(tournament,"disp_name")+(format.isEmpty()?"":" · BO"+format)+(stage.isEmpty()?"":" · "+stage)).trim();
+            m.detail=(m.event+(format.isEmpty()?"":" · BO"+format)+(stage.isEmpty()?"":" · "+stage)).trim();
             m.url="https://www.5eplay.com/";
             matches.add(m);
         }

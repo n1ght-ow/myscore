@@ -98,6 +98,24 @@ public class TeamScheduleTest {
         assertTrue(TeamSchedule.parseFive(team("cs2","csgo_tm_7020","Team Spirit"),root,100).isEmpty());
     }
 
+    @Test public void fiveScheduleNormalizesTbdNamesAndNullCrests()throws Exception{
+        JSONObject row=new JSONObject().put("mc_info",new JSONObject().put("id","csgo_mc_9").put("ts","1791652200").put("match_status","0")
+            .put("home_info",new JSONObject().put("id","").put("disp_name","TBD").put("logo","https://oss.5eplay.com/sport/csgo/team/null.png"))
+            .put("opponent_info",new JSONObject().put("id","csgo_tm_4494").put("disp_name","MOUZ").put("logo","https://oss.5eplay.com/sport/csgo/team/b.png")))
+            .put("tt_info",new JSONObject().put("disp_name","IEM 北京 2026").put("grade","2").put("grade_label","S级赛事"));
+        Match m=TeamSchedule.parseFive(team("cs2","csgo_tm_4494","MOUZ"),fivePage(row),100).get(0);
+        assertEquals("对阵待定",m.home);assertEquals("",m.homeLogo);assertEquals("MOUZ",m.away);
+        assertTrue(m.tierOne);assertEquals("IEM 北京 2026",m.event);
+    }
+
+    @Test public void tierOneEnrichmentKeepsFeedVersionAndAddsUpcomingMatches(){
+        Match past=new Match();past.id="five:cs2:csgo_mc_1";past.home="Spirit";
+        Match future=new Match();future.id="five:cs2:csgo_mc_2";future.home="Spirit";future.homeId="csgo_tm_7020";future.state="scheduled";
+        Match duplicate=new Match();duplicate.id="five:cs2:csgo_mc_1";duplicate.home="Other";
+        List<Match> merged=TeamSchedule.merge(List.of(past),List.of(future,duplicate));
+        assertEquals(2,merged.size());assertSame(past,merged.get(0));assertEquals("five:cs2:csgo_mc_2",merged.get(1).id);
+    }
+
     @Test public void awayTeamScoreIsPresentedInTheTeamsOwnOrder()throws Exception{
         Match m=new Match();m.id="m";m.league="epl";m.group="足球";m.home="Liverpool";m.away="Arsenal";m.homeId="360";m.awayId="359";
         m.homeScore="1";m.awayScore="2";m.state="final";m.status="已结束";m.timeConfirmed=true;m.start=1_793_165_200_000L;

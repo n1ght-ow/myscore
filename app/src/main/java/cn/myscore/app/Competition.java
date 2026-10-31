@@ -13,7 +13,7 @@ public final class Competition {
         new Competition("nba", "NBA", "NBA", "basketball/nba"),
         new Competition("nfl", "NFL", "NFL", "football/nfl"),
         new Competition("f1", "F1", "F1", "racing/f1"),
-        new Competition("cs2", "CS2 · Team Spirit", "CS2", ""),
+        new Competition("cs2", "CS2", "CS2", ""),
         new Competition("lol", "LOL · Worlds", "LOL", "")
     };
     public boolean esports() { return path.isEmpty(); }

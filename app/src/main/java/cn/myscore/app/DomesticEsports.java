@@ -13,11 +13,38 @@ import java.util.Map;
 public final class DomesticEsports {
     public static final String LOL="https://lpl.qq.com/web201612/data/LOL_MATCH2_MATCH_HOMEPAGE_BMATCH_LIST.js";
     public static final String FIVE="https://esports-data.5eplaycdn.com/v1/api/csgo/";
+    // Major (1), S+ (7) and S (2) are tier one; A/B/C, qualifiers and showmatches are not.
+    static final String TIER_ONE="https://app.5eplay.com/api/tournament/session_list?game_type=1&game_status=0&grades=1%2C2%2C7&limit=100";
+    static final int MAX_TIER_PAGES=8;
+    interface Source {String get(String url) throws Exception;}
     private static JSONObject obj(JSONObject o,String k){JSONObject v=o.optJSONObject(k);return v==null?new JSONObject():v;}
     private static JSONArray arr(JSONObject o,String k){JSONArray v=o.optJSONArray(k);return v==null?new JSONArray():v;}
     private static String score(JSONObject o,String k){return o.isNull(k)?"":o.optString(k);}
     private static long seconds(String s){try{return Long.parseLong(s)*1000;}catch(RuntimeException e){return 0;}}
     private static long localTime(String s){try{return LocalDateTime.parse(s,Formats.SOURCE_TIMESTAMP).atZone(Match.ZONE).toInstant().toEpochMilli();}catch(RuntimeException e){return 0;}}
+    static boolean isTierOne(String grade,String label){
+        return "1".equals(grade)||"2".equals(grade)||"7".equals(grade)
+            ||"Major".equals(label)||"S+赛事".equals(label)||"S级赛事".equals(label);
+    }
+    static boolean tierOne(JSONObject row){
+        JSONObject mc=obj(row,"mc_info"),tt=obj(row,"tt_info");
+        return isTierOne(DetailParsers.text(tt,"grade",DetailParsers.text(mc,"grade")),DetailParsers.text(tt,"grade_label"));
+    }
+    static String teamName(JSONObject team){
+        String name=DetailParsers.text(team,"disp_name").trim();
+        return name.isEmpty()||name.equalsIgnoreCase("TBD")||name.equals("待定")?"对阵待定":name;
+    }
+    static String crest(JSONObject team){
+        String url=DetailSources.https(DetailParsers.text(team,"logo"));
+        return url.endsWith("/null.png")?"":url;
+    }
+    static boolean spiritMatch(Match match){
+        if(match==null)return false;
+        if(!match.homeId.isEmpty()||!match.awayId.isEmpty()) {
+            return "csgo_tm_7020".equals(match.homeId)||"csgo_tm_7020".equals(match.awayId);
+        }
+        return "SPIRIT".equals(BilibiliVods.cs2Team(match.home))||"SPIRIT".equals(BilibiliVods.cs2Team(match.away));
+    }
     public static List<Match> worlds(JSONObject root,long fetched) throws Exception {
         if(!root.optString("status").equals("0") || root.optJSONArray("msg")==null)throw new Exception("LOL 官方赛程格式发生变化");
         List<Match> all=new ArrayList<>();JSONArray list=arr(root,"msg");long published=localTime(root.optString("lastUpTime"));
@@ -44,21 +71,22 @@ public final class DomesticEsports {
     private static Match fiveBase(JSONObject mc,JSONObject tournament,long fetched) {
         Match m=new Match();m.id="five:cs2:"+mc.optString("id");m.league="cs2";m.group="CS2";m.source="5EPlay";m.updated=fetched;
         JSONObject home=obj(mc,"t1_info"),away=obj(mc,"t2_info");
-        m.home=DetailParsers.text(home,"disp_name");m.away=DetailParsers.text(away,"disp_name");
+        m.home=teamName(home);m.away=teamName(away);
         m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");
-        m.homeLogo=DetailSources.https(DetailParsers.text(home,"logo"));m.awayLogo=DetailSources.https(DetailParsers.text(away,"logo"));
+        m.homeLogo=crest(home);m.awayLogo=crest(away);
         // The live feed uses ts for the scheduled start; the team feed may only carry plan_ts.
         m.start=seconds(mc.optString("ts"));if(m.start==0)m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
-        if(m.home.isEmpty())m.home="对阵待定";if(m.away.isEmpty())m.away="对阵待定";
-        m.detail=DetailParsers.text(tournament,"disp_name")+(DetailParsers.text(mc,"format").isEmpty()?"":" · BO"+DetailParsers.text(mc,"format"))+(DetailParsers.text(mc,"tt_stage_desc").isEmpty()?"":" · "+DetailParsers.text(mc,"tt_stage_desc"));m.url="https://www.5eplay.com/";return m;
+        m.event=DetailParsers.text(tournament,"disp_name").trim();
+        m.tierOne=isTierOne(DetailParsers.text(tournament,"grade",DetailParsers.text(mc,"grade")),DetailParsers.text(tournament,"grade_label"));
+        String format=DetailParsers.text(mc,"format"),stage=DetailParsers.text(mc,"tt_stage_desc"),detail=m.event;
+        if(!format.isEmpty())detail+=(detail.isEmpty()?"":" · ")+"BO"+format;
+        if(!stage.isEmpty())detail+=(detail.isEmpty()?"":" · ")+stage;
+        m.detail=detail;m.url="https://www.5eplay.com/";return m;
     }
     public static boolean spirit(JSONObject first,JSONObject second){return first.optString("id").equals("csgo_tm_7020")||second.optString("id").equals("csgo_tm_7020");}
+    /** Any 5EPlay match may be opened from the main list or from a team page. */
     public static Match fiveMatch(JSONObject match,long fetched,boolean confirmed) throws Exception {
-        return fiveMatch(match,fetched,confirmed,true);
-    }
-    /** Team pages may open any team's match; the main CS2 list still requires Spirit. */
-    public static Match fiveMatch(JSONObject match,long fetched,boolean confirmed,boolean requireSpirit) throws Exception {
-        JSONObject mc=obj(match,"mc_info");if(requireSpirit&&!spirit(obj(mc,"t1_info"),obj(mc,"t2_info")))throw new Exception("5EPlay 对阵与 Spirit 主队不匹配");
+        JSONObject mc=obj(match,"mc_info");
         Match m=fiveBase(mc,obj(match,"tt_info"),fetched);JSONObject state=obj(match,confirmed?"global_state":"state");
         m.state=switch(state.optString("status")){case "0"->"scheduled";case "1"->"live";case "2"->"final";default->"unknown";};m.status=Rules.stateLabel(m.state);
         if(!m.scheduled()){m.homeScore=score(state,"t1_score");m.awayScore=score(state,"t2_score");}
@@ -71,6 +99,54 @@ public final class DomesticEsports {
         }
         return m;
     }
+    static Match tierOneMatch(JSONObject row,long fetched) throws Exception {
+        if(!tierOne(row))return null;
+        JSONObject mc=obj(row,"mc_info");String id=mc.optString("id");
+        if(!id.matches("csgo_mc_[0-9]+"))return null;
+        return fiveMatch(row,fetched,false);
+    }
+    public static List<Match> tierOneMatches(LocalDate from,LocalDate to,long now) throws Exception {
+        return tierOneMatches(from,to,now,Repository::get);
+    }
+    static List<Match> tierOneMatches(LocalDate from,LocalDate to,long now,Source source) throws Exception {
+        if(to.isBefore(from))to=from;
+        long fromStart=from.atStartOfDay(Match.ZONE).toInstant().toEpochMilli();
+        long toEnd=to.plusDays(1).atStartOfDay(Match.ZONE).toInstant().toEpochMilli()-1;
+        Map<String,Match> all=new LinkedHashMap<>();
+        for(int page=1;page<=MAX_TIER_PAGES;page++) {
+            if(Thread.currentThread().isInterrupted())throw new InterruptedException();
+            JSONObject root=new JSONObject(source.get(TIER_ONE+"&page="+page));
+            if(!root.optBoolean("success"))throw new Exception("5EPlay 一线赛程读取失败");
+            JSONArray rows=obj(root,"data").optJSONArray("matches");
+            if(rows==null)throw new Exception("5EPlay 一线赛程格式变化");
+            if(rows.length()==0)break;
+            long oldest=Long.MAX_VALUE;
+            for(int i=0;i<rows.length();i++) {
+                JSONObject row=rows.optJSONObject(i);if(row==null)continue;
+                JSONObject mc=obj(row,"mc_info");
+                long start=seconds(mc.optString("ts"));if(start==0)start=seconds(mc.optString("plan_ts"));
+                if(start>0)oldest=Math.min(oldest,start);
+                if(start<fromStart||start>toEnd)continue;
+                Match m=tierOneMatch(row,now);if(m!=null)all.putIfAbsent(m.id,m);
+            }
+            // The list is newest-first. Once a page reaches before the requested day, later pages
+            // cannot contain it; a short page is the end of the feed.
+            if(oldest==Long.MAX_VALUE)throw new Exception("5EPlay 一线赛程缺少开赛时间");
+            if(oldest<fromStart||rows.length()<100)break;
+            if(page==MAX_TIER_PAGES)throw new Exception("CS2 一线赛事仅提供最近约 1 年");
+        }
+        return new ArrayList<>(all.values());
+    }
+    static List<Match> merge(List<Match> spirit,List<Match> tierOne) {
+        Map<String,Match> all=new LinkedHashMap<>();
+        if(spirit!=null)for(Match m:spirit)if(m!=null)all.put(m.id,m);
+        // Keep the team-feed version of a duplicate so its home/opponent orientation stays stable.
+        if(tierOne!=null)for(Match m:tierOne)if(m!=null)all.putIfAbsent(m.id,m);
+        return new ArrayList<>(all.values());
+    }
+    public static List<Match> cs2(LocalDate from,LocalDate to,long now) throws Exception {
+        return merge(spirit(from,now),tierOneMatches(from,to,now));
+    }
     public static List<Match> history(JSONObject root,long fetched) throws Exception {
         if(!root.optBoolean("success"))throw new Exception("5EPlay 战队赛程返回失败");
         JSONObject data=obj(root,"data"),items=obj(data,"items");if(items.optJSONArray("matches")==null)throw new Exception("5EPlay 战队赛程格式变化");
@@ -78,8 +154,8 @@ public final class DomesticEsports {
         for(int i=0;i<rows.length();i++) {
             JSONObject row=rows.optJSONObject(i);if(row==null)continue;JSONObject mc=obj(row,"mc_info"),home=obj(mc,"home_info"),away=obj(mc,"opponent_info");
             if(!spirit(home,away))continue;
-            Match m=fiveBase(mc,obj(row,"tt_info"),fetched);m.home=DetailParsers.text(home,"disp_name");m.away=DetailParsers.text(away,"disp_name");m.start=seconds(mc.optString("ts"));m.timeConfirmed=m.start>0;
-            m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");m.homeLogo=DetailSources.https(DetailParsers.text(home,"logo"));m.awayLogo=DetailSources.https(DetailParsers.text(away,"logo"));
+            Match m=fiveBase(mc,obj(row,"tt_info"),fetched);m.home=teamName(home);m.away=teamName(away);m.start=seconds(mc.optString("ts"));if(m.start==0)m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
+            m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");m.homeLogo=crest(home);m.awayLogo=crest(away);
             m.state=switch(mc.optString("status")){case "past"->"final";case "future","upcoming"->"scheduled";case "live"->"live";default->"unknown";};m.status=Rules.stateLabel(m.state);
             // History is in home/opponent coordinates, not t1/t2 coordinates.
             if(!m.scheduled()){m.homeScore=score(mc,"home_score");m.awayScore=score(mc,"opponent_score");}

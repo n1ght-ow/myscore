@@ -153,7 +153,7 @@ final class ScoreAdapter extends BaseAdapter {
             card.setOnClickListener(v->{if(match!=null)host.openMatch(match);});
             metaRow=ui.row();
             league=ui.text("",12,ui.muted,true);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
-            state=ui.text("",12,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(4),0,0,0);LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(0,-2,1);stateParams.setMarginStart(ui.dp(8));metaRow.addView(state,stateParams);
+            state=ui.text("",12,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(4),0,0,0);LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(-2,-2);stateParams.setMarginStart(ui.dp(8));metaRow.addView(state,stateParams);
             card.addView(metaRow);ui.gap(card,6);
 
             LinearLayout homeRow=ui.row();
@@ -181,7 +181,7 @@ final class ScoreAdapter extends BaseAdapter {
             watch.setVisibility(View.GONE);
             sub=new FrameLayout(ui.c);
             sub.setTag("fixture-calendar");
-            subIcon=new Ui.Icon(ui.c,"calendar-add",ui.primary);
+            subIcon=new Ui.Icon(ui.c,"calendar-add",ui.muted);
             sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.CENTER));
             ui.clickable(sub,Color.TRANSPARENT,24);sub.setFocusable(true);
             LinearLayout.LayoutParams subParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));subParams.setMarginStart(ui.dp(8));footRow.addView(sub,subParams);
@@ -194,8 +194,7 @@ final class ScoreAdapter extends BaseAdapter {
 
         void bind(Match m) {
             match=m;
-            Competition comp=Competition.find(m.league);
-            text(league,comp==null?m.group:comp.name);
+            text(league,MatchLabel.of(m));
             state(state,m);
             text(home,m.home);
             text(away,m.away);
@@ -242,7 +241,7 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout footRow=ui.row();
             foot=ui.new MatchTime();footRow.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             sub=new FrameLayout(ui.c);
-            subIcon=new Ui.Icon(ui.c,"calendar-add",ui.primary);
+            subIcon=new Ui.Icon(ui.c,"calendar-add",ui.muted);
             sub.addView(subIcon,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
             ui.clickable(sub,Color.TRANSPARENT,24);sub.setFocusable(true);
             LinearLayout.LayoutParams subParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));subParams.setMarginStart(ui.dp(8));footRow.addView(sub,subParams);
@@ -254,8 +253,7 @@ final class ScoreAdapter extends BaseAdapter {
 
         void bind(Match m) {
             match=m;
-            Competition comp=Competition.find(m.league);
-            text(league,comp==null?m.group:comp.name);
+            text(league,MatchLabel.of(m));
             state(state,m);
             text(title,m.displayTitle());
             text(first,m.results.size()>0?m.results.get(0):"");first.setVisibility(m.results.size()>0?View.VISIBLE:View.GONE);

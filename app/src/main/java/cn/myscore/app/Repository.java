@@ -69,6 +69,8 @@ public final class Repository {
     private static final SingleFlight<Request,String> REQUESTS=new SingleFlight<>();
     private final Context context;
     private static final Object CACHE_LOCK=new Object();
+    // Bump when the CS2 source scope or cached identity fields change; older view caches are ignored.
+    private static final int CS2_CACHE_SCHEMA=3;
     private static final java.util.concurrent.atomic.AtomicLong CACHE_WRITES=new java.util.concurrent.atomic.AtomicLong();
     private record Failure(int count,long until,String message){}
     private final Map<String,Failure> failures=new ConcurrentHashMap<>();
@@ -161,7 +163,7 @@ public final class Repository {
             if(Thread.currentThread().isInterrupted())throw new InterruptedException();
             b.error="";
             List<Match> matches;
-            if(c.id.equals("cs2")) matches=DomesticEsports.spirit(from,now);
+            if(c.id.equals("cs2")) matches=DomesticEsports.cs2(from,to,now);
             else if(c.id.equals("lol")) {matches=DomesticEsports.worlds(new JSONObject(get(DomesticEsports.LOL)),now);try{DetailSources.enrichWorlds(matches);}catch(Exception e){android.util.Log.i("MyScore","Worlds crests temporarily unavailable");}}
             else {
                 matches=espn(c,from,to,now,force,retry,b);
@@ -307,7 +309,11 @@ public final class Repository {
                 File file=cacheFile(c,from,to,prefix);if(!file.exists())return b;
                 JSONObject root=new JSONObject(new String(new AtomicFile(file).readFully(),StandardCharsets.UTF_8));
                 b.fetched=root.optLong("fetched");b.error=root.optString("error");JSONArray a=root.optJSONArray("matches");
-                if(a!=null)for(int i=0;i<a.length();i++)if(a.optJSONObject(i)!=null)b.matches.add(Match.fromJson(a.optJSONObject(i)));
+                // The CS2 list changed from Spirit-only to tier-one + Spirit; old view caches must be
+                // ignored once so an empty Spirit day or a locked terminal match cannot hide tier-one.
+                boolean reset=c.id.equals("cs2")&&root.optInt("schema",0)<CS2_CACHE_SCHEMA;
+                if(reset){b.fetched=0;b.error="";}
+                if(a!=null&&!reset)for(int i=0;i<a.length();i++)if(a.optJSONObject(i)!=null)b.matches.add(Match.fromJson(a.optJSONObject(i)));
             } catch(Exception e) {android.util.Log.w("MyScore","Ignoring unreadable score cache");}
         }
         return b;
@@ -318,7 +324,7 @@ public final class Repository {
             AtomicFile file=new AtomicFile(cacheFile(b.competition,from,to,prefix));FileOutputStream out=null;
             try {
                 JSONArray a=new JSONArray();for(Match m:b.matches)a.put(m.json());
-                JSONObject root=new JSONObject().put("fetched",b.fetched).put("error",b.error).put("matches",a);
+                JSONObject root=new JSONObject().put("fetched",b.fetched).put("error",b.error).put("schema",b.competition.id.equals("cs2")?CS2_CACHE_SCHEMA:0).put("matches",a);
                 out=file.startWrite();out.write(root.toString().getBytes(StandardCharsets.UTF_8));file.finishWrite(out);
             } catch(Exception e) {if(out!=null)file.failWrite(out);android.util.Log.w("MyScore","Cannot persist score cache");}
             // Keep score cache bounded; no personal calendar data is stored here.

@@ -6,9 +6,11 @@ package cn.myscore.app;
  * <p>Migu league zones are the safe fallback; {@code WatchRepository} upgrades a league zone to
  * the exact match page when its public search returns a verified fixture. Worlds finished matches
  * upgrade from the Huya room to Bilibili's official full-series recording, with a "pending" Bilibili
- * card while the recording has not been published yet. Finished Spirit matches use the configured
- * CS2 account with the same replay/pending states. Manchester City's finished cup matches use
- * official highlights; other cup teams, F1 and NFL stay unconfigured.</p>
+ * card while the recording has not been published yet. Finished CS2 matches in tier-one events and
+ * Spirit's matches use the configured CS2 account with the same replay/pending states; other
+ * finished CS2 matches have no verified replay and return no entry instead of an unrelated live room.
+ * Manchester City's finished cup matches use official highlights; other cup teams, F1 and NFL stay
+ * unconfigured.</p>
  */
 final class WatchLinks {
     enum Kind {
@@ -57,7 +59,7 @@ final class WatchLinks {
         switch (match.league) {
             case "epl": return EPL;
             case "nba": return NBA;
-            case "cs2": return CS2;
+            case "cs2": return match.finalised() || match.cancelled() ? null : CS2;
             case "lol": return LOL;
             default: return null;
         }
@@ -70,9 +72,11 @@ final class WatchLinks {
     static Link biliPending(Match match) {
         if (ManCityHighlights.supports(match)) return new Link("哔哩哔哩", "B站", "集锦待发布",
             "曼城 · 赛后集锦稍后更新", BilibiliVods.Source.CITY_HIGHLIGHTS.space(), Kind.PENDING);
-        if (BilibiliVods.source(match) != BilibiliVods.Source.SPIRIT) return BILI_PENDING;
-        return new Link("哔哩哔哩", "B站", "录像待发布", "CS2 · Spirit · 稍后更新",
-            BilibiliVods.Source.SPIRIT.space(), Kind.PENDING);
+        BilibiliVods.Source source = BilibiliVods.source(match);
+        if (source == BilibiliVods.Source.WORLDS) return BILI_PENDING;
+        if (source != BilibiliVods.Source.CS2) return null;
+        return new Link("哔哩哔哩", "B站", "录像待发布", "CS2 · 稍后更新",
+            BilibiliVods.Source.CS2.space(), Kind.PENDING);
     }
 
     static Link biliVideo(String bvid, Match match) {

@@ -66,6 +66,19 @@ public final class CalendarSync {
     }
     public boolean hasSubscriptions() {return !subscribedIds().isEmpty();}
     public boolean isSubscribed(String id) {return links.contains("match:"+id);}
+    /** Adopt MyScore events already present in the shared calendar (possibly created on another device). */
+    public int adopt(List<Match> matches) {
+        if(matches==null||matches.isEmpty()||!permitted(context))return 0;
+        Map<String,Match> known=new HashMap<>();
+        for(Match m:matches)if(m!=null&&!m.id.isBlank())known.put(m.id,m);
+        if(known.isEmpty())return 0;
+        Result result=new Result();
+        synchronized(LOCK) {
+            int recovered=recoverOwnedEvents(known,result);
+            if(result.failed>0)android.util.Log.w("MyScore","Calendar adoption incomplete: "+result.error);
+            return recovered;
+        }
+    }
     public Set<String> subscribedIds() {
         Set<String> ids=new HashSet<>();
         for(String key:links.getAll().keySet())if(key.startsWith("match:"))ids.add(key.substring(6));
@@ -293,9 +306,10 @@ public final class CalendarSync {
         if(context.getContentResolver().update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),values,null,null)!=1)
             throw new IllegalStateException("日历事件未更新，请稍后重试");
     }
-    /** Reuse an orphan only when all installation markers and an existing reminder agree. */
-    private void recoverOwnedEvents(Map<String,Match> known,Result result) {
-        if(known.isEmpty())return;
+    /** Reuse an event created by this app on any device; repair a missing reminder for future matches. */
+    private int recoverOwnedEvents(Map<String,Match> known,Result result) {
+        if(known.isEmpty())return 0;
+        int recovered=0;
         try(Cursor rows=context.getContentResolver().query(CalendarContract.Events.CONTENT_URI,
             new String[]{CalendarContract.Events._ID,CalendarContract.Events.DESCRIPTION,CalendarContract.Events.CUSTOM_APP_URI},
             CalendarContract.Events.CUSTOM_APP_PACKAGE+"=? AND "+CalendarContract.Events.DELETED+"=0",new String[]{context.getPackageName()},null)) {
@@ -304,13 +318,26 @@ public final class CalendarSync {
                 String description=rows.getString(1);if(description==null||!description.startsWith("MyScore:"))continue;
                 int newline=description.indexOf('\n');if(newline<0)continue;
                 String id=description.substring(8,newline);Match match=known.get(id);
-                if(match==null||links.contains("match:"+id)||!description.startsWith("MyScore:"+match.id+"\n"))continue;
+                if(match==null||!description.startsWith("MyScore:"+match.id+"\n"))continue;
+                if(links.contains("match:"+id)) {
+                    long existing=links.getLong("match:"+id,-1);
+                    if(existing>0&&ownsEvent(existing,id))continue;
+                    // The event was deleted or re-created elsewhere (cross-device resubscribe).
+                    links.edit().remove("match:"+id).remove("record:"+id).remove("fingerprint:"+id).apply();
+                }
                 if(!("myscore://match/"+Uri.encode(id)).equals(rows.getString(2)))continue;
-                long event=rows.getLong(0);if(!hasReminder(event)||!ownsEvent(event,id))continue;
+                long event=rows.getLong(0);if(!ownsEvent(event,id))continue;
                 if(!links.edit().putLong("match:"+id,event).putString("record:"+id,match.json().toString()).remove("fingerprint:"+id).commit())
                     throw new IllegalStateException("无法恢复日历关联");
+                recovered++;
+                if(match.start>System.currentTimeMillis()&&!hasReminder(event)) {
+                    long calendar=eventCalendar(event);
+                    try{ensureReminder(event,reminderMethod(calendar>=0?calendar:calendarId()));}
+                    catch(RuntimeException ignored) {android.util.Log.w("MyScore","Adopted event reminder unavailable");}
+                }
             }
         } catch(RuntimeException e) {result.failed++;result.error=readable(e);}
+        return recovered;
     }
     private ContentValues eventValues(Match m,long calendar) {
         Competition c=Competition.find(m.league);

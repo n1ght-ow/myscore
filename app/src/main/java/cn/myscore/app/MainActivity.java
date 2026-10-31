@@ -1271,7 +1271,7 @@ implements ScoreAdapter.Host {
     }
 
     private void help() {
-        this.message("使用帮助", "在比赛卡上点日历加号订阅，点勾选可取消。提醒由系统日历发送；小米 / 澎湃 OS 需要允许日历通知与后台运行。\n\n更换接收日历只影响新订阅，已有事件保留在原日历。\n\n体育由 ESPN 提供；CS2 仅 Spirit 主队，来自 5EPlay；LOL 仅 Worlds，来自英雄联盟赛事官网。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");
+        this.message("使用帮助", "在比赛卡上点日历加号订阅，点勾选可取消。提醒由系统日历发送；小米 / 澎湃 OS 需要允许日历通知与后台运行。\n\n更换接收日历只影响新订阅，已有事件保留在原日历。\n\n体育由 ESPN 提供；CS2 来自 5EPlay：一线赛事（Major / S+ / S 级）与 Team Spirit 全部比赛，一线赛事卡片显示赛事名，Spirit 的次级比赛显示 CS2 · Team Spirit；LOL 仅 Worlds，来自英雄联盟赛事官网。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");
     }
 
     private String calendarName() {
@@ -1460,7 +1460,7 @@ implements ScoreAdapter.Host {
         }
         ArrayList<Sheet.Item> items = new ArrayList<Sheet.Item>();
         for (Match m : list) {
-            items.add(new Sheet.Item(m.displayTitle(), MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · " + (Competition.find(m.league) == null ? m.league : Competition.find((String)m.league).name), false));
+            items.add(new Sheet.Item(m.displayTitle(), MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · " + MatchLabel.of(m), false));
         }
         Sheet.choose(this, "已订阅的比赛", "点选一场可取消订阅。提醒由系统日历发送。", items, -1, index -> {
             Match m = (Match)list.get(index);
@@ -2224,9 +2224,8 @@ implements ScoreAdapter.Host {
             host.addView((View)empty);
             return;
         }
-        Competition competition = Competition.find(m.league);
         LinearLayout eyebrow = this.ui.row();
-        TextView kicker = this.ui.text((competition == null ? m.group : competition.name), 11, this.ui.muted, true);
+        TextView kicker = this.ui.text(MatchLabel.of(m), 11, this.ui.muted, true);
         kicker.setLetterSpacing(0.06f);
         eyebrow.addView((View)kicker, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         TextView updated = this.ui.text(padUpdatedText(m), 11, this.ui.muted, false);
@@ -2338,7 +2337,7 @@ implements ScoreAdapter.Host {
             FrameLayout subscribe = this.padIconAction(isSubscribed ? "calendar-check" : "calendar-add", isSubscribed ? "取消比赛提醒" : "订阅比赛提醒", () -> this.toggleSubscription(m));
             subscribe.setSelected(isSubscribed);
             subscribe.setTooltipText(isSubscribed ? "取消提醒" : "订阅提醒");
-            ((Ui.Icon)subscribe.getChildAt(0)).set(isSubscribed ? "calendar-check" : "calendar-add", isSubscribed ? this.ui.primary : this.ui.text);
+            ((Ui.Icon)subscribe.getChildAt(0)).set(isSubscribed ? "calendar-check" : "calendar-add", isSubscribed ? this.ui.primary : this.ui.muted);
             actions.addView(subscribe, new LinearLayout.LayoutParams(this.ui.dp(48), this.ui.dp(48)));
         }
         View gap2 = new View((Context)this);

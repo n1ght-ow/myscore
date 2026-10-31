@@ -27,7 +27,6 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import cn.myscore.app.BuildConfig;
-import cn.myscore.app.Competition;
 import cn.myscore.app.DetailParsers;
 import cn.myscore.app.DetailRepository;
 import cn.myscore.app.DetailRows;
@@ -564,9 +563,8 @@ extends Activity {
     }
 
     private void updatePadChrome() {
-        Competition competition = Competition.find(this.match.league);
         if (this.padTitle != null) {
-            this.padTitle.setText((CharSequence)(competition == null ? this.match.group : competition.name));
+            this.padTitle.setText((CharSequence)MatchLabel.of(this.match));
         }
         if (this.padSubtitle != null) {
             String when = this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M月d日 EEE HH:mm") : "时间待定";
@@ -974,8 +972,7 @@ extends Activity {
         LinearLayout appbar = this.ui.row();
         appbar.setPadding(this.ui.dp(4.0f), this.ui.dp(4.0f), this.ui.dp(4.0f), this.ui.dp(2.0f));
         appbar.addView((View)this.iconButton("back", "返回比赛列表", () -> ((DetailActivity)this).finish()));
-        Competition competition = Competition.find(this.match.league);
-        TextView title = this.ui.text(competition == null ? this.match.group : competition.name, 16, this.ui.text, true);
+        TextView title = this.ui.text(MatchLabel.of(this.match), 16, this.ui.text, true);
         title.setGravity(17);
         appbar.addView((View)title, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         appbar.addView((View)this.iconButton("refresh", "刷新比赛详情", () -> this.load(true)));

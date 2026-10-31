@@ -34,10 +34,10 @@ public final class MatchResolver implements CalendarSync.Resolver {
             if(!shared.containsKey("worlds"))shared.put("worlds",DomesticEsports.worlds(new JSONObject(source.get(DomesticEsports.LOL)),now));
             candidates=shared.get("worlds");
         } else if(previous.id.startsWith("five:cs2:")) {
-            String id=previous.id.substring("five:cs2:".length());if(!id.matches("csgo_mc_[0-9]+"))throw new Exception("Spirit 比赛标识无效");
+            String id=previous.id.substring("five:cs2:".length());if(!id.matches("csgo_mc_[0-9]+"))throw new Exception("CS2 比赛标识无效");
             JSONObject root=new JSONObject(source.get(DomesticEsports.FIVE+"matches/"+id+"/data"));
             JSONObject data=root.optJSONObject("data"),match=data==null?null:data.optJSONObject("match");
-            if(!root.optBoolean("success")||match==null)throw new Exception("Spirit 已导入比赛详情暂不可用");
+            if(!root.optBoolean("success")||match==null)throw new Exception("CS2 已导入比赛详情暂不可用");
             candidates=java.util.Collections.singletonList(DomesticEsports.fiveMatch(match,now,true));
         } else throw new Exception("来源暂不支持身份复核");
         for(Match m:candidates)if(m.id.equals(previous.id)){if(m.url.isEmpty())m.url=previous.url;return m;}

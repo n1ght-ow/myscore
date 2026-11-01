@@ -2,6 +2,10 @@ package cn.myscore.app;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.database.ContentObserver;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.CalendarContract;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -16,10 +20,37 @@ final class CalendarUpdates {
     private static final Map<String,Match> PENDING=new LinkedHashMap<>();
     private static final Map<String,String> CHECKED_ORPHANS=new HashMap<>();
     private static boolean running;
+    private static boolean recoverPending;
+    private static ContentObserver observer;
+    private static final Handler MAIN=new Handler(Looper.getMainLooper());
+    private static Runnable calendarChanged;
+    /** Called on resume, including after calendar permission is granted. Never waits for network. */
+    static void start(Context context) {
+        if(!CalendarSync.permitted(context))return;
+        Context app=context.getApplicationContext();
+        synchronized(PENDING) {
+            if(observer==null) {
+                calendarChanged=()->recover(app);
+                ContentObserver candidate=new ContentObserver(MAIN) {
+                    @Override public void onChange(boolean selfChange) {
+                        MAIN.removeCallbacks(calendarChanged);MAIN.postDelayed(calendarChanged,200);
+                    }
+                };
+                try {app.getContentResolver().registerContentObserver(CalendarContract.CONTENT_URI,true,candidate);observer=candidate;}
+                catch(RuntimeException e){android.util.Log.w("MyScore","Calendar observer unavailable",e);}
+            }
+        }
+        recover(app);
+    }
+    private static void recover(Context app) {
+        synchronized(PENDING) {
+            CHECKED_ORPHANS.clear();recoverPending=true;
+            if(running)return;running=true;WORKER.execute(()->drain(app));
+        }
+    }
     static void observe(Context context,List<Match> matches) {
         if(matches==null||matches.isEmpty()||!CalendarSync.permitted(context))return;
-        Context app=context.getApplicationContext();SharedPreferences settings=app.getSharedPreferences("settings",0),links=app.getSharedPreferences("calendar-links",0);
-        if(settings.getLong("calendar_id",-1)<0&&!hasLinks(links))return;
+        Context app=context.getApplicationContext();SharedPreferences links=app.getSharedPreferences("calendar-links",0);
         synchronized(PENDING) {
             for(Match match:matches) {
                 if(match==null||match.id.isBlank())continue;
@@ -44,14 +75,23 @@ final class CalendarUpdates {
     private static void drain(Context app) {
         for(;;) {
             List<Match> batch;
-            synchronized(PENDING){if(PENDING.isEmpty()){running=false;return;}batch=new ArrayList<>(PENDING.values());PENDING.clear();}
+            boolean local;
+            synchronized(PENDING){if(PENDING.isEmpty()&&!recoverPending){running=false;return;}local=recoverPending;recoverPending=false;batch=new ArrayList<>(PENDING.values());PENDING.clear();}
             try {
-                CalendarSync.Result result=new CalendarSync(app).syncKnown(batch,System.currentTimeMillis());
+                CalendarSync sync=new CalendarSync(app);
+                if(local){
+                    long started=android.os.SystemClock.uptimeMillis();
+                    CalendarSync.Result result=sync.recoverLocal();
+                    if(result.inserted>0)CalendarJob.schedule(app);
+                    android.util.Log.i("MyScorePerf","calendar local recovery in "+(android.os.SystemClock.uptimeMillis()-started)+"ms links="+result.inserted+" reminders="+result.updated+" failed="+result.failed);
+                    if(result.failed>0)android.util.Log.w("MyScore","Calendar recovery incomplete: "+result.error);
+                }
+                if(batch.isEmpty())continue;
+                CalendarSync.Result result=sync.syncKnown(batch,System.currentTimeMillis());
                 if(result.failed>0){synchronized(PENDING){for(Match m:batch)CHECKED_ORPHANS.remove(m.id);}android.util.Log.w("MyScore","Calendar source update incomplete: "+result.message());}
             }catch(RuntimeException e){synchronized(PENDING){for(Match m:batch)CHECKED_ORPHANS.remove(m.id);}android.util.Log.w("MyScore","Calendar source update failed",e);}
         }
     }
-    private static boolean hasLinks(SharedPreferences links){for(String key:links.getAll().keySet())if(key.startsWith("match:"))return true;return false;}
     private static String signature(Match m){return m.start+"|"+m.timeConfirmed+"|"+m.state+"|"+m.displayTitle();}
     static void awaitIdle()throws Exception {WORKER.submit(()->{}).get(10,java.util.concurrent.TimeUnit.SECONDS);}
 }

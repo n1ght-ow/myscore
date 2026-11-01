@@ -18,7 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** Single-match calendar subscriptions. Only events tagged by this installation can ever be changed. */
+/** Single-match calendar subscriptions. Only events carrying the app's ownership markers change. */
 public final class CalendarSync {
     public interface Resolver {
         default void beginSync() {}
@@ -43,12 +43,20 @@ public final class CalendarSync {
     private final Context context;
     private final SharedPreferences preferences,links;
     private final Resolver resolver;
+    private final java.util.function.LongConsumer cloudChanged;
     public CalendarSync(Context c) {this(c,new MatchResolver());}
     public CalendarSync(Context c,Resolver resolver) {
+        this(c,resolver,null);
+    }
+    CalendarSync(Context c,Resolver resolver,java.util.function.LongConsumer cloudChanged) {
         context=c.getApplicationContext();
         preferences=context.getSharedPreferences("settings",Context.MODE_PRIVATE);
         links=context.getSharedPreferences("calendar-links",Context.MODE_PRIVATE);
         this.resolver=resolver;
+        this.cloudChanged=cloudChanged==null?id->CalendarCloudSync.changed(context,id):cloudChanged;
+    }
+    private void requestCloud(long calendar) {
+        try{cloudChanged.accept(calendar);}catch(RuntimeException e){android.util.Log.w("MyScore","Cloud request could not be queued: "+e.getClass().getSimpleName());}
     }
     public static boolean permitted(Context c) {
         return c.checkSelfPermission(Manifest.permission.READ_CALENDAR)==PackageManager.PERMISSION_GRANTED && c.checkSelfPermission(Manifest.permission.WRITE_CALENDAR)==PackageManager.PERMISSION_GRANTED;
@@ -61,8 +69,11 @@ public final class CalendarSync {
         return all.isEmpty()?null:all.get(0);
     }
     public boolean hasCalendar(long id) {
-        for(CalendarChoice choice:calendars())if(choice.id==id)return true;
-        return false;
+        List<CalendarChoice> choices=calendars();
+        for(CalendarChoice choice:choices)if(choice.id==id)return true;
+        // HyperOS can temporarily return no calendar rows during cloud sync. Keep an
+        // explicitly remembered choice; the provider still validates the actual write.
+        return choices.isEmpty()&&id>=0&&id==calendarId()&&!calendarName().isBlank();
     }
     public boolean hasSubscriptions() {return !subscribedIds().isEmpty();}
     public boolean isSubscribed(String id) {return links.contains("match:"+id);}
@@ -78,6 +89,13 @@ public final class CalendarSync {
             if(result.failed>0)android.util.Log.w("MyScore","Calendar adoption incomplete: "+result.error);
             return recovered;
         }
+    }
+    /** Local-only recovery, independent of score requests and their network deadlines. */
+    Result recoverLocal() {
+        Result result=new Result();
+        if(!permitted(context))return result;
+        synchronized(LOCK){result.inserted=recoverOwnedEvents(null,result);}
+        return result;
     }
     public Set<String> subscribedIds() {
         Set<String> ids=new HashSet<>();
@@ -145,6 +163,7 @@ public final class CalendarSync {
         synchronized(LOCK) {
             String key="match:"+m.id;
             try {
+                links.edit().remove("retired:"+m.id).apply();
                 if(!links.contains(key)) {
                     recoverOwnedEvents(Map.of(m.id,m),result);
                     if(result.failed>0)return result;
@@ -168,6 +187,7 @@ public final class CalendarSync {
                 }
                 ensureReminder(eventId,method);
                 links.edit().putString("record:"+m.id,m.json().toString()).putString("fingerprint:"+m.id,fingerprint(m,target)).apply();
+                requestCloud(target);
             } catch(Exception e) {
                 result.failed++;result.error=readable(e);
                 android.util.Log.w("MyScore","Calendar subscribe failed: "+e.getClass().getSimpleName());
@@ -181,7 +201,21 @@ public final class CalendarSync {
         synchronized(LOCK) {
             long eventId=links.getLong("match:"+id,-1);
             try {
-                if(eventId>0&&ownsEvent(eventId,id))context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),null,null);
+                Map<Long,Long> events=new HashMap<>();
+                // A rapid remote cancel/resubscribe may leave more than one local event for
+                // the same match. Cancel every strictly owned copy, not only the saved id.
+                try(Cursor rows=context.getContentResolver().query(CalendarContract.Events.CONTENT_URI,
+                    new String[]{CalendarContract.Events._ID,CalendarContract.Events.CALENDAR_ID,CalendarContract.Events.CUSTOM_APP_URI,CalendarContract.Events.DESCRIPTION},
+                    CalendarContract.Events.CUSTOM_APP_PACKAGE+"=? AND "+CalendarContract.Events.DESCRIPTION+" LIKE ? AND "+CalendarContract.Events.DELETED+"=0",
+                    new String[]{context.getPackageName(),"MyScore:"+id+"\n%"},null)) {
+                    if(rows==null)throw new IllegalStateException("无法读取日历事件");
+                    while(rows.moveToNext())if(("myscore://match/"+Uri.encode(id)).equals(rows.getString(2))
+                        &&rows.getString(3)!=null&&rows.getString(3).startsWith("MyScore:"+id+"\n"))events.put(rows.getLong(0),rows.getLong(1));
+                }
+                if(eventId>0&&ownsEvent(eventId,id))events.put(eventId,eventCalendar(eventId));
+                Set<Long> calendars=new HashSet<>();
+                for(Map.Entry<Long,Long> event:events.entrySet())if(context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,event.getKey()),null,null)>0)calendars.add(event.getValue());
+                for(long calendar:calendars)requestCloud(calendar);
                 removeLink(id);result.cancelled++;
             } catch(RuntimeException e) {result.failed++;result.error=readable(e);}
         }
@@ -259,10 +293,12 @@ public final class CalendarSync {
                         // Keep the historical calendar event, but stop tracking a completed match.
                         if(m.timeConfirmed&&m.start>0)updateEvent(sub.eventId,m,calendar,false);
                         deleteReminders(sub.eventId);
+                        links.edit().putLong("retired:"+sub.id,sub.eventId).apply();
                         removeLink(sub.id);result.completed++;continue;
                     }
                     if(m.cancelled()) {
-                        context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,sub.eventId),null,null);
+                        if(context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,sub.eventId),null,null)>0)
+                            requestCloud(calendar);
                         removeLink(sub.id);result.cancelled++;continue;
                     }
                     if(m.live()) {
@@ -283,7 +319,10 @@ public final class CalendarSync {
                         ensureReminder(sub.eventId,reminderMethod(calendar));
                         result.updated++;
                         links.edit().putString("record:"+sub.id,m.json().toString()).putString("fingerprint:"+sub.id,fingerprint).apply();
-                    } else saveRecord(sub.id,m);
+                    } else {
+                        if(!hasReminder(sub.eventId))ensureReminder(sub.eventId,reminderMethod(calendar));
+                        saveRecord(sub.id,m);
+                    }
                 } catch(Exception e) {
                     result.failed++;
                     android.util.Log.w("MyScore","Calendar apply failed: "+e.getClass().getSimpleName());
@@ -303,41 +342,125 @@ public final class CalendarSync {
     }
     private void updateEvent(long eventId,Match m,long calendar,boolean alarm) {
         ContentValues values=eventValues(m,calendar);values.put(CalendarContract.Events.HAS_ALARM,alarm?1:0);
+        // Read actual provider fields: a recovered cloud event has no local fingerprint yet.
+        // A no-op UPDATE would dirty it and cause an upload/download feedback loop.
+        String[] columns=values.keySet().toArray(new String[0]);
+        try(Cursor row=context.getContentResolver().query(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),columns,null,null,null)) {
+            if(row==null)throw new IllegalStateException("无法读取日历事件");
+            if(row.moveToFirst()) {
+                boolean same=true;
+                for(int i=0;i<columns.length;i++)if(!java.util.Objects.equals(values.getAsString(columns[i]),row.isNull(i)?null:row.getString(i))){same=false;break;}
+                if(same)return;
+            }
+        }
         if(context.getContentResolver().update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),values,null,null)!=1)
             throw new IllegalStateException("日历事件未更新，请稍后重试");
+        requestCloud(calendar);
     }
     /** Reuse an event created by this app on any device; repair a missing reminder for future matches. */
     private int recoverOwnedEvents(Map<String,Match> known,Result result) {
-        if(known.isEmpty())return 0;
+        if(known!=null&&known.isEmpty())return 0;
         int recovered=0;
+        long now=System.currentTimeMillis();
+        Map<String,OwnedEvent> owned=new HashMap<>();
+        Map<String,List<OwnedEvent>> copies=new HashMap<>();
+        // One ownership snapshot replaces one provider read per event and per existing link.
         try(Cursor rows=context.getContentResolver().query(CalendarContract.Events.CONTENT_URI,
-            new String[]{CalendarContract.Events._ID,CalendarContract.Events.DESCRIPTION,CalendarContract.Events.CUSTOM_APP_URI},
-            CalendarContract.Events.CUSTOM_APP_PACKAGE+"=? AND "+CalendarContract.Events.DELETED+"=0",new String[]{context.getPackageName()},null)) {
+            new String[]{CalendarContract.Events._ID,CalendarContract.Events.DESCRIPTION,CalendarContract.Events.CUSTOM_APP_URI,
+                CalendarContract.Events.DTSTART,CalendarContract.Events.CALENDAR_ID,CalendarContract.Events.TITLE,
+                CalendarContract.Events._SYNC_ID,CalendarContract.Events.DIRTY},
+            CalendarContract.Events.CUSTOM_APP_PACKAGE+"=? AND "+CalendarContract.Events.DELETED+"=0",new String[]{context.getPackageName()},CalendarContract.Events._ID+" DESC")) {
             if(rows==null)throw new IllegalStateException("无法读取日历事件");
             while(rows.moveToNext()) {
                 String description=rows.getString(1);if(description==null||!description.startsWith("MyScore:"))continue;
-                int newline=description.indexOf('\n');if(newline<0)continue;
-                String id=description.substring(8,newline);Match match=known.get(id);
-                if(match==null||!description.startsWith("MyScore:"+match.id+"\n"))continue;
-                if(links.contains("match:"+id)) {
-                    long existing=links.getLong("match:"+id,-1);
-                    if(existing>0&&ownsEvent(existing,id))continue;
-                    // The event was deleted or re-created elsewhere (cross-device resubscribe).
-                    links.edit().remove("match:"+id).remove("record:"+id).remove("fingerprint:"+id).apply();
-                }
+                int newline=description.indexOf('\n');if(newline<=8)continue;
+                String id=description.substring(8,newline);
+                if(known!=null&&!known.containsKey(id))continue;
                 if(!("myscore://match/"+Uri.encode(id)).equals(rows.getString(2)))continue;
-                long event=rows.getLong(0);if(!ownsEvent(event,id))continue;
-                if(!links.edit().putLong("match:"+id,event).putString("record:"+id,match.json().toString()).remove("fingerprint:"+id).commit())
-                    throw new IllegalStateException("无法恢复日历关联");
-                recovered++;
-                if(match.start>System.currentTimeMillis()&&!hasReminder(event)) {
-                    long calendar=eventCalendar(event);
-                    try{ensureReminder(event,reminderMethod(calendar>=0?calendar:calendarId()));}
-                    catch(RuntimeException ignored) {android.util.Log.w("MyScore","Adopted event reminder unavailable");}
-                }
+                OwnedEvent event=new OwnedEvent(rows.getLong(0),rows.getLong(3),rows.getLong(4),rows.getString(5),description,rows.getString(6),rows.getInt(7)!=0);
+                copies.computeIfAbsent(id+"\n"+event.calendar,key->new ArrayList<>()).add(event);
+                OwnedEvent previous=owned.get(id);
+                if(previous==null||event.eventId==links.getLong("match:"+id,-1))owned.put(id,event);
             }
-        } catch(RuntimeException e) {result.failed++;result.error=readable(e);}
+        } catch(RuntimeException e) {result.failed++;result.error=readable(e);return 0;}
+        // Rapid cancel/resubscribe can download a stale copy while a new event uploads.
+        // Only deduplicate fully acknowledged copies in the SAME calendar. Cloud IDs give
+        // every device the same ordering; local row IDs could make devices delete each other.
+        Set<Long> deduplicated=new HashSet<>();
+        for(List<OwnedEvent> group:copies.values()) {
+            if(group.size()<2||group.stream().anyMatch(e->e.start<=now||e.dirty||e.sync==null||e.sync.isBlank()))continue;
+            if(group.stream().map(e->e.sync).distinct().count()!=group.size())continue;
+            OwnedEvent keep=group.stream().max(Comparator.comparing(e->e.sync)).orElseThrow();
+            String id=keep.description.substring(8,keep.description.indexOf('\n'));
+            try {
+                for(OwnedEvent duplicate:group)if(duplicate!=keep) {
+                    if(context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,duplicate.eventId),null,null)>0)
+                        deduplicated.add(duplicate.calendar);
+                }
+                if(owned.get(id).calendar==keep.calendar)owned.put(id,keep);
+            }catch(RuntimeException e){result.failed++;result.error=readable(e);}
+        }
+        for(long calendar:deduplicated)requestCloud(calendar);
+        SharedPreferences.Editor edit=links.edit();boolean changed=false;
+        if(known==null)for(String key:links.getAll().keySet())if(key.startsWith("match:")&&!owned.containsKey(key.substring(6))) {
+            String id=key.substring(6);edit.remove(key).remove("record:"+id).remove("fingerprint:"+id);changed=true;
+        }
+        List<OwnedEvent> reminders=new ArrayList<>();
+        for(Map.Entry<String,OwnedEvent> entry:owned.entrySet()) {
+            String id=entry.getKey();OwnedEvent event=entry.getValue();
+            boolean linked=links.getLong("match:"+id,-1)==event.eventId;
+            if(!linked&&links.getLong("retired:"+id,-1)==event.eventId)continue;
+            Match match=known==null?null:known.get(id);
+            if(known==null&&linked)try {
+                String record=links.getString("record:"+id,"");if(!record.isBlank())match=Match.fromJson(new org.json.JSONObject(record));
+            }catch(Exception ignored){}
+            if(!linked&&(event.start<=now||(match!=null&&(match.finalised()||match.cancelled()))))continue;
+            if(!linked) {
+                edit.putLong("match:"+id,event.eventId).remove("fingerprint:"+id);changed=true;recovered++;
+            }
+            if(!links.contains("record:"+id)||(!linked&&known==null)) {
+                if(match==null)match=calendarRecord(id,event);
+                if(match!=null){edit.putString("record:"+id,match.json().toString());changed=true;}
+            }
+            if(event.start>now&&(match==null||match.scheduled()||match.state.equals("unknown")))reminders.add(event);
+        }
+        if(changed&&!edit.commit()){result.failed++;result.error="无法恢复日历关联";return 0;}
+        // Read all five-minute reminders once; linked events need repair too, even if the
+        // source fingerprint did not change. No writes are made when the reminder is intact.
+        if(!reminders.isEmpty())try {
+            Set<Long> ready=new HashSet<>();
+            try(Cursor rows=context.getContentResolver().query(CalendarContract.Reminders.CONTENT_URI,
+                new String[]{CalendarContract.Reminders.EVENT_ID},CalendarContract.Reminders.MINUTES+"=?",
+                new String[]{Integer.toString(REMIND_MINUTES)},null)) {
+                if(rows==null)throw new IllegalStateException("无法读取日历提醒");
+                while(rows.moveToNext())ready.add(rows.getLong(0));
+            }
+            Map<Long,Integer> methods=new HashMap<>();
+            for(OwnedEvent event:reminders)if(!ready.contains(event.eventId)) {
+                try {
+                    int method=methods.computeIfAbsent(event.calendar,this::reminderMethod);
+                    ensureReminder(event.eventId,method);
+                    ContentValues alarm=new ContentValues();alarm.put(CalendarContract.Events.HAS_ALARM,1);
+                    if(context.getContentResolver().update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,event.eventId),alarm,null,null)!=1)
+                        throw new IllegalStateException("日历提醒状态未更新");
+                    result.updated++;
+                    requestCloud(event.calendar);
+                }catch(RuntimeException e){result.failed++;result.error=readable(e);}
+            }
+        }catch(RuntimeException e){result.failed++;result.error=readable(e);}
         return recovered;
+    }
+    private record OwnedEvent(long eventId,long start,long calendar,String title,String description,String sync,boolean dirty){}
+    /** Calendar facts only; the source resolver must confirm the match's current state. */
+    private Match calendarRecord(String id,OwnedEvent event) {
+        String[] parts=id.split(":");Competition c=parts.length>1?Competition.find(parts[1]):null;
+        if(c==null)return null;
+        Match m=new Match();m.id=id;m.league=c.id;m.group=c.group;m.start=event.start;m.timeConfirmed=event.start>0;
+        m.title=event.title==null?"":event.title;String prefix=c.name+" · ";if(m.title.startsWith(prefix))m.title=m.title.substring(prefix.length());
+        m.status="日历订阅 · 等待来源确认";
+        String[] lines=event.description.split("\n");String sourcePrefix="北京时间 · ";if(lines.length>1&&lines[1].startsWith(sourcePrefix))m.source=lines[1].substring(sourcePrefix.length());
+        if(lines.length>2)m.url=lines[2];
+        return m;
     }
     private ContentValues eventValues(Match m,long calendar) {
         Competition c=Competition.find(m.league);
@@ -356,6 +479,7 @@ public final class CalendarSync {
         return event;
     }
     private void ensureReminder(long eventId,int method) {
+        if(hasReminder(eventId))return;
         long reminder=tryReminder(eventId,method);
         if(reminder<0&&method!=CalendarContract.Reminders.METHOD_DEFAULT)reminder=tryReminder(eventId,CalendarContract.Reminders.METHOD_DEFAULT);
         if(reminder<0) {
@@ -369,7 +493,7 @@ public final class CalendarSync {
     }
     private boolean hasReminder(long eventId) {
         try(Cursor cur=context.getContentResolver().query(CalendarContract.Reminders.CONTENT_URI,
-            new String[]{"_id"},"event_id=?",new String[]{Long.toString(eventId)},null)) {
+            new String[]{"_id"},"event_id=? AND minutes=?",new String[]{Long.toString(eventId),Integer.toString(REMIND_MINUTES)},null)) {
             if(cur==null)throw new IllegalStateException("无法读取日历提醒");
             return cur.moveToFirst();
         }

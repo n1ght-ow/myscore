@@ -151,7 +151,17 @@ final class ScoreAdapter extends BaseAdapter {
             card=ui.column();card.setPadding(ui.dp(18),ui.dp(14),ui.dp(18),ui.dp(8));
             ui.clickable(card,ui.surface,Ui.CARD_RADIUS);card.setFocusable(true);
             card.setOnClickListener(v->{if(match!=null)host.openMatch(match);});
-            metaRow=ui.row();
+            metaRow=new LinearLayout(ui.c) {
+                @Override protected void onMeasure(int width,int height) {
+                    if(MeasureSpec.getMode(width)!=MeasureSpec.UNSPECIFIED) {
+                        int available=MeasureSpec.getSize(width)-getPaddingLeft()-getPaddingRight();
+                        int label=Math.min(available/2,(int)Math.ceil(league.getPaint().measureText(league.getText().toString())));
+                        state.setMaxWidth(Math.max(0,available-label-ui.dp(8)));
+                    }
+                    super.onMeasure(width,height);
+                }
+            };
+            metaRow.setOrientation(LinearLayout.HORIZONTAL);metaRow.setGravity(Gravity.CENTER_VERTICAL);
             league=ui.text("",12,ui.muted,true);metaRow.addView(league,new LinearLayout.LayoutParams(0,-2,1));
             state=ui.text("",12,ui.primary,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(4),0,0,0);LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(-2,-2);stateParams.setMarginStart(ui.dp(8));metaRow.addView(state,stateParams);
             card.addView(metaRow);ui.gap(card,6);

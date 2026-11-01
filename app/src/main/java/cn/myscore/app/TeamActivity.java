@@ -38,6 +38,9 @@ public final class TeamActivity extends Activity {
     private LinearLayout filters;
     private String filter="upcoming";
     private CalendarSync calendarSync;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener calendarListener=(preferences,key)->{
+        if(key!=null&&key.startsWith("match:")){handler.removeCallbacks(this.renderSoon);handler.postDelayed(this.renderSoon,32);}
+    };
     private Match pendingSubscription;
     private boolean calendarBusy;
     private final ExecutorService calendarWorker=Executors.newSingleThreadExecutor();
@@ -68,6 +71,7 @@ public final class TeamActivity extends Activity {
         if(team==null||!team.usable()){finish();return;}
         if(saved!=null){pendingPosition=saved.getInt("position",-1);pendingPadUpcoming=saved.getInt("pad_upcoming",-1);pendingPadFinished=saved.getInt("pad_finished",-1);filter=saved.getString("filter","all");String pending=saved.getString("pending_subscription","");if(!pending.isEmpty())try{pendingSubscription=Match.fromJson(new JSONObject(pending));}catch(Exception ignored){pendingSubscription=null;}}
         repository=new TeamRepository(this);calendarSync=new CalendarSync(this);
+        getSharedPreferences("calendar-links",0).registerOnSharedPreferenceChangeListener(calendarListener);
         getWindow().setStatusBarColor(ui.bg);getWindow().setNavigationBarColor(ui.bg);
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(ui.bg));
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
@@ -81,9 +85,9 @@ public final class TeamActivity extends Activity {
         root.requestApplyInsets();
         build();
     }
-    @Override public void onResume(){super.onResume();active=true;if(repository==null||isFinishing())return;render();if(pendingForce||!TeamRepository.fresh(result,System.currentTimeMillis()))load(false);else schedule();}
+    @Override public void onResume(){super.onResume();active=true;if(repository==null||isFinishing())return;CalendarUpdates.start(this);render();if(pendingForce||!TeamRepository.fresh(result,System.currentTimeMillis()))load(false);else schedule();}
     @Override public void onPause(){active=false;handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);super.onPause();}
-    @Override public void onDestroy(){active=false;Sheet.dismissAll(this);handler.removeCallbacksAndMessages(null);worker.shutdownNow();calendarWorker.shutdownNow();super.onDestroy();}
+    @Override public void onDestroy(){active=false;getSharedPreferences("calendar-links",0).unregisterOnSharedPreferenceChangeListener(calendarListener);Sheet.dismissAll(this);handler.removeCallbacksAndMessages(null);worker.shutdownNow();calendarWorker.shutdownNow();super.onDestroy();}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putInt("position",list==null?pendingPosition:list.getFirstVisiblePosition());state.putInt("pad_upcoming",padUpcomingList==null?pendingPadUpcoming:padUpcomingList.getFirstVisiblePosition());state.putInt("pad_finished",padFinishedList==null?pendingPadFinished:padFinishedList.getFirstVisiblePosition());state.putString("filter",filter);if(pendingSubscription!=null)state.putString("pending_subscription",pendingSubscription.json().toString());}
 
@@ -317,14 +321,13 @@ public final class TeamActivity extends Activity {
         worker.submit(()-> {
             if(readCache) {
                 TeamRepository.Result cached=repository.cached(requested);
-                if(cached.fetched>0){int adopted=calendarSync.adopt(cached.matches);handler.post(()->{if(isDestroyed())return;result=cached;render();if(adopted>0)refreshSubscriptionViews();});}
+                if(cached.fetched>0){handler.post(()->{if(isDestroyed())return;result=cached;render();});CalendarUpdates.observe(this,cached.matches);}
             }
             TeamRepository.Result next=repository.fetch(requested,forced);
-            int adopted=calendarSync.adopt(next.matches);
             handler.post(()-> {
                 if(isDestroyed())return;
                 busy=false;result=next;
-                if(active){render();if(adopted>0)refreshSubscriptionViews();if(pendingForce)load(false);else schedule();}
+                if(active){render();if(pendingForce)load(false);else schedule();}
             });
         });
     }

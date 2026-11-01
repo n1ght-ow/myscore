@@ -47,6 +47,7 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
                 java.io.FileInputStream output=new java.io.FileInputStream(descriptor.getFileDescriptor())){output.readAllBytes();}
             Activity activity=waitForMonitorWithTimeout(launch,10000);removeMonitor(launch);
             require(activity!=null,"main screen starts on the selected device");
+            checks+=DateRefreshChecks.run(this,activity);
             waitForIdleSync();Thread.sleep(700);waitForIdleSync();
             if(review)SpaceReview.run(this,activity);
             else tabletNavigation(activity);

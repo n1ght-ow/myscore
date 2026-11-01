@@ -54,7 +54,7 @@ android
 
 ## Evidence on Hand
 
-当前版本为 4.7.0 / 52；当前验证范围见 VERIFICATION.md 的 4.7.0 节。以下为按日期保留的历史证据，不能代表当前版本的验收覆盖。
+当前版本为 4.8.0 / 53；当前验证范围见 VERIFICATION.md 的 4.8.0 节。以下为按日期保留的历史证据，不能代表当前版本的验收覆盖。
 
 - 2026-10-27 4.1.1 稳定性与内存：158 项 JVM 测试（新增 3 项）、Lint 0 错误 / 26 警告、手机尺寸 280 项 `SmokeInstrumentation` 通过；平板刷新跳过阅读栏重建，系统 `RUNNING_LOW` 释放 2,285,568 字节队标缓存；同设备单次滑动 P99 24 → 19 ms。详见 `VERIFICATION.md`。
 - 2026-10-27 4.1.0 平板工作台：3048 × 2032 / 320 dpi AVD 横竖屏与手机 411dp 回退实际截图；155 项 JVM 测试与 Lint（0 错误 / 26 警告）通过；截图在 `artifacts/pad-redesign/`。Pad 6S Pro 真机、HyperOS 与性能仍未验收。

@@ -116,11 +116,26 @@ implements ScoreAdapter.Host {
     private boolean pendingForce;
     private boolean selectionLoading;
     private long selectionVersion;
+    private long scoreVersion;
     private Future<?> scoreRequest;
     private Future<?> selectionCacheRequest;
     private LocalDate loadedDay;
     private CalendarSync calendarSync;
     private final Set<String> subscribed = new HashSet<String>();
+    private final Runnable calendarChanged = () -> {
+        if (!this.active || this.isDestroyed()) return;
+        this.refreshSubscribed();
+        this.render(true);
+    };
+    private final SharedPreferences.OnSharedPreferenceChangeListener calendarListener = (preferences, key) -> {
+        if (key != null && key.startsWith("match:")) {
+            this.handler.removeCallbacks(this.calendarChanged);
+            this.handler.postDelayed(this.calendarChanged, 32L);
+        }
+    };
+    private final SharedPreferences.OnSharedPreferenceChangeListener cloudListener = (preferences, key) -> {
+        this.handler.post(() -> {if(this.active && this.tab==1 && !this.isDestroyed())this.render(false);});
+    };
     private Match pendingSubscription;
     private long lastScoreScroll;
     private String renderedScores = "";
@@ -182,6 +197,8 @@ implements ScoreAdapter.Host {
         // source error on the day the user later opens.
         this.prefetchRepository = new Repository((Context)this);
         this.calendarSync = new CalendarSync((Context)this);
+        this.getSharedPreferences("calendar-links", 0).registerOnSharedPreferenceChangeListener(this.calendarListener);
+        this.getSharedPreferences(CalendarCloudSync.STORE, 0).registerOnSharedPreferenceChangeListener(this.cloudListener);
         this.detailRepository = new DetailRepository((Context)this);
         this.watches = WatchRepository.get(this);
         this.watchLauncher = new WatchLauncher(this, this.watches);
@@ -234,10 +251,9 @@ implements ScoreAdapter.Host {
         this.busy = true;
         this.render(false);
         LocalDate initialDay = this.from();
-        String initialGroup = this.group;
         String initialTag = this.queryTag();
         this.cacheWorker.submit(() -> {
-            Repository.Snapshot cached = this.repository.cached(initialDay, initialDay, initialGroup);
+            Repository.Snapshot cached = this.repository.cached(initialDay, initialDay, "全部");
             this.handler.post(() -> {
                 if (this.isDestroyed()) {
                     return;
@@ -245,8 +261,8 @@ implements ScoreAdapter.Host {
                 this.cacheReady = true;
                 if (initialTag.equals(this.queryTag())) {
                     this.busy = false;
-                    this.snapshot = cached;
-                    this.rememberAll(initialGroup, initialDay, cached);
+                    this.rememberAll("全部", initialDay, cached);
+                    this.snapshot = subset(cached, this.group);
                     this.render(true);
                 }
                 this.load(false);
@@ -290,6 +306,7 @@ implements ScoreAdapter.Host {
     public void onResume() {
         super.onResume();
         this.active = true;
+        CalendarUpdates.start(this);
         this.refreshSubscribed();
         if (this.cacheReady) {
             this.render(true);
@@ -311,6 +328,8 @@ implements ScoreAdapter.Host {
 
     public void onDestroy() {
         this.active = false;
+        this.getSharedPreferences("calendar-links", 0).unregisterOnSharedPreferenceChangeListener(this.calendarListener);
+        this.getSharedPreferences(CalendarCloudSync.STORE, 0).unregisterOnSharedPreferenceChangeListener(this.cloudListener);
         Sheet.dismissAll(this);
         this.handler.removeCallbacksAndMessages(null);
         this.executor.shutdownNow();
@@ -357,31 +376,33 @@ implements ScoreAdapter.Host {
         this.pendingForce = false;
         this.busy = true;
         this.pending = false;
-        String tag = this.queryTag();
-        long version = this.selectionVersion;
+        long version = this.scoreVersion;
         LocalDate f = this.from();
         LocalDate t = this.to();
-        String g = this.group;
         long started = System.currentTimeMillis();
         java.util.concurrent.atomic.AtomicBoolean firstBatch = new java.util.concurrent.atomic.AtomicBoolean(true);
         this.scoreRequest = this.executor.submit(() -> {
             Repository.Snapshot result;
             try {
-                result = this.repository.fetch(f, t, g, forced, batch -> this.handler.post(() -> {
-                    if (this.isDestroyed() || !this.active || !tag.equals(this.queryTag())) {
+                result = this.repository.fetch(f, t, "全部", forced, batch -> this.handler.post(() -> {
+                    if (this.isDestroyed() || version != this.scoreVersion) {
                         return;
                     }
                     if (BuildConfig.DEBUG && firstBatch.compareAndSet(true, false)) {
                         Log.i("MyScorePerf", "first source batch in " + (System.currentTimeMillis() - started) + "ms");
                     }
-                    this.snapshot.merge((Repository.Batch)batch);
+                    Repository.Snapshot all = this.snapshotFor(f, "全部");
+                    all = all == null ? new Repository.Snapshot() : subset(all, "全部");
+                    all.merge(batch);
+                    this.rememberAll("全部", f, all);
+                    this.snapshot = subset(all, this.group);
                     this.handler.removeCallbacks(this.renderSoon);
                     this.handler.postDelayed(this.renderSoon, 150L);
                 }));
             }
             catch (RuntimeException e) {
                 Log.w((String)"MyScore", (String)"Score refresh interrupted", (Throwable)e);
-                result = this.repository.cached(f, t, g);
+                result = this.repository.cached(f, t, "全部");
                 for (Repository.Batch batch2 : result.batches) {
                     if (!batch2.error.isEmpty()) continue;
                     batch2.error = "刷新意外中断，已保留上次数据";
@@ -389,25 +410,19 @@ implements ScoreAdapter.Host {
             }
             Repository.Snapshot next = result;
             this.handler.post(() -> {
-                if (this.isDestroyed() || version != this.selectionVersion) {
+                if (this.isDestroyed() || version != this.scoreVersion) {
                     return;
                 }
                 this.busy = false;
-                if (!tag.equals(this.queryTag())) {
-                    if (this.active) {
-                        this.load(false);
-                    }
-                    return;
-                }
                 Log.i((String)"MyScorePerf", (String)("all sources in " + (System.currentTimeMillis() - started) + "ms"));
                 this.handler.removeCallbacks(this.renderSoon);
-                this.snapshot = next;
-                this.rememberAll(g, f, next);
+                this.rememberAll("全部", f, next);
+                this.snapshot = subset(next, this.group);
                 if (this.active) {
                     this.render(true);
                 }
                 if (this.active) {
-                    if (this.pending || !tag.equals(this.queryTag())) {
+                    if (this.pending) {
                         this.load(false);
                         return;
                     }
@@ -415,7 +430,7 @@ implements ScoreAdapter.Host {
                     long delay = RefreshPolicy.pollDelay(next.batches, f, Match.today(now), now);
                     long midnight = RefreshPolicy.untilNextDay(now);
                     this.handler.postDelayed(this.tick, delay > 0L ? Math.min(delay, midnight) : midnight);
-                    this.schedulePrefetch(f, g);
+                    this.schedulePrefetch(f, this.group);
                 }
             });
         });
@@ -436,13 +451,15 @@ implements ScoreAdapter.Host {
         this.handler.removeCallbacks(this.renderSoon);
         this.handler.removeCallbacks(this.settleLoad);
         this.cancelPrefetch();
+        boolean keepScoreRequest = !force && nextTab == 0 && this.tab == 0 && offset == this.dayOffset && this.busy && this.scoreRequest != null && !this.scoreRequest.isDone();
         ++this.selectionVersion;
-        if (this.scoreRequest != null) {
+        if (!keepScoreRequest) ++this.scoreVersion;
+        if (!keepScoreRequest && this.scoreRequest != null) {
             this.scoreRequest.cancel(true);
         }
-        this.busy = false;
+        this.busy = keepScoreRequest;
         this.pending = false;
-        this.pendingForce = false;
+        if (!keepScoreRequest) this.pendingForce = false;
         if (this.selectionCacheRequest != null) {
             this.selectionCacheRequest.cancel(true);
             this.selectionCacheRequest = null;
@@ -523,7 +540,7 @@ implements ScoreAdapter.Host {
             if (Thread.currentThread().isInterrupted()) {
                 return;
             }
-            Repository.Snapshot cached = this.repository.cached(day, day, selectedGroup);
+            Repository.Snapshot cached = this.repository.cached(day, day, "全部");
             if (Thread.currentThread().isInterrupted()) {
                 return;
             }
@@ -534,16 +551,17 @@ implements ScoreAdapter.Host {
                 this.selectionLoading = false;
                 // Keep the in-memory day (and any batch that arrived while the disk read ran)
                 // when it is at least as fresh as the same source on disk.
-                for (Repository.Batch batch : this.snapshot.batches) {
+                Repository.Snapshot memory = this.snapshotFor(day, "全部");
+                for (Repository.Batch batch : memory == null ? this.snapshot.batches : memory.batches) {
                     Repository.Batch disk = cached.batches.stream().filter(b -> b.competition.id.equals(batch.competition.id)).findFirst().orElse(null);
                     if (disk != null && disk.fetched > batch.fetched) continue;
                     cached.merge(batch);
                 }
-                this.snapshot = cached;
-                this.rememberAll(selectedGroup, day, cached);
+                this.rememberAll("全部", day, cached);
+                this.snapshot = subset(cached, this.group);
                 // Let a quick run of arrow taps settle first; only the final day pays for a
                 // network round instead of every intermediate selection.
-                this.scheduleLoad(150L);
+                if (!this.busy) this.scheduleLoad(150L);
                 if (!tag.equals(this.queryTag())) {
                     return;
                 }
@@ -603,14 +621,12 @@ implements ScoreAdapter.Host {
     }
 
     private Repository.Snapshot snapshotFor(LocalDate day, String group) {
-        Repository.Snapshot exact = this.daySnapshots.get(MainActivity.dayKey(day, group));
-        if (exact != null) {
-            return exact;
-        }
         Repository.Snapshot everything = this.daySnapshots.get(MainActivity.dayKey(day, "全部"));
-        if (everything != null && !"全部".equals(group)) {
+        if (everything != null) {
             return MainActivity.subset(everything, group);
         }
+        Repository.Snapshot exact = this.daySnapshots.get(MainActivity.dayKey(day, group));
+        if (exact != null) return exact;
         if (this.allSnapshot != null && day.equals(this.allSnapshotDay)) {
             return "全部".equals(group) ? this.allSnapshot : MainActivity.subset(this.allSnapshot, group);
         }
@@ -1033,6 +1049,7 @@ implements ScoreAdapter.Host {
 
     private String settingsKey() {
         StringBuilder key = new StringBuilder(128);
+        key.append(CalendarCloudSync.status(this)).append('|');
         key.append(this.tab).append('|').append(this.calendarBusy).append('|').append(this.calendarName()).append('|').append(this.calendarSync.linkedEvents()).append('|').append(this.prefs.getLong("calendar_checked", 0L)).append('|').append(this.snapshot.failed());
         for (Repository.Batch batch : this.snapshot.batches) {
             key.append('|').append(batch.competition.id).append(':').append(batch.error);
@@ -1205,6 +1222,7 @@ implements ScoreAdapter.Host {
         long checked = this.prefs.getLong("calendar_checked", 0L);
         this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期与取消", () -> this.syncSubscriptions(true));
         this.settingRow(calendar, "calendar-open", "打开系统日历", "查看日程与提醒", this::openCalendar);
+        this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), () -> ShizukuCalendar.manage(this));
         this.body.addView((View)calendar);
         this.section("偏好与帮助");
         LinearLayout options = this.ui.column();
@@ -2684,6 +2702,7 @@ implements ScoreAdapter.Host {
         this.settingRow(calendar, "subscriptions", "已订阅的比赛", this.calendarSync.linkedEvents() + " 场 · 提前 5 分钟提醒", this::subscribedList);
         this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期与取消", () -> this.syncSubscriptions(true));
         this.settingRow(calendar, "calendar-open", "打开系统日历", "查看日程与提醒", this::openCalendar);
+        this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), () -> ShizukuCalendar.manage(this));
         left.addView((View)calendar);
         this.ui.gap(left, 28);
         this.padSettingsHeading(left, "数据来源");

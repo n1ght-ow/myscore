@@ -40,6 +40,12 @@ final class AppIcons {
                 p.moveTo(3.5f,9);p.lineTo(20.5f,9);
                 p.moveTo(13,21);p.lineTo(21,13);p.moveTo(15.5f,13);p.lineTo(21,13);p.lineTo(21,18.5f);
             }
+            case "calendar-cloud" -> {
+                p.moveTo(6,17);p.cubicTo(1,17,1,10,5.5f,9.5f);
+                p.cubicTo(5,3,14,1.5f,17,7);p.cubicTo(23,6.5f,25,16,19,17);
+                p.moveTo(8,21);p.lineTo(8,13);p.moveTo(5.5f,15.5f);p.lineTo(8,13);p.lineTo(10.5f,15.5f);
+                p.moveTo(15,13);p.lineTo(15,21);p.moveTo(12.5f,18.5f);p.lineTo(15,21);p.lineTo(17.5f,18.5f);
+            }
             case "appearance" -> {
                 p.moveTo(12,3);p.cubicTo(6.8f,3,3,6.8f,3,11.8f);p.cubicTo(3,17,7.1f,21,12,21);
                 p.cubicTo(14.7f,21,15.4f,19,13.8f,17.3f);p.cubicTo(12.8f,16.2f,13.5f,14.5f,15.1f,14.5f);

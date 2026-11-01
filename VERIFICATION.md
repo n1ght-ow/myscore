@@ -1,3 +1,24 @@
+# MyScore 4.8.0 发布构建与双端核对（2026-11-02）
+
+- 版本 4.8.0 / versionCode 53，包名 `cn.myscore.app`。发布文件 `MyScore-4.8.0.apk` 为同签名个人安装 debug 包，大小 1,268,045 bytes，SHA-256 `600b8047ab769a0e2d10b729157b3d960ad19ab9f4c8167a013d2aa0698a3bf7`；校验附件 `SHA256SUMS-4.8.0.txt`。证书 SHA-256 继续为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 同一发布文件已保留数据覆盖安装到 Redmi K80 Pro 与 Xiaomi Pad 6S Pro；双端包管理器确认 4.8.0 / 53，实际 `base.apk` 哈希均与本地发布文件一致。
+- 本次版本构建完成 248 项 JVM 测试、965 项模拟器原生检查、手机 842 项原生回归及平板 886 项原生回归（含横竖屏）；`lintDebug` 为 0 错误、29 警告，应用与测试 APK 构建通过。前一节发布前调试记录保留其原始版本与哈希，不把跨端压力测试或局部截图误称为本版全应用视觉验收。
+- 发布内容为日期切换全来源刷新、本机日历快速恢复、五分钟提醒修复，以及经用户授权的 Shizuku 主动小米日历同步、断连补发和重复事件收敛。主动云同步需手机和平板都启动并授权 Shizuku，无需 root；设备重启后需重新确认服务运行，设置页可查看连接与请求状态。
+- 发布目标为 `origin/main`、标签 `v4.8.0` 与 [MyScore 4.8.0](https://github.com/n1ght-ow/myscore/releases/tag/v4.8.0)。发布后通过远端标签解引用、Latest Release 的 APK digest、下载文件 SHA-256 与双端 `base.apk` 共同核对，最终远端核对记录保存在本机忽略目录 `artifacts/release-4.8.0/`。
+
+# 日期全量刷新、本机日历恢复及 Shizuku 双向同步（2026-11-02，本地调试）
+
+- 最终包仍为 4.7.0 / versionCode 52；大小 1,845,017 bytes，SHA-256 `d0a62c4e1487e13372075cc5442e4d44f138353b1dcf145782a3c46de3a2d845`。已覆盖安装至 Redmi K80 Pro（无线调试）与 Xiaomi Pad 6S Pro（有线调试），两端 `base.apk` 哈希一致。未提交、推送或发布。
+- 日期切换始终读取全部九个来源，再按当前列表筛选展示；同一天切换类别保留正在进行的全量请求，换日期取消旧请求并拒绝旧回调。原生回归检查覆盖未进入「全部」时 NBA 等其他列表也取得新日期快照。
+- 本机日历关联恢复与来源网络请求分开执行，先显示球队缓存；进程级 Provider 观察器合并变更，后台批量恢复关联及未来比赛的五分钟提醒。重建事件重新绑定，已结束事件不被旧缓存重新激活。
+- 真机系统实现确认：Xiaomi `SyncSecurityStubImpl` 会静默拒绝普通应用对小米账户的同步请求，普通 API 返回不能证明任务已启动。经用户授权接入官方 Shizuku API / Provider 13.1.5，两端安装官方 Shizuku 13.6.0 并以 ADB 身份启动，无 root。专用 UserService 仅接受本应用 UID，固定请求当前用户的 `com.xiaomi` 账户与日历 authority，不提供任意命令接口，不向 App 返回账户名或凭据。
+- 打开 App、订阅、取消、改期和提醒修复均可排入同步队列；300ms 合并、2 秒冷却且保留尾部请求。前台每 15 秒补查，后台停止轮询。待发送改动持久化并由 JobScheduler 补发；断连自动重连，撤销日历权限后停止后台重试。设置页显示连接、待发送和请求失败状态，不把「已请求」当作云端完成。
+- 连续测试触发过普通同步任务的 `WITHIN_QUOTA` 限制；Android 12 及以上改用 `setScheduleAsExpeditedJob(true)`，与旧式 expedited 标记分开使用，真机记录确认任务可继续执行。重复事件仅在同一日历、所有副本已有云端 ID 且无待上传改动时收敛，两端使用相同 ID 排序；未变化的事件和已有五分钟提醒不重复写入，避免再次变脏和上传循环。
+- 双端六组真实未来比赛测试通过：平板快速取消重订阅两轮 15.68 秒，手机对应操作 14.14 秒；手机取消至平板 14.50 秒，手机订阅至平板 15.37 秒，平板取消至手机 13.05 秒，平板订阅至手机 15.54 秒。每次订阅均核对单一活动事件、相同云端 ID 和 `dirty=0`，取消核对两端无活动事件且关联移除。Shizuku 中断期间待发送代次 18 / 已发送 17，重启后自动恢复为 18 / 18 并完成远端删除。
+- 另用 Mobile Dev 实际点击手机比赛卡订阅，平板列表与阅读区自动显示绿色日历勾；再在平板确认取消，手机自动恢复灰色加号。两端设置页的连接状态已截图检查。测试比赛最后已取消，未留下活动测试事件。六组跨端及截图证据来自 `faff0bdc…` 功能包；最终包仅追加撤销日历权限时的后台任务守卫，并重新执行下述原生与构建检查。
+- 最终检查：248 项 JVM 测试、965 项模拟器原生检查、手机 842 项原生回归、平板 886 项原生回归通过；`assembleDebug` / `assembleDebugAndroidTest` / `lintDebug` 通过，lint 0 错误、29 警告。一次真机复核在设备未保持前台时出现日期测试超时；唤醒设备后双端复测通过。
+- 证据：本机忽略目录 `artifacts/shizuku/roundtrip-results-final.jsonl`、`phone-settings-connected.png`、`pad-settings-connected.png`、`phone-ui-subscribed.png`、`pad-ui-adopted.png`、`phone-ui-remote-cancelled.png`、`pad-ui-cancelled.png`；构建记录在 `artifacts/2026-11-02-date-calendar/`。没有把本轮源码检查或这些局部截图称为全应用逐路由视觉验收，也没有新增可靠 FPS 证据。跨端时间仍受网络、小米服务及系统调度影响；无 root 设备重启后需确认 Shizuku 已重新启动。
+
 # MyScore 4.7.0 队伍赛程订阅即时更新、跨端日历恢复（2026-10-31）
 
 - 版本 4.7.0 / versionCode 52；发布 APK `MyScore-4.7.0.apk`，大小 1,149,375 bytes，SHA-256 `e82f78bf34601437d5b7269bdd3de95f9ceae279f24a40e062eb1c7aa132da39`。将提交到 `origin/main`，打 `v4.7.0` tag，并创建 GitHub release 上传同一 APK 与 `SHA256SUMS-4.7.0.txt`；最终以远端 asset digest 和双端 `base.apk` 哈希核对为准。

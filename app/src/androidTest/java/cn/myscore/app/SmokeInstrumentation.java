@@ -47,6 +47,7 @@ public final class SmokeInstrumentation extends Instrumentation {
             check(findText(activity.getWindow().getDecorView(),"MyScore")!=null,"sport filters stay interactive during network loads");
             checks+=StabilityChecks.run(this,activity);
             calendarChecks();
+            checks+=DateRefreshChecks.run(this,activity);
             checks+=UiChecks.run(this,activity);
             checks+=LayoutChecks.run(this,context);
             checks+=CrestChecks.run(this,context);
@@ -178,6 +179,7 @@ public final class SmokeInstrumentation extends Instrumentation {
         try(Cursor personalEvent=context.getContentResolver().query(personalUri,new String[]{CalendarContract.Events.TITLE},null,null,null)){check(personalEvent!=null&&personalEvent.moveToFirst()&&personalEvent.getString(0).equals("Personal event must survive"),"foreign event is never deleted by a stale subscription link");}
         check(eventCount()==1,"foreign event remains as the only calendar row");
         check(sync.subscriptions().isEmpty(),"no subscription record remains after cleanup");
+        checks+=CalendarRecoveryChecks.run(this,context,calendar);
     }
     private Uri syncUri(Uri uri){return uri.buildUpon().appendQueryParameter(CalendarContract.CALLER_IS_SYNCADAPTER,"true").appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME,"myscore-functional-tests").appendQueryParameter(CalendarContract.Calendars.ACCOUNT_TYPE,CalendarContract.ACCOUNT_TYPE_LOCAL).build();}
     private int eventCount(){try(Cursor c=context.getContentResolver().query(CalendarContract.Events.CONTENT_URI,new String[]{"_id"},"calendar_id=? AND deleted=0",new String[]{Long.toString(calendar)},null)){return c==null?0:c.getCount();}}

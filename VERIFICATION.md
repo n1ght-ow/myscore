@@ -1,3 +1,12 @@
+# MyScore 4.8.1 发布构建与真机核对（2026-11-12）
+
+- 版本 4.8.1 / versionCode 54，包名 `cn.myscore.app`。发布文件 `MyScore-4.8.1.apk` 为同签名个人安装 debug 包，大小 1,269,417 bytes，SHA-256 `f168986450c2a0263bac9af4a9071e0d16d14aa22abde35ac81ad57ae880f4cc`；校验附件 `SHA256SUMS-4.8.1.txt`。证书 SHA-256 继续为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 同一发布文件已保留数据覆盖安装到 Redmi K80 Pro（无线调试，`24122RKC7C`）。包管理器确认 4.8.1 / 54，设备上 `base.apk` 的 SHA-256 与发布文件一致。平板本次未连接，没有做双端安装核对。
+- 构建：`testDebugUnitTest` 248 项，0 失败 / 错误 / 跳过；`lintDebug` 0 错误、28 警告；`assembleDebug` 与 `assembleDebugAndroidTest` 通过。未重跑模拟器原生检查或平板回归，不把 4.8.0 的那些结果记为本版验收。
+- 修复：小米账户日历的允许提醒列表以默认方式开头时，提前 5 分钟提醒改为状态栏提醒；已有的五分钟提醒如果方式不对，或事件缺少闹钟标记，会补回。不写入日历扩展属性，澎湃 OS 只允许同步适配器修改该表，强行写入会让订阅更新失败。
+- 真机：CS2 Spirit vs G2（2026-11-12 17:30）的提醒为提前 5 分钟、方式 1，且 `hasAlarm=1`。日历 Provider 的 RTC_WAKEUP 排在 17:25，覆盖安装 4.8.1 后仍在。尚未到点，没有把这次排程当成通知已经弹出。
+- 发布目标为 `origin/main`、标签 `v4.8.1` 与 [MyScore 4.8.1](https://github.com/n1ght-ow/myscore/releases/tag/v4.8.1)。手机安装哈希在发布前核对；远端附件 digest 在上传后核对，记录放在本机忽略目录 `artifacts/release-4.8.1/`。
+
 # MyScore 4.8.0 发布构建与双端核对（2026-11-02）
 
 - 版本 4.8.0 / versionCode 53，包名 `cn.myscore.app`。发布文件 `MyScore-4.8.0.apk` 为同签名个人安装 debug 包，大小 1,268,045 bytes，SHA-256 `600b8047ab769a0e2d10b729157b3d960ad19ab9f4c8167a013d2aa0698a3bf7`；校验附件 `SHA256SUMS-4.8.0.txt`。证书 SHA-256 继续为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。

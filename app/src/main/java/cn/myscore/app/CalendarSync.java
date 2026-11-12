@@ -173,7 +173,6 @@ public final class CalendarSync {
                 if(eventId>0&&!owns) {removeLink(m.id);eventId=-1;}
                 long existingCalendar=owns?eventCalendar(eventId):-1;
                 long target=existingCalendar>=0?existingCalendar:calendar;
-                int method=reminderMethod(target);
                 if(owns) {updateEvent(eventId,m,target);result.updated++;}
                 else {
                     eventId=insertEvent(m,calendar);
@@ -185,7 +184,7 @@ public final class CalendarSync {
                     }
                     result.inserted++;
                 }
-                ensureReminder(eventId,method);
+                ensureAlarm(eventId,target);
                 links.edit().putString("record:"+m.id,m.json().toString()).putString("fingerprint:"+m.id,fingerprint(m,target)).apply();
                 requestCloud(target);
             } catch(Exception e) {
@@ -316,11 +315,11 @@ public final class CalendarSync {
                     String fingerprint=fingerprint(m,calendar);
                     if(!fingerprint.equals(links.getString("fingerprint:"+sub.id,""))) {
                         updateEvent(sub.eventId,m,calendar);
-                        ensureReminder(sub.eventId,reminderMethod(calendar));
+                        if(ensureAlarm(sub.eventId,calendar))requestCloud(calendar);
                         result.updated++;
                         links.edit().putString("record:"+sub.id,m.json().toString()).putString("fingerprint:"+sub.id,fingerprint).apply();
                     } else {
-                        if(!hasReminder(sub.eventId))ensureReminder(sub.eventId,reminderMethod(calendar));
+                        if(ensureAlarm(sub.eventId,calendar)){result.updated++;requestCloud(calendar);}
                         saveRecord(sub.id,m);
                     }
                 } catch(Exception e) {
@@ -368,7 +367,7 @@ public final class CalendarSync {
         try(Cursor rows=context.getContentResolver().query(CalendarContract.Events.CONTENT_URI,
             new String[]{CalendarContract.Events._ID,CalendarContract.Events.DESCRIPTION,CalendarContract.Events.CUSTOM_APP_URI,
                 CalendarContract.Events.DTSTART,CalendarContract.Events.CALENDAR_ID,CalendarContract.Events.TITLE,
-                CalendarContract.Events._SYNC_ID,CalendarContract.Events.DIRTY},
+                CalendarContract.Events._SYNC_ID,CalendarContract.Events.DIRTY,CalendarContract.Events.HAS_ALARM},
             CalendarContract.Events.CUSTOM_APP_PACKAGE+"=? AND "+CalendarContract.Events.DELETED+"=0",new String[]{context.getPackageName()},CalendarContract.Events._ID+" DESC")) {
             if(rows==null)throw new IllegalStateException("无法读取日历事件");
             while(rows.moveToNext()) {
@@ -377,7 +376,7 @@ public final class CalendarSync {
                 String id=description.substring(8,newline);
                 if(known!=null&&!known.containsKey(id))continue;
                 if(!("myscore://match/"+Uri.encode(id)).equals(rows.getString(2)))continue;
-                OwnedEvent event=new OwnedEvent(rows.getLong(0),rows.getLong(3),rows.getLong(4),rows.getString(5),description,rows.getString(6),rows.getInt(7)!=0);
+                OwnedEvent event=new OwnedEvent(rows.getLong(0),rows.getLong(3),rows.getLong(4),rows.getString(5),description,rows.getString(6),rows.getInt(7)!=0,rows.getInt(8)==1);
                 copies.computeIfAbsent(id+"\n"+event.calendar,key->new ArrayList<>()).add(event);
                 OwnedEvent previous=owned.get(id);
                 if(previous==null||event.eventId==links.getLong("match:"+id,-1))owned.put(id,event);
@@ -425,32 +424,33 @@ public final class CalendarSync {
             if(event.start>now&&(match==null||match.scheduled()||match.state.equals("unknown")))reminders.add(event);
         }
         if(changed&&!edit.commit()){result.failed++;result.error="无法恢复日历关联";return 0;}
-        // Read all five-minute reminders once; linked events need repair too, even if the
-        // source fingerprint did not change. No writes are made when the reminder is intact.
+        // A five-minute row is not enough: HyperOS notifies for METHOD_ALERT, while a Xiaomi
+        // account whose allowed list starts with METHOD_DEFAULT used to be left on that method.
         if(!reminders.isEmpty())try {
-            Set<Long> ready=new HashSet<>();
+            Map<Long,Integer> found=new HashMap<>();
             try(Cursor rows=context.getContentResolver().query(CalendarContract.Reminders.CONTENT_URI,
-                new String[]{CalendarContract.Reminders.EVENT_ID},CalendarContract.Reminders.MINUTES+"=?",
-                new String[]{Integer.toString(REMIND_MINUTES)},null)) {
+                new String[]{CalendarContract.Reminders.EVENT_ID,CalendarContract.Reminders.METHOD},
+                CalendarContract.Reminders.MINUTES+"=?",new String[]{Integer.toString(REMIND_MINUTES)},null)) {
                 if(rows==null)throw new IllegalStateException("无法读取日历提醒");
-                while(rows.moveToNext())ready.add(rows.getLong(0));
+                while(rows.moveToNext()) {
+                    long id=rows.getLong(0);int method=rows.getInt(1);
+                    Integer previous=found.get(id);
+                    if(previous==null||method==CalendarContract.Reminders.METHOD_ALERT)found.put(id,method);
+                }
             }
             Map<Long,Integer> methods=new HashMap<>();
-            for(OwnedEvent event:reminders)if(!ready.contains(event.eventId)) {
+            for(OwnedEvent event:reminders) {
+                int method=methods.computeIfAbsent(event.calendar,this::reminderMethod);
+                Integer actual=found.get(event.eventId);
+                if(actual!=null&&actual==method&&event.alarm)continue;
                 try {
-                    int method=methods.computeIfAbsent(event.calendar,this::reminderMethod);
-                    ensureReminder(event.eventId,method);
-                    ContentValues alarm=new ContentValues();alarm.put(CalendarContract.Events.HAS_ALARM,1);
-                    if(context.getContentResolver().update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,event.eventId),alarm,null,null)!=1)
-                        throw new IllegalStateException("日历提醒状态未更新");
-                    result.updated++;
-                    requestCloud(event.calendar);
+                    if(ensureAlarm(event.eventId,event.calendar)){result.updated++;requestCloud(event.calendar);}
                 }catch(RuntimeException e){result.failed++;result.error=readable(e);}
             }
         }catch(RuntimeException e){result.failed++;result.error=readable(e);}
         return recovered;
     }
-    private record OwnedEvent(long eventId,long start,long calendar,String title,String description,String sync,boolean dirty){}
+    private record OwnedEvent(long eventId,long start,long calendar,String title,String description,String sync,boolean dirty,boolean alarm){}
     /** Calendar facts only; the source resolver must confirm the match's current state. */
     private Match calendarRecord(String id,OwnedEvent event) {
         String[] parts=id.split(":");Competition c=parts.length>1?Competition.find(parts[1]):null;
@@ -478,24 +478,58 @@ public final class CalendarSync {
         event.put(CalendarContract.Events.STATUS,CalendarContract.Events.STATUS_CONFIRMED);
         return event;
     }
-    private void ensureReminder(long eventId,int method) {
-        if(hasReminder(eventId))return;
+    private boolean ensureAlarm(long eventId,long calendar) {
+        boolean changed=ensureReminder(eventId,reminderMethod(calendar));
+        if(!eventHasAlarm(eventId)) {
+            ContentValues alarm=new ContentValues();alarm.put(CalendarContract.Events.HAS_ALARM,1);
+            if(context.getContentResolver().update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),alarm,null,null)!=1)
+                throw new IllegalStateException("日历提醒状态未更新");
+            changed=true;
+        }
+        return changed;
+    }
+    /** @return true when a reminder row was inserted or its method changed. */
+    private boolean ensureReminder(long eventId,int method) {
+        long current=reminderId(eventId,-1);
+        if(current>0&&hasReminder(eventId,method))return deleteOtherReminders(eventId,reminderId(eventId,method))>0;
+        if(current>0) {
+            ContentValues values=new ContentValues();values.put(CalendarContract.Reminders.METHOD,method);
+            if(context.getContentResolver().update(CalendarContract.Reminders.CONTENT_URI,values,"_id=?",new String[]{Long.toString(current)})==1
+                &&hasReminder(eventId,method)) {
+                deleteOtherReminders(eventId,reminderId(eventId,method));
+                return true;
+            }
+        }
         long reminder=tryReminder(eventId,method);
         if(reminder<0&&method!=CalendarContract.Reminders.METHOD_DEFAULT)reminder=tryReminder(eventId,CalendarContract.Reminders.METHOD_DEFAULT);
         if(reminder<0) {
-            // Some providers reject a duplicate reminder before the old one is removed.
-            if(hasReminder(eventId))return;
+            if(hasReminder(eventId,method)||reminderId(eventId,-1)>0)return false;
             throw new IllegalStateException("日历未接受提醒");
         }
-        // Replace older reminders only after the new one exists; a transient provider failure
-        // must not leave the event with no reminder at all.
-        context.getContentResolver().delete(CalendarContract.Reminders.CONTENT_URI,"event_id=? AND _id<>?",new String[]{Long.toString(eventId),Long.toString(reminder)});
+        deleteOtherReminders(eventId,reminder);
+        return true;
     }
-    private boolean hasReminder(long eventId) {
-        try(Cursor cur=context.getContentResolver().query(CalendarContract.Reminders.CONTENT_URI,
-            new String[]{"_id"},"event_id=? AND minutes=?",new String[]{Long.toString(eventId),Integer.toString(REMIND_MINUTES)},null)) {
+    private boolean hasReminder(long eventId,int method) {return reminderId(eventId,method)>0;}
+    private long reminderId(long eventId,int method) {
+        String selection="event_id=? AND minutes=?";
+        String[] args=new String[]{Long.toString(eventId),Integer.toString(REMIND_MINUTES)};
+        if(method>=0) {
+            selection+=" AND method=?";
+            args=new String[]{Long.toString(eventId),Integer.toString(REMIND_MINUTES),Integer.toString(method)};
+        }
+        try(Cursor cur=context.getContentResolver().query(CalendarContract.Reminders.CONTENT_URI,new String[]{"_id"},selection,args,null)) {
             if(cur==null)throw new IllegalStateException("无法读取日历提醒");
-            return cur.moveToFirst();
+            return cur.moveToFirst()?cur.getLong(0):-1;
+        }
+    }
+    private int deleteOtherReminders(long eventId,long keep) {
+        return context.getContentResolver().delete(CalendarContract.Reminders.CONTENT_URI,"event_id=? AND _id<>?",new String[]{Long.toString(eventId),Long.toString(keep)});
+    }
+    private boolean eventHasAlarm(long eventId) {
+        try(Cursor cur=context.getContentResolver().query(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),
+            new String[]{CalendarContract.Events.HAS_ALARM},null,null,null)) {
+            if(cur==null)throw new IllegalStateException("无法读取日历事件");
+            return cur.moveToFirst()&&cur.getInt(0)==1;
         }
     }
     private long tryReminder(long eventId,int method) {
@@ -512,18 +546,22 @@ public final class CalendarSync {
     private int reminderMethod(long calendar) {
         try(Cursor cur=context.getContentResolver().query(ContentUris.withAppendedId(CalendarContract.Calendars.CONTENT_URI,calendar),
             new String[]{CalendarContract.Calendars.ALLOWED_REMINDERS},null,null,null)) {
-            if(cur!=null&&cur.moveToFirst()) {
-                String allowed=cur.getString(0);
-                if(allowed!=null) {
-                    // ALLOWED_REMINDERS is a comma-separated list; contains("1") would match "10".
-                    for(String part:allowed.split(",")) {
-                        String value=part.trim();
-                        if(value.equals("1"))return CalendarContract.Reminders.METHOD_ALERT;
-                        if(value.equals("0"))return CalendarContract.Reminders.METHOD_DEFAULT;
-                    }
-                }
-            }
+            if(cur!=null&&cur.moveToFirst())return preferredReminder(cur.getString(0));
         } catch(RuntimeException ignored) {}
+        return CalendarContract.Reminders.METHOD_ALERT;
+    }
+    /** Prefer a status-bar alert wherever the calendar allows it, even if default is listed first. */
+    private static int preferredReminder(String allowed) {
+        boolean alert=false,alarm=false,fallback=false;
+        if(allowed!=null)for(String part:allowed.split(",")) {
+            String value=part.trim();
+            if(value.equals("1"))alert=true;
+            else if(value.equals("4"))alarm=true;
+            else if(value.equals("0"))fallback=true;
+        }
+        if(alert)return CalendarContract.Reminders.METHOD_ALERT;
+        if(alarm)return CalendarContract.Reminders.METHOD_ALARM;
+        if(fallback)return CalendarContract.Reminders.METHOD_DEFAULT;
         return CalendarContract.Reminders.METHOD_ALERT;
     }
     private String fingerprint(Match m,long calendar) {return m.start+"|"+m.displayTitle()+"|"+REMIND_MINUTES+"|"+calendar+"|"+m.state;}

@@ -50,7 +50,7 @@ final class DetailChecks {
             }
         }
         c.getSharedPreferences("settings",0).edit().putString("theme","dark").commit();c.getResources().getConfiguration();
-        activity=test.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));test.waitForIdleSync();check(find(activity.getWindow().getDecorView(),"MyScore")!=null,"system Back leaves full detail and score list can resume");
+        activity=test.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));test.waitForIdleSync();check(find(activity.getWindow().getDecorView(),"N1ghtScore")!=null,"system Back leaves full detail and score list can resume");
     }
     private static Object fieldDetail()throws Exception{java.lang.reflect.Field field=DetailActivity.class.getDeclaredField("detail");field.setAccessible(true);Object[] result=new Object[1];instrumentation.runOnMainSync(()->{try{result[0]=field.get(activity);}catch(IllegalAccessException e){throw new AssertionError(e);}});return result[0];}
     private static boolean noJson(View root){if(root instanceof TextView){String text=((TextView)root).getText().toString();if(text.contains("\"displayName\"")||text.contains("\"Referee\""))return false;}if(root instanceof ViewGroup){ViewGroup group=(ViewGroup)root;for(int i=0;i<group.getChildCount();i++)if(!noJson(group.getChildAt(i)))return false;}return true;}

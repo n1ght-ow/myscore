@@ -70,7 +70,7 @@ final class UpdateRepository {
         }catch(Exception e){clear();throw e;}
     }
     static void validateArchive(PackageInfo archive,PackageInfo installed,String version)throws IOException {
-        if(archive==null||!installed.packageName.equals(archive.packageName)||!version.equals(archive.versionName))throw new IOException("安装包与 MyScore 版本不匹配");
+        if(archive==null||!installed.packageName.equals(archive.packageName)||!version.equals(archive.versionName))throw new IOException("安装包与 N1ghtScore 版本不匹配");
         if(archive.getLongVersionCode()<=installed.getLongVersionCode())throw new IOException("此安装包不是更新版本");
         if(archive.signingInfo==null||installed.signingInfo==null||!signers(archive.signingInfo.getApkContentsSigners()).equals(signers(installed.signingInfo.getApkContentsSigners())))throw new IOException("安装包签名不一致，已停止安装");
     }

@@ -340,9 +340,9 @@ final class Ui {
             appPath=AppIcons.path(kind);
             int resource=kind.equals("mark")?R.drawable.brand_s:0;
             glyph=resource==0?null:getContext().getDrawable(resource).mutate();
-            if(glyph!=null)glyph.setTint(color);
+            if(glyph!=null&&!kind.equals("mark"))glyph.setTint(color);
         }
-        void set(String kind,int color){if(kind.equals(this.kind)&&color==this.color)return;boolean changed=!kind.equals(this.kind);this.kind=kind;this.color=color;if(changed)loadGlyph();else if(glyph!=null)glyph.setTint(color);invalidate();}
+        void set(String kind,int color){if(kind.equals(this.kind)&&color==this.color)return;boolean changed=!kind.equals(this.kind);this.kind=kind;this.color=color;if(changed)loadGlyph();else if(glyph!=null&&!kind.equals("mark"))glyph.setTint(color);invalidate();}
         int color(){return color;}
         @Override protected void onDraw(Canvas canvas){
             super.onDraw(canvas);

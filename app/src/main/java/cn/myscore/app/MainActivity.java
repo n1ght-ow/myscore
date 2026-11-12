@@ -1067,7 +1067,7 @@ implements ScoreAdapter.Host {
             mp.setMarginEnd(this.ui.dp(10.0f));
             header.addView((View)mark, (ViewGroup.LayoutParams)mp);
         }
-        TextView heading = this.ui.text(this.tab == 0 ? "MyScore" : "设置", 24, this.ui.text, true);
+        TextView heading = this.ui.text(this.tab == 0 ? "N1ghtScore" : "设置", 24, this.ui.text, true);
         heading.setLetterSpacing(-0.025f);
         header.addView((View)heading, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         if (this.tab == 0) {
@@ -1233,7 +1233,7 @@ implements ScoreAdapter.Host {
         this.settingRow(options, "help", "使用帮助", "日历提醒与数据说明", this::help);
         this.body.addView((View)options);
         this.ui.gap(this.body, 24);
-        TextView hint = this.ui.text("MyScore · " + BuildConfig.VERSION_NAME + "\n在比赛卡上点日历图标，订阅单场比赛。", 12, this.ui.muted, false);
+        TextView hint = this.ui.text("N1ghtScore · " + BuildConfig.VERSION_NAME + "\n在比赛卡上点日历图标，订阅单场比赛。", 12, this.ui.muted, false);
         hint.setLineSpacing((float)this.ui.dp(6.0f), 1.0f);
         hint.setGravity(17);
         hint.setPadding(this.ui.dp(4.0f), 0, this.ui.dp(4.0f), 0);
@@ -1720,11 +1720,11 @@ implements ScoreAdapter.Host {
         brand.setGravity(16);
         brand.setPadding(this.ui.dp(2.0f), 0, 0, 0);
         Ui.Icon mark = new Ui.Icon((Context)this, "mark", this.ui.text);
-        brand.addView((View)mark, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(28.0f), this.ui.dp(28.0f)));
-        TextView word = this.ui.text("MyScore", 13, this.ui.text, true);
+        brand.addView((View)mark, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(24.0f), this.ui.dp(24.0f)));
+        TextView word = this.ui.text("N1ghtScore", 12, this.ui.text, true);
         word.setLetterSpacing(-0.01f);
         LinearLayout.LayoutParams wordParams = new LinearLayout.LayoutParams(-2, -2);
-        wordParams.setMarginStart(this.ui.dp(8.0f));
+        wordParams.setMarginStart(this.ui.dp(6.0f));
         brand.addView((View)word, (ViewGroup.LayoutParams)wordParams);
         rail.addView((View)brand);
         this.ui.gap(rail, 24);
@@ -1786,7 +1786,7 @@ implements ScoreAdapter.Host {
         this.padRailWeek = zone;
         rail.addView((View)zone);
         this.ui.gap(rail, 8);
-        TextView version = this.ui.text("MyScore " + BuildConfig.VERSION_NAME, 9, this.ui.muted, false);
+        TextView version = this.ui.text("N1ghtScore " + BuildConfig.VERSION_NAME, 9, this.ui.muted, false);
         version.setPadding(this.ui.dp(4.0f), 0, 0, 0);
         rail.addView((View)version);
         return rail;
@@ -2772,7 +2772,7 @@ implements ScoreAdapter.Host {
         LinearLayout about = this.padSurface();
         about.addView((View)new Ui.Icon((Context)this, "mark", this.ui.text), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(32.0f), this.ui.dp(32.0f)));
         this.ui.gap(about, 10);
-        about.addView((View)this.ui.text("MyScore " + BuildConfig.VERSION_NAME, 18, this.ui.text, true));
+        about.addView((View)this.ui.text("N1ghtScore " + BuildConfig.VERSION_NAME, 18, this.ui.text, true));
         this.ui.gap(about, 6);
         about.addView((View)this.ui.text("原生 Android · 无广告 · 无登录 · 北京时间\n赛程与比分来自公开来源，失败时保留真实缓存。", 11, this.ui.muted, false));
         right.addView((View)about);

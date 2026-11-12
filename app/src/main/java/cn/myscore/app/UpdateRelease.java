@@ -17,8 +17,8 @@ final class UpdateRelease {
     final long size;
     private UpdateRelease(String version,String url,String assetUrl,String digest,long size,String notes)throws IOException {
         parts(version);
-        if(!url.equals(REPOSITORY+"/releases/download/v"+version+"/MyScore-"+version+".apk"))throw new IOException("更新文件地址不属于 MyScore 发布渠道");
-        if(!assetUrl.isEmpty()&&!assetUrl.matches("https://api\\.github\\.com/repos/n1ght-ow/myscore/releases/assets/[1-9][0-9]{0,18}"))throw new IOException("更新附件接口不属于 MyScore 发布渠道");
+        if(!url.equals(REPOSITORY+"/releases/download/v"+version+"/MyScore-"+version+".apk"))throw new IOException("更新文件地址不属于 N1ghtScore 发布渠道");
+        if(!assetUrl.isEmpty()&&!assetUrl.matches("https://api\\.github\\.com/repos/n1ght-ow/myscore/releases/assets/[1-9][0-9]{0,18}"))throw new IOException("更新附件接口不属于 N1ghtScore 发布渠道");
         if(!digest.matches("sha256:[a-fA-F0-9]{64}"))throw new IOException("发布文件缺少有效的校验信息，请稍后重试");
         if(size<=0||size>MAX_BYTES)throw new IOException("更新文件大小异常");
         this.version=version;this.url=url;this.assetUrl=assetUrl;this.sha256=digest.substring(7).toLowerCase(Locale.ROOT);this.size=size;

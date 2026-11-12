@@ -44,7 +44,7 @@ public final class UpdateService extends Service {
     private Notification notification(long bytes,long total){
         PendingIntent open=PendingIntent.getActivity(this,0,new Intent(this,UpdateActivity.class),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         int percent=total<=0?0:(int)Math.min(100,bytes*100/total);
-        return new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("MyScore 更新下载").setContentText(total<=0?"正在连接下载服务器…":"已下载 "+percent+"%").setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setProgress(100,percent,total<=0).build();
+        return new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("N1ghtScore 更新下载").setContentText(total<=0?"正在连接下载服务器…":"已下载 "+percent+"%").setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setProgress(100,percent,total<=0).build();
     }
     private void foreground(Notification notification){if(android.os.Build.VERSION.SDK_INT>=29)startForeground(NOTIFICATION,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);else startForeground(NOTIFICATION,notification);}
     @SuppressLint("UsableSpace")

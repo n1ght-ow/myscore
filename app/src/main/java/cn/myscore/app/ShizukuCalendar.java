@@ -80,6 +80,6 @@ final class ShizukuCalendar {
         }catch(RuntimeException ignored){}
         Intent launch=activity.getPackageManager().getLaunchIntentForPackage("moe.shizuku.privileged.api");
         try {activity.startActivity(launch!=null?launch:new Intent(Intent.ACTION_VIEW,Uri.parse("https://shizuku.rikka.app/download/")));}
-        catch(RuntimeException e){Sheet.message(activity,"日历云同步", "请在 Shizuku 中启动服务并授权 MyScore。本机日历改动会保留。设备重启后请确认 Shizuku 已运行。");}
+        catch(RuntimeException e){Sheet.message(activity,"日历云同步", "请在 Shizuku 中启动服务并授权 N1ghtScore。本机日历改动会保留。设备重启后请确认 Shizuku 已运行。");}
     }
 }

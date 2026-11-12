@@ -1,3 +1,10 @@
+# N1ghtScore 4.9.0 发布构建（2026-11-12）
+
+- 版本 4.9.0 / versionCode 55，包名仍为 `cn.myscore.app`。桌面和应用内名称改为 N1ghtScore；日历事件前缀 `MyScore:` 与更新包文件名 `MyScore-4.9.0.apk` 保持不变，已安装的 4.8.1 可以直接覆盖升级。
+- 发布文件为同签名个人安装 debug 包，大小 1,273,469 bytes，SHA-256 `3c959a800ac8e07b1d3d7255ac3f4d80c6635d6b663d8a4b91c69219cf88e50b`。校验附件 `SHA256SUMS-4.9.0.txt`。
+- 图标为岩白底盘上的黑曜石 / 深钛灰双联比分牌，冷绿色 Live 灯；应用内字标使用同一枚徽章，不再跟随文字染色。
+- 构建：`testDebugUnitTest` 248 项，0 失败 / 错误 / 跳过；`lintDebug` 通过（0 错误）；`assembleDebug` 通过。本次没有重装到 Redmi K80 Pro 或平板，也没有重跑模拟器界面检查。
+
 # MyScore 4.8.1 发布构建与真机核对（2026-11-12）
 
 - 版本 4.8.1 / versionCode 54，包名 `cn.myscore.app`。发布文件 `MyScore-4.8.1.apk` 为同签名个人安装 debug 包，大小 1,269,417 bytes，SHA-256 `f168986450c2a0263bac9af4a9071e0d16d14aa22abde35ac81ad57ae880f4cc`；校验附件 `SHA256SUMS-4.8.1.txt`。证书 SHA-256 继续为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。

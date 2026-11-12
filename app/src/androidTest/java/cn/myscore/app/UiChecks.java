@@ -77,7 +77,7 @@ final class UiChecks {
         require(recreated!=null,"activity recreates");test.waitForIdleSync();checks++;
         require(hasText(test,recreated,"单场订阅"),"settings remains selected after recreation");checks++;
         test.runOnMainSync(()->click(recreated.getWindow().getDecorView(),"比赛"));test.waitForIdleSync();
-        require(hasText(test,recreated,"MyScore"),"matches remain reachable after recreation");checks++;
+        require(hasText(test,recreated,"N1ghtScore"),"matches remain reachable after recreation");checks++;
         return checks;
     }
     private static Field field(String name)throws NoSuchFieldException{Field field=MainActivity.class.getDeclaredField(name);field.setAccessible(true);return field;}

@@ -3,7 +3,6 @@
     <queries>
         <package android:name="com.duowan.kiwi" />
         <package android:name="com.miui.micloudsync" />
-        <package android:name="moe.shizuku.privileged.api" />
     </queries>
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -36,9 +35,5 @@
             </intent-filter>
         </receiver>
         <provider android:name=".UpdateProvider" android:authorities="${applicationId}.updates" android:exported="false" android:grantUriPermissions="true" />
-        <provider android:name="rikka.shizuku.ShizukuProvider" android:authorities="${applicationId}.shizuku"
-            android:multiprocess="false" android:enabled="true" android:exported="true"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
-        <service android:name=".CalendarCloudJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true" />
     </application>
 </manifest>

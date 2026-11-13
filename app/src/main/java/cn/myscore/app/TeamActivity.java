@@ -39,7 +39,7 @@ public final class TeamActivity extends Activity {
     private String filter="upcoming";
     private CalendarSync calendarSync;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener calendarListener=(preferences,key)->{
-        if(key!=null&&key.startsWith("match:")){handler.removeCallbacks(this.renderSoon);handler.postDelayed(this.renderSoon,32);}
+        if(key==null||key.startsWith("match:")){handler.removeCallbacks(this.renderSoon);handler.postDelayed(this.renderSoon,32);}
     };
     private Match pendingSubscription;
     private boolean calendarBusy;
@@ -49,7 +49,7 @@ public final class TeamActivity extends Activity {
     private TeamRepository.Result result;
     private boolean busy,active;
     private boolean pendingForce;
-    private final Runnable renderSoon=()->{if(active&&!isDestroyed())render();};
+    private final Runnable renderSoon=()->{if(!isDestroyed()&&!isFinishing()){render();refreshSubscriptionViews();}};
     private int pendingPosition=-1;
     private int pendingPadUpcoming=-1,pendingPadFinished=-1;
     private final Runnable tick=()->load(false);
@@ -201,8 +201,8 @@ public final class TeamActivity extends Activity {
         column.addView(head);
         ScoreList list=new ScoreList(this);
         list.setPadding(ui.dp(20),ui.dp(4),ui.dp(20),ui.dp(28));list.setClipToPadding(false);list.setVerticalScrollBarEnabled(false);
-        if(upcoming){padUpcomingList=list;padUpcomingAdapter=padScheduleAdapter();}
-        else{padFinishedList=list;padFinishedAdapter=padScheduleAdapter();}
+        if(upcoming){padUpcomingList=list;padUpcomingAdapter=padScheduleAdapter();padUpcomingAdapter.attach(list);}
+        else{padFinishedList=list;padFinishedAdapter=padScheduleAdapter();padFinishedAdapter.attach(list);}
         column.addView(list,new LinearLayout.LayoutParams(-1,0,1));
         return column;
     }
@@ -320,7 +320,7 @@ public final class TeamActivity extends Activity {
         super.onRequestPermissionsResult(code,permissions,results);
         if(code!=42)return;
         Match match=pendingSubscription;pendingSubscription=null;
-        if(CalendarSync.permitted(this)){if(match!=null)toggleCalendar(match);}
+        if(CalendarSync.permitted(this)){CalendarUpdates.start(this);CalendarCloudSync.opened(this);if(match!=null)toggleCalendar(match);}
         else Sheet.message(this,"未开启日历权限","需要订阅时，请在系统应用权限中允许日历读写。");
     }
 

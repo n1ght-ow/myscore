@@ -48,7 +48,7 @@ final class ResultNotify {
         activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 43);
     }
 
-    private static NotificationManager ensureChannel(Context context) {
+    static NotificationManager ensureChannel(Context context) {
         NotificationManager nm = context.getSystemService(NotificationManager.class);
         if (nm == null) return null;
         NotificationChannel channel = new NotificationChannel(CHANNEL, "比赛结果", NotificationManager.IMPORTANCE_HIGH);

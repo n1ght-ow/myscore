@@ -123,20 +123,32 @@ implements ScoreAdapter.Host {
     private CalendarSync calendarSync;
     private final Set<String> subscribed = new HashSet<String>();
     private final Runnable calendarChanged = () -> {
-        if (!this.active || this.isDestroyed()) return;
+        if (this.isDestroyed() || this.isFinishing()) return;
         this.refreshSubscribed();
-        this.render(true);
+        this.renderedSettings = "";
+        if (this.active || this.getWindow().getDecorView().getWindowVisibility() == View.VISIBLE) {
+            this.render(true);
+        }
+        if (this.active && this.hasWindowFocus() && !this.subscribed.isEmpty()) {
+            ResultNotify.requestIfNeeded(this);
+        }
     };
     private final SharedPreferences.OnSharedPreferenceChangeListener calendarListener = (preferences, key) -> {
-        if (key != null && key.startsWith("match:")) {
+        if (key == null || key.startsWith("match:")) {
             this.handler.removeCallbacks(this.calendarChanged);
             this.handler.postDelayed(this.calendarChanged, 32L);
         }
     };
     private final SharedPreferences.OnSharedPreferenceChangeListener cloudListener = (preferences, key) -> {
-        this.handler.post(() -> {if(this.active && this.tab==1 && !this.isDestroyed())this.render(false);});
+        this.handler.post(() -> {
+            if (this.active && this.tab == 1 && !this.isDestroyed()) {
+                this.renderedSettings = "";
+                this.render(true);
+            }
+        });
     };
     private Match pendingSubscription;
+    private boolean pendingChooseCalendar;
     private long lastScoreScroll;
     private String renderedScores = "";
     private String renderedSettings = "";
@@ -301,7 +313,38 @@ implements ScoreAdapter.Host {
         super.onWindowFocusChanged(focus);
         if (focus) {
             Ui.highRefresh(this.getWindow());
+            this.requestStartupPermissionsIfNeeded();
         }
+    }
+
+    private void requestStartupPermissionsIfNeeded() {
+        if (!this.active || this.isFinishing() || this.isDestroyed() || !this.hasWindowFocus()) {
+            return;
+        }
+        if (android.app.ActivityManager.isUserAMonkey() || "ranchu".equals(Build.HARDWARE) || "goldfish".equals(Build.HARDWARE)) {
+            return;
+        }
+        ResultNotify.ensureChannel(this);
+        boolean needCalendar = !CalendarSync.permitted((Context)this) && !this.prefs.getBoolean("asked_calendar_startup", false);
+        SharedPreferences notifyPrefs = this.getSharedPreferences("result-notifications", 0);
+        boolean needNotify = Build.VERSION.SDK_INT >= 33
+            && this.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            && !notifyPrefs.getBoolean("asked_permission", false)
+            && (needCalendar || !this.subscribed.isEmpty());
+        if (!needCalendar && !needNotify) {
+            return;
+        }
+        ArrayList<String> perms = new ArrayList<String>(3);
+        if (needCalendar) {
+            this.prefs.edit().putBoolean("asked_calendar_startup", true).apply();
+            perms.add("android.permission.READ_CALENDAR");
+            perms.add("android.permission.WRITE_CALENDAR");
+        }
+        if (needNotify) {
+            notifyPrefs.edit().putBoolean("asked_permission", true).apply();
+            perms.add("android.permission.POST_NOTIFICATIONS");
+        }
+        this.requestPermissions(perms.toArray(new String[0]), 44);
     }
 
     public void onResume() {
@@ -1071,6 +1114,7 @@ implements ScoreAdapter.Host {
 
     private String settingsKey() {
         StringBuilder key = new StringBuilder(128);
+        key.append(CalendarSync.permitted((Context)this)).append('|');
         key.append(CalendarCloudSync.status(this)).append('|');
         key.append(Http.epoch()).append('|');
         key.append(this.tab).append('|').append(this.calendarBusy).append('|').append(this.calendarName()).append('|').append(this.calendarSync.linkedEvents()).append('|').append(this.prefs.getLong("calendar_checked", 0L)).append('|').append(this.snapshot.failed());
@@ -1240,12 +1284,12 @@ implements ScoreAdapter.Host {
         this.section("单场订阅");
         LinearLayout calendar = this.ui.column();
         calendar.setBackground((Drawable)this.ui.panel());
-        this.settingRow(calendar, "calendar-target", "接收日历", this.calendarName(), this::calendarChoice);
-        this.settingRow(calendar, "subscriptions", "已订阅的比赛", this.calendarSync.linkedEvents() + " 场 · 提前 5 分钟提醒", this::subscribedList);
+        this.settingRow(calendar, "calendar-target", "接收日历", this.calendarTargetDetail(), this::calendarChoice);
+        this.settingRow(calendar, "subscriptions", "已订阅的比赛", this.subscriptionsDetail(), this::subscribedList);
         long checked = this.prefs.getLong("calendar_checked", 0L);
         this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期、取消与完场赛果通知", () -> this.syncSubscriptions(true));
         this.settingRow(calendar, "calendar-open", "打开系统日历", "查看日程与提醒", this::openCalendar);
-        this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), () -> ShizukuCalendar.manage(this));
+        this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), this::manageCloudSync);
         this.body.addView((View)calendar);
         this.section("偏好与帮助");
         LinearLayout options = this.ui.column();
@@ -1312,12 +1356,50 @@ implements ScoreAdapter.Host {
     }
 
     private void help() {
-        this.message("使用帮助", "在比赛卡上点日历加号订阅，点勾选可取消。开赛前 5 分钟由系统日历提醒；已订阅比赛结束后由系统任务自动核对并推送最终赛果通知（无需应用常驻后台；小米 / 澎湃 OS 请开启应用通知、自启动及日历通知权限）。\n\n更换接收日历只影响新订阅，已有事件保留在原日历。\n\n网络采用多路自适应：国内源优先物理网卡直连分流，海外源自动在代理 / 直连与自有 HTTPS 节点间择优切换，切换网络或代理后自动恢复。\n\n体育由 ESPN 提供；CS2 来自 5EPlay：一线赛事（Major / S+ / S 级）与 Team Spirit 全部比赛，一线赛事卡片显示赛事名，Spirit 的次级比赛显示 CS2 · Team Spirit；LOL 仅 Worlds，来自英雄联盟赛事官网。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");
+        this.message("使用帮助", "在比赛卡上点日历加号订阅，点勾选可取消。开赛前 5 分钟由系统日历提醒；已订阅比赛结束后由系统任务自动核对并推送最终赛果通知（无需应用常驻后台；小米 / 澎湃 OS 请开启应用日历读写、应用通知、自启动及系统日历通知权限）。\n\n跨设备同步：手机与平板登录同一小米账户并开启日历权限后，单场订阅与取消约 45 秒–3 分钟通过小米日历自动互通，无需安装或启动 Shizuku。更换接收日历只影响新订阅，已有事件保留在原日历。\n\n网络采用多路自适应：国内源优先物理网卡直连分流，海外源自动在代理 / 直连与自有 HTTPS 节点间择优切换，切换网络或代理后自动恢复。\n\n体育由 ESPN 提供；CS2 来自 5EPlay：一线赛事（Major / S+ / S 级）与 Team Spirit 全部比赛，一线赛事卡片显示赛事名，Spirit 的次级比赛显示 CS2 · Team Spirit；LOL 仅 Worlds，来自英雄联盟赛事官网。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");
     }
 
     private String calendarName() {
         String name = this.calendarSync.calendarName();
         return name == null || name.isBlank() ? "选择手机日历" : name;
+    }
+
+    private String calendarTargetDetail() {
+        return CalendarSync.permitted((Context)this) ? this.calendarName() : "未开启日历权限 · 点此授权";
+    }
+
+    private String subscriptionsDetail() {
+        return CalendarSync.permitted((Context)this)
+            ? this.calendarSync.linkedEvents() + " 场 · 提前 5 分钟提醒"
+            : "开启日历权限后自动识别手机与平板订阅";
+    }
+
+    private void requestCalendarPermission(boolean chooseAfter) {
+        if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
+        this.pendingChooseCalendar = chooseAfter;
+        this.requestPermissions(new String[]{"android.permission.READ_CALENDAR", "android.permission.WRITE_CALENDAR"}, 42);
+    }
+
+    private void manageCloudSync() {
+        if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
+        if (!CalendarSync.permitted((Context)this)) {
+            this.requestCalendarPermission(false);
+            return;
+        }
+        CalendarCloudSync.manage(this, () -> {
+            if (this.isDestroyed() || this.isFinishing()) {
+                return;
+            }
+            this.refreshSubscribed();
+            this.renderedScores = "";
+            this.renderedSettings = "";
+            this.renderedPadFocus = "";
+            this.render(true);
+        });
     }
 
     private void calendarChoice() {
@@ -1329,7 +1411,7 @@ implements ScoreAdapter.Host {
             return;
         }
         if (!CalendarSync.permitted((Context)this)) {
-            this.requestPermissions(new String[]{"android.permission.READ_CALENDAR", "android.permission.WRITE_CALENDAR"}, 42);
+            this.requestCalendarPermission(true);
             return;
         }
         if (this.calendarQuerying) {
@@ -1392,7 +1474,7 @@ implements ScoreAdapter.Host {
         }
         this.pendingSubscription = m;
         if (!CalendarSync.permitted((Context)this)) {
-            this.requestPermissions(new String[]{"android.permission.READ_CALENDAR", "android.permission.WRITE_CALENDAR"}, 42);
+            this.requestCalendarPermission(false);
             return;
         }
         this.subscribePending();
@@ -1495,6 +1577,10 @@ implements ScoreAdapter.Host {
     }
 
     private void subscribedList() {
+        if (!CalendarSync.permitted((Context)this)) {
+            this.requestCalendarPermission(false);
+            return;
+        }
         List<Match> list = this.calendarSync.subscriptions();
         if (list.isEmpty()) {
             Sheet.message(this, "还没有订阅", "在比赛卡上点“订阅”，把单场比赛加入手机日历。");
@@ -1512,6 +1598,12 @@ implements ScoreAdapter.Host {
 
     private void syncSubscriptions(boolean feedback) {
         if (this.isFinishing() || this.isDestroyed()) {
+            return;
+        }
+        if (!CalendarSync.permitted((Context)this)) {
+            if (feedback) {
+                this.requestCalendarPermission(false);
+            }
             return;
         }
         if (this.calendarBusy) {
@@ -1587,17 +1679,45 @@ implements ScoreAdapter.Host {
 
     public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
-        if (code != 42) {
+        if (code != 42 && code != 44) {
             return;
         }
+        boolean chooseAfter = this.pendingChooseCalendar;
+        this.pendingChooseCalendar = false;
         if (!CalendarSync.permitted((Context)this)) {
             this.pendingSubscription = null;
-            Sheet.message(this, "未开启日历权限", "比分查看不受影响。需要订阅时，请在系统应用权限中允许日历读写。");
+            this.renderedSettings = "";
+            this.render(true);
+            if (code == 42) {
+                Sheet.message(this, "未开启日历权限", "开启日历权限后，才能订阅比赛并自动同步手机与平板的小米日历赛程。请在系统应用权限中允许日历读写。");
+            }
             return;
         }
+        CalendarUpdates.start(this);
+        CalendarUpdates.observe(this, this.snapshot.matches());
+        CalendarCloudSync.opened(this);
+        this.calendarWorker.submit(() -> {
+            this.ensureCalendar(false);
+            this.calendarSync.recoverLocal();
+            CalendarJob.schedule((Context)this);
+            this.handler.post(() -> {
+                if (this.isDestroyed()) {
+                    return;
+                }
+                this.refreshSubscribed();
+                this.renderedScores = "";
+                this.renderedSettings = "";
+                this.renderedPadFocus = "";
+                this.render(true);
+                if (this.calendarSync.hasSubscriptions()) {
+                    ResultNotify.requestIfNeeded(this);
+                    this.syncSubscriptions(false);
+                }
+            });
+        });
         if (this.pendingSubscription != null) {
             this.subscribePending();
-        } else {
+        } else if (chooseAfter) {
             this.chooseCalendar();
         }
     }
@@ -2723,11 +2843,11 @@ implements ScoreAdapter.Host {
         this.padSettingsHeading(left, "单场订阅");
         LinearLayout calendar = this.ui.column();
         calendar.setBackground((Drawable)this.ui.panel());
-        this.settingRow(calendar, "calendar-target", "接收日历", this.calendarName(), this::calendarChoice);
-        this.settingRow(calendar, "subscriptions", "已订阅的比赛", this.calendarSync.linkedEvents() + " 场 · 提前 5 分钟提醒", this::subscribedList);
+        this.settingRow(calendar, "calendar-target", "接收日历", this.calendarTargetDetail(), this::calendarChoice);
+        this.settingRow(calendar, "subscriptions", "已订阅的比赛", this.subscriptionsDetail(), this::subscribedList);
         this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期、取消与完场赛果通知", () -> this.syncSubscriptions(true));
         this.settingRow(calendar, "calendar-open", "打开系统日历", "查看日程与提醒", this::openCalendar);
-        this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), () -> ShizukuCalendar.manage(this));
+        this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), this::manageCloudSync);
         left.addView((View)calendar);
         this.ui.gap(left, 28);
         this.padSettingsHeading(left, "数据来源");

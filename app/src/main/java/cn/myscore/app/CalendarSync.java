@@ -94,7 +94,13 @@ public final class CalendarSync {
     Result recoverLocal() {
         Result result=new Result();
         if(!permitted(context))return result;
-        synchronized(LOCK){result.inserted=recoverOwnedEvents(null,result);}
+        synchronized(LOCK){
+            if(calendarId()<0) {
+                CalendarChoice best=bestCalendar();
+                if(best!=null)chooseCalendar(best.id,best.name);
+            }
+            result.inserted=recoverOwnedEvents(null,result);
+        }
         return result;
     }
     public Set<String> subscribedIds() {
@@ -404,7 +410,7 @@ public final class CalendarSync {
         for(long calendar:deduplicated)requestCloud(calendar);
         SharedPreferences.Editor edit=links.edit();boolean changed=false;
         if(known==null)for(String key:links.getAll().keySet())if(key.startsWith("match:")&&!owned.containsKey(key.substring(6))) {
-            String id=key.substring(6);edit.remove(key).remove("record:"+id).remove("fingerprint:"+id);changed=true;
+            String id=key.substring(6);edit.remove(key).remove("record:"+id).remove("fingerprint:"+id);changed=true;result.cancelled++;
         }
         List<OwnedEvent> reminders=new ArrayList<>();
         for(Map.Entry<String,OwnedEvent> entry:owned.entrySet()) {

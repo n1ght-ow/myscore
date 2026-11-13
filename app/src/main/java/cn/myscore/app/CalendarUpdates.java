@@ -82,13 +82,14 @@ final class CalendarUpdates {
                 if(local){
                     long started=android.os.SystemClock.uptimeMillis();
                     CalendarSync.Result result=sync.recoverLocal();
-                    if(result.inserted>0)CalendarJob.schedule(app);
+                    if(result.inserted+result.cancelled>0)CalendarJob.schedule(app);
+                    CalendarCloudSync.refreshAsync(app);
                     android.util.Log.i("MyScorePerf","calendar local recovery in "+(android.os.SystemClock.uptimeMillis()-started)+"ms links="+result.inserted+" reminders="+result.updated+" failed="+result.failed);
                     if(result.failed>0)android.util.Log.w("MyScore","Calendar recovery incomplete: "+result.error);
                 }
                 if(batch.isEmpty())continue;
                 CalendarSync.Result result=sync.syncKnown(batch,System.currentTimeMillis());
-                if(result.updated+result.completed+result.cancelled>0)CalendarJob.schedule(app);
+                if(result.updated+result.completed+result.cancelled>0){CalendarJob.schedule(app);CalendarCloudSync.refreshAsync(app);}
                 if(result.failed>0){synchronized(PENDING){for(Match m:batch)CHECKED_ORPHANS.remove(m.id);}android.util.Log.w("MyScore","Calendar source update incomplete: "+result.message());}
             }catch(RuntimeException e){synchronized(PENDING){for(Match m:batch)CHECKED_ORPHANS.remove(m.id);}android.util.Log.w("MyScore","Calendar source update failed",e);}
         }

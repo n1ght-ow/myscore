@@ -1,3 +1,11 @@
+# N1ghtScore 4.10.1 发布构建（2026-11-13）
+
+- 版本 4.10.1 / versionCode 58，包名 `cn.myscore.app`。日历事件前缀 `MyScore:` 与更新包文件名 `MyScore-4.10.1.apk` 保持不变，签名证书 SHA-256 继续为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 发布文件为同签名个人安装 debug 包，大小 1,253,559 bytes，SHA-256 `e28aae499e7036c375bc9c8d9427702c416efdbb7ae41bcceb97d720020fe31a`；校验附件 `SHA256SUMS-4.10.1.txt`。
+- 移除 Shizuku 依赖与原生跨端同步修复：彻底移除 `dev.rikka.shizuku`、`ShizukuProvider`、AIDL 及遗留后台重试任务 `24704`，将 `CalendarCloudSync` 改为直接依据 `CalendarContract` 的 `_sync_id` 与 `dirty` 状态展示小米日历上云进度并触发系统同步；补齐真机首次启动日历读写与通知权限引导，授权后自动选定「小米日历 · 小米账户」、立即认领跨端订阅并安排完场结果推送任务（`ID_FINISH = 24705`）；修复远端取消订阅后的任务重排及平板端 `TeamActivity` 赛程列表适配器未绑定 `attach(list)` 导致的局部刷新遗漏。
+- 验证：`testDebugUnitTest` 259 项全部通过；`lintDebug` 0 错误；`Redmi K80 Pro`（`24122RKC7C`）与 `Xiaomi Pad 6S Pro`（`b34f6efa`）双真机覆盖安装实测通过，实测手机订阅 `CS2 · G2 vs Falcons`、`NBA · Spurs vs Warriors`、`LOL · Worlds · GEN vs BLG` 后无需 Shizuku 自动上云并推送至平板日历，平板端唤起后 63 ms 内自动认领全部 3 场订阅、点亮绿色勾选并排好完场推送任务。
+- 发布目标为 `origin/main`、标签 `v4.10.1` 与 [N1ghtScore 4.10.1](https://github.com/n1ght-ow/myscore/releases/tag/v4.10.1)，本地产物存档于忽略目录 `artifacts/release-4.10.1/`。
+
 # N1ghtScore 4.10.0 发布构建（2026-11-13）
 
 - 版本 4.10.0 / versionCode 57，包名 `cn.myscore.app`。日历事件前缀 `MyScore:` 与更新包文件名 `MyScore-4.10.0.apk` 保持不变，已安装的旧版可直接覆盖升级并保留设置与日历关联。

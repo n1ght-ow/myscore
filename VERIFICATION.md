@@ -1,3 +1,11 @@
+# N1ghtScore 4.11.0 发布构建（2026-11-13）
+
+- 版本 4.11.0 / versionCode 59，包名 `cn.myscore.app`。日历事件前缀 `MyScore:` 与更新包文件名 `MyScore-4.11.0.apk` 保持不变，签名证书 SHA-256 继续为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 发布文件为同签名个人安装 debug 包，大小 1,260,827 bytes，SHA-256 `e4d2cc18ff3f19fe94f561e9cd72fed2ee9ce5ab8ec603fe9e825f722e8e7916`；校验附件 `SHA256SUMS-4.11.0.txt`。
+- 应用内全界面重绘与空间利用率优化：重绘矢量图标系统（`AppIcons` 与 `brand_s.xml`），统一色板、字阶、4/8/12/16/24dp 间距与 1px 细边容器（`Ui`、`Sheet`）；重构比分列表与平板双栏卡片（`MainActivity`、`ScoreAdapter`、`PadScoreAdapter`、`TeamActivity`、`TeamScheduleAdapter`）、赛事详情与数据表格（`DetailActivity`、`DetailTableView`、`PlayerStatsView`、`TeamPanelsView`、`FootballLineupView`、`LolMatchView`）以及应用内更新页（`UpdateActivity`），收紧冗余间距并消除重复标题与错误提示。
+- 验证：`testDebugUnitTest` 259 项全部通过；`lintDebug` 0 错误；`SmokeInstrumentation` 965 项、`TabletRegressionInstrumentation` 886 项、`DesignReviewInstrumentation` 17,809 项、`UiAuditInstrumentation` 36 路由 5,798 项全部通过；`Xiaomi Pad 6S Pro`（`b34f6efa`）与 `Redmi K80 Pro`（`24122RKC7C`）双真机覆盖安装同一 APK，两端实装 `base.apk` SHA-256 与本地发布包完全一致。
+- 发布目标为 `origin/main`、标签 `v4.11.0` 与 [N1ghtScore 4.11.0](https://github.com/n1ght-ow/myscore/releases/tag/v4.11.0)，本地产物存档于忽略目录 `artifacts/release-4.11.0/`。
+
 # N1ghtScore 4.10.1 发布构建（2026-11-13）
 
 - 版本 4.10.1 / versionCode 58，包名 `cn.myscore.app`。日历事件前缀 `MyScore:` 与更新包文件名 `MyScore-4.10.1.apk` 保持不变，签名证书 SHA-256 继续为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。

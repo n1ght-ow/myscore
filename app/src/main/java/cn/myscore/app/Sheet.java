@@ -44,9 +44,9 @@ final class Sheet {
             boolean on = i == selected;
             LinearLayout row = ui.row();
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setMinimumHeight(ui.dp(56));
-            row.setPadding(0, ui.dp(10), 0, ui.dp(10));
-            ui.clickable(row, Color.TRANSPARENT, Ui.CONTROL_RADIUS);
+            row.setMinimumHeight(ui.dp(50));
+            row.setPadding(ui.dp(12), ui.dp(8), ui.dp(12), ui.dp(8));
+            ui.clickable(row, on ? ui.tonal : Color.TRANSPARENT, Ui.CONTROL_RADIUS);
             row.setSelected(on);
             row.setFocusable(true);
             row.setContentDescription(item.title + (item.detail.isEmpty() ? "" : "，" + item.detail) + (on ? "，已选中" : ""));
@@ -78,7 +78,7 @@ final class Sheet {
         Dialog dialog=base(activity,ui);
         LinearLayout content=content(activity,ui,dialog,"选择日期",null);
         // Keep seven 48dp date targets on compact phones without shrinking the type.
-        int side=Math.max(0,Math.min(ui.dp(24),(activity.getResources().getDisplayMetrics().widthPixels-ui.dp(336))/2));
+        int side=Math.max(0,Math.min(ui.dp(20),(activity.getResources().getDisplayMetrics().widthPixels-ui.dp(336))/2));
         content.setPadding(side,content.getPaddingTop(),side,content.getPaddingBottom());
         YearMonth[] month={YearMonth.from(selected)};
         LinearLayout nav=ui.row();
@@ -93,8 +93,9 @@ final class Sheet {
         ui.clickable(next,ui.tonal,Ui.CONTROL_RADIUS);next.setFocusable(true);next.setContentDescription("下一个月");
         nav.addView(next,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         content.addView(nav);
+        ui.gap(content,4);
         LinearLayout weekdays=ui.row();
-        for(String label:new String[]{"一","二","三","四","五","六","日"}){TextView d=ui.text(label,11,ui.muted,false);d.setGravity(Gravity.CENTER);d.setPadding(0,ui.dp(6),0,ui.dp(6));weekdays.addView(d,new LinearLayout.LayoutParams(0,-2,1));}
+        for(String label:new String[]{"一","二","三","四","五","六","日"}){TextView d=ui.text(label,11,ui.muted,false);d.setGravity(Gravity.CENTER);d.setPadding(0,ui.dp(4),0,ui.dp(4));weekdays.addView(d,new LinearLayout.LayoutParams(0,-2,1));}
         content.addView(weekdays);
         LinearLayout grid=ui.column();content.addView(grid);
         Runnable[] draw=new Runnable[1];
@@ -168,11 +169,12 @@ final class Sheet {
         LinearLayout root = ui.column();
         GradientDrawable background = new GradientDrawable();
         background.setColor(ui.surface);
+        background.setStroke(Math.max(1, ui.dp(0.75f)), ui.border);
         float r = ui.dp(Ui.SHEET_RADIUS);
         boolean pad = Ui.isPad(activity);
         background.setCornerRadii(pad ? new float[]{r, r, r, r, r, r, r, r} : new float[]{r, r, r, r, 0, 0, 0, 0});
         root.setBackground(background);
-        root.setPadding(ui.dp(pad ? 32 : 24), ui.dp(pad ? 20 : 8), ui.dp(pad ? 32 : 24), ui.dp(24));
+        root.setPadding(ui.dp(pad ? 28 : 20), ui.dp(pad ? 18 : 8), ui.dp(pad ? 28 : 20), ui.dp(20));
         View handle = new View(activity);
         handle.setBackground(ui.shape(ui.line, 2));
         handle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -182,8 +184,8 @@ final class Sheet {
         handle.setVisibility(pad ? View.GONE : View.VISIBLE);
         root.addView(handle, handleParams);
         if (title != null && !title.isEmpty()) {
-            TextView heading = ui.text(title, 22, ui.text, true);
-            heading.setPadding(0, ui.dp(16), 0, 0);
+            TextView heading = ui.text(title, 20, ui.text, true);
+            heading.setPadding(0, ui.dp(12), 0, 0);
             root.addView(heading);
         }
         if (message != null && !message.isEmpty()) {

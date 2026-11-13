@@ -33,9 +33,9 @@ final class Ui {
         params.preferredDisplayModeId=0;params.preferredRefreshRate=best;window.setAttributes(params);
     }
     final Context c;
-    static final int CARD_RADIUS=20,CONTROL_RADIUS=24,SHEET_RADIUS=28;
+    static final int CARD_RADIUS=16,CONTROL_RADIUS=14,SHEET_RADIUS=24;
     static final float ACTION_ICON_ALPHA=.75f;
-    final int bg,surface,text,muted,primary,onPrimary,tonal,line,error,secondary,action,onAction;
+    final int bg,surface,text,muted,primary,onPrimary,tonal,line,border,error,secondary,action,onAction;
     private static Typeface interRegular,interMedium;
     private final Typeface regular,medium;
     static boolean isDark(Context context) {
@@ -49,14 +49,15 @@ final class Ui {
             interMedium=new Typeface.Builder(c.getAssets(),"fonts/Inter.ttf").setWeight(600).build();
         }
         regular=interRegular==null?REGULAR:interRegular;medium=interMedium==null?MEDIUM:interMedium;
-        bg=Color.parseColor(dark?"#000000":"#F5F5F3");
-        surface=Color.parseColor(dark?"#141414":"#FFFFFF");
+        bg=Color.parseColor(dark?"#000000":"#F4F5F3");
+        surface=Color.parseColor(dark?"#121313":"#FFFFFF");
         text=Color.parseColor(dark?"#F5F5F3":"#191B1A");
         muted=Color.parseColor(dark?"#A3A5A3":"#616660");
         primary=Color.parseColor(dark?"#76DDB0":"#176B49");
         onPrimary=Color.parseColor(dark?"#092C1D":"#FFFFFF");
-        tonal=Color.parseColor(dark?"#252525":"#E9EBE7");
-        line=Color.parseColor(dark?"#2A2A2A":"#E4E6E1");
+        tonal=Color.parseColor(dark?"#1E201F":"#EAECE8");
+        line=Color.parseColor(dark?"#242726":"#E1E4DF");
+        border=Color.parseColor(dark?"#222524":"#E2E5E0");
         error=Color.parseColor(dark?"#FFAAA5":"#AD322B");
         secondary=Color.parseColor(dark?"#B5B8B5":"#5E655E");
         action=text;onAction=bg;
@@ -180,9 +181,10 @@ final class Ui {
         }
     }
     GradientDrawable shape(int color,int radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));return g;}
-    GradientDrawable panel(){return shape(surface,CARD_RADIUS);}
+    GradientDrawable panel(){GradientDrawable card=shape(surface,CARD_RADIUS);card.setStroke(Math.max(1,dp(0.75f)),border);return card;}
     void clickable(View v,int fill,int radius){
         GradientDrawable background=shape(fill,radius);
+        if(fill==surface&&radius>0)background.setStroke(Math.max(1,dp(0.75f)),border);
         v.setBackground(new RippleDrawable(ColorStateList.valueOf(text&0x00ffffff|0x18000000),background,shape(Color.WHITE,radius)));
     }
     TextView chip(String label,boolean selected,Runnable action) {
@@ -295,11 +297,11 @@ final class Ui {
         final TextView title,message,action;
         ScheduleEmpty(Runnable next) {
             super(c);setOrientation(VERTICAL);setGravity(Gravity.START);
-            setPadding(dp(8),dp(64),dp(8),dp(40));
+            setPadding(dp(8),dp(40),dp(8),dp(40));
             Icon calendar=new Icon(c,"calendar",muted);
             calendar.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             addView(calendar,new LinearLayout.LayoutParams(dp(32),dp(32)));
-            gap(this,24);
+            gap(this,16);
             title=text("",22,text,true);addView(title,new LinearLayout.LayoutParams(-1,-2));
             gap(this,10);
             message=text("",14,muted,false);message.setLineSpacing(dp(5),1);
@@ -333,9 +335,10 @@ final class Ui {
         }
     }
     static final class Icon extends View {
-        private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);private String kind;private int color;private final Path refreshArrow=new Path();
+        private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);private String kind;private int color;
+        private final Path refreshArrow=new Path(),playPath=new Path();
         private Drawable glyph;private Path appPath;
-        Icon(Context c,String kind,int color){super(c);this.kind=kind;this.color=color;loadGlyph();refreshArrow.moveTo(19,3);refreshArrow.lineTo(19,9);refreshArrow.lineTo(13,9);setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
+        Icon(Context c,String kind,int color){super(c);this.kind=kind;this.color=color;loadGlyph();refreshArrow.moveTo(18.2f,3.8f);refreshArrow.lineTo(18.2f,7.8f);refreshArrow.lineTo(14.2f,7.8f);playPath.moveTo(8.6f,5.5f);playPath.lineTo(18.6f,12f);playPath.lineTo(8.6f,18.5f);playPath.close();setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);}
         private void loadGlyph(){
             appPath=AppIcons.path(kind);
             int resource=kind.equals("mark")?R.drawable.brand_s:0;
@@ -354,24 +357,24 @@ final class Ui {
             }
             canvas.save();float scale=Math.min(getWidth(),getHeight())/24f;
             canvas.translate((getWidth()-24*scale)/2,(getHeight()-24*scale)/2);canvas.scale(scale,scale);
-            p.setColor(color);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.8f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
-            if(appPath!=null){p.setStrokeWidth(1.7f);canvas.drawPath(appPath,p);}
-            else if(kind.equals("back")){canvas.drawLine(20,12,4,12,p);canvas.drawLine(4,12,11,5,p);canvas.drawLine(4,12,11,19,p);}
-            else if(kind.equals("check")){canvas.drawLine(5,12,10,17,p);canvas.drawLine(10,17,19,7,p);}
-            else if(kind.equals("play")){canvas.drawLine(8,5,8,19,p);canvas.drawLine(8,5,19,12,p);canvas.drawLine(19,12,8,19,p);}
-            else if(kind.equals("chevron")){canvas.drawLine(9,6,15,12,p);canvas.drawLine(15,12,9,18,p);}
-            else if(kind.equals("refresh")) {canvas.drawArc(4,4,20,20,35,285,false,p);canvas.drawPath(refreshArrow,p);}
-            else if(kind.equals("calendar")) {canvas.drawRoundRect(4,5,20,21,2,2,p);canvas.drawLine(8,3,8,7,p);canvas.drawLine(16,3,16,7,p);canvas.drawLine(4,10,20,10,p);canvas.drawLine(8,14,10,14,p);canvas.drawLine(14,14,16,14,p);canvas.drawLine(8,17,10,17,p);}
+            p.setColor(color);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1.75f);p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
+            if(appPath!=null){canvas.drawPath(appPath,p);}
+            else if(kind.equals("back")){canvas.drawLine(19f,12f,5f,12f,p);canvas.drawLine(5f,12f,11.5f,5.5f,p);canvas.drawLine(5f,12f,11.5f,18.5f,p);}
+            else if(kind.equals("check")){canvas.drawLine(5.5f,12.5f,10f,17f,p);canvas.drawLine(10f,17f,18.5f,7.5f,p);}
+            else if(kind.equals("play")){canvas.drawPath(playPath,p);}
+            else if(kind.equals("chevron")){canvas.drawLine(9.5f,6.5f,15f,12f,p);canvas.drawLine(15f,12f,9.5f,17.5f,p);}
+            else if(kind.equals("refresh")) {canvas.drawArc(4.5f,4.5f,19.5f,19.5f,45,280,false,p);canvas.drawPath(refreshArrow,p);}
+            else if(kind.equals("calendar")) {canvas.drawRoundRect(4.5f,5.5f,19.5f,20.5f,2.5f,2.5f,p);canvas.drawLine(8.5f,3.2f,8.5f,6.8f,p);canvas.drawLine(15.5f,3.2f,15.5f,6.8f,p);canvas.drawLine(4.5f,9.8f,19.5f,9.8f,p);canvas.drawLine(8.5f,13.5f,10.5f,13.5f,p);canvas.drawLine(13.5f,13.5f,15.5f,13.5f,p);canvas.drawLine(8.5f,16.8f,10.5f,16.8f,p);canvas.drawLine(13.5f,16.8f,15.5f,16.8f,p);}
             else if(kind.equals("calendar-add")||kind.equals("calendar-check")) {
-                canvas.drawRoundRect(4.5f,6,19.5f,20.5f,2,2,p);canvas.drawLine(8.5f,3.5f,8.5f,8,p);canvas.drawLine(15.5f,3.5f,15.5f,8,p);canvas.drawLine(4.5f,10.5f,19.5f,10.5f,p);
-                if(kind.equals("calendar-add")){canvas.drawLine(9,15.5f,15,15.5f,p);canvas.drawLine(12,12.5f,12,18.5f,p);}
-                else{canvas.drawLine(8.5f,15,11,17.5f,p);canvas.drawLine(11,17.5f,15.5f,13,p);}
+                canvas.drawRoundRect(4.5f,5.5f,19.5f,20.5f,2.5f,2.5f,p);canvas.drawLine(8.5f,3.2f,8.5f,6.8f,p);canvas.drawLine(15.5f,3.2f,15.5f,6.8f,p);canvas.drawLine(4.5f,9.8f,19.5f,9.8f,p);
+                if(kind.equals("calendar-add")){canvas.drawLine(9.2f,15.1f,14.8f,15.1f,p);canvas.drawLine(12f,12.3f,12f,17.9f,p);}
+                else{canvas.drawLine(8.8f,15.2f,11f,17.4f,p);canvas.drawLine(11f,17.4f,15.2f,13.2f,p);}
             }
-            else if(kind.equals("settings")) {for(int i=0;i<3;i++){int y=6+i*6;canvas.drawLine(4,y,20,y,p);p.setStyle(Paint.Style.FILL);canvas.drawCircle(i==1?9:15,y,2.8f,p);p.setStyle(Paint.Style.STROKE);}}
-            else if(kind.equals("clock")){canvas.drawCircle(12,12,8.5f,p);canvas.drawLine(12,7,12,12,p);canvas.drawLine(12,12,16,14,p);}
-            else if(kind.equals("theme")){canvas.drawCircle(12,12,8,p);p.setStyle(Paint.Style.FILL);canvas.drawArc(4,4,20,20,90,180,true,p);}
-            else if(kind.equals("info")){canvas.drawCircle(12,12,8.5f,p);canvas.drawLine(12,11,12,16,p);p.setStyle(Paint.Style.FILL);canvas.drawCircle(12,7.5f,1,p);}
-            else if(kind.equals("download")){canvas.drawLine(12,3,12,15,p);canvas.drawLine(7,10,12,15,p);canvas.drawLine(12,15,17,10,p);canvas.drawLine(4,16,4,21,p);canvas.drawLine(4,21,20,21,p);canvas.drawLine(20,21,20,16,p);}
+            else if(kind.equals("settings")) {for(int rowIndex=0;rowIndex<3;rowIndex++){float y=6f+rowIndex*6f;float cx=rowIndex==1?9f:15f;canvas.drawLine(4f,y,cx-2.3f,y,p);canvas.drawCircle(cx,y,2.3f,p);canvas.drawLine(cx+2.3f,y,20f,y,p);}}
+            else if(kind.equals("clock")){canvas.drawCircle(12f,12f,8.2f,p);canvas.drawLine(12f,7.5f,12f,12f,p);canvas.drawLine(12f,12f,15.5f,14f,p);}
+            else if(kind.equals("theme")){canvas.drawCircle(12f,12f,8.2f,p);p.setStyle(Paint.Style.FILL);canvas.drawArc(3.8f,3.8f,20.2f,20.2f,90f,180f,true,p);}
+            else if(kind.equals("info")){canvas.drawCircle(12f,12f,8.2f,p);canvas.drawLine(12f,11.2f,12f,16f,p);p.setStyle(Paint.Style.FILL);canvas.drawCircle(12f,8.1f,0.9f,p);}
+            else if(kind.equals("download")){canvas.drawLine(12f,4f,12f,14.5f,p);canvas.drawLine(7.8f,10.3f,12f,14.5f,p);canvas.drawLine(16.2f,10.3f,12f,14.5f,p);canvas.drawLine(4.5f,16.5f,4.5f,19.5f,p);canvas.drawLine(4.5f,19.5f,19.5f,19.5f,p);canvas.drawLine(19.5f,19.5f,19.5f,16.5f,p);}
             else {canvas.drawRoundRect(3,5,21,20,2,2,p);canvas.drawLine(6,10,12,10,p);canvas.drawLine(6,15,12,15,p);canvas.drawLine(17,9,17,11,p);canvas.drawLine(17,14,17,16,p);}
             canvas.restore();
         }

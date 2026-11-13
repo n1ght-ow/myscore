@@ -47,8 +47,8 @@ final class TeamScheduleAdapter extends BaseAdapter {
         if(row.type==TeamScheduleRow.SECTION) {
             TextView text=(TextView)convertView;
             if(text==null) {
-                text=ui.text("",14,ui.text,true);
-                text.setPadding(ui.dp(4),ui.dp(22),0,ui.dp(12));
+                text=ui.text("",13,ui.text,true);
+                text.setPadding(ui.dp(4),ui.dp(12),0,ui.dp(6));
             }
             text.setText(row.title);
             text.setTextColor(row.title.startsWith("进行中")?ui.primary:ui.text);
@@ -89,6 +89,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
 
     private final class MatchHolder {
         final LinearLayout root,card;
+        final LinearLayout numbers;
         final TextView date,state,opponent,detail,result;
         final Ui.ScoreText score;
         final Ui.MatchTime foot;
@@ -96,11 +97,12 @@ final class TeamScheduleAdapter extends BaseAdapter {
         final FrameLayout action;
         final Ui.Icon calendar;
         final Logos.Crest crest;
+        final int scoreWidth;
         TeamScheduleRow row;
 
         MatchHolder() {
             root=ui.column();root.setPadding(0,0,0,ui.dp(8));
-            card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(18),ui.dp(14),ui.dp(18),ui.dp(10));
+            card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(16),ui.dp(11),ui.dp(14),ui.dp(6));
             ui.clickable(card,ui.surface,Ui.CARD_RADIUS);card.setFocusable(true);
             card.setOnClickListener(v->{if(row!=null&&row.match!=null)host.openMatch(row.match);});
             card.setMinimumHeight(ui.dp(72));
@@ -108,7 +110,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
             date=ui.text("",12,ui.muted,false);top.addView(date,new LinearLayout.LayoutParams(0,-2,1));
             state=ui.text("",12,ui.muted,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),0,0,0);
             top.addView(state,new LinearLayout.LayoutParams(-2,-2));
-            card.addView(top);ui.gap(card,10);
+            card.addView(top);ui.gap(card,8);
             LinearLayout main=ui.row();
             crest=Logos.crest(ui,24,false);main.addView(crest.box,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));
             LinearLayout middle=ui.column();
@@ -116,23 +118,24 @@ final class TeamScheduleAdapter extends BaseAdapter {
             detail=ui.text("",11,ui.muted,false);detail.setPadding(0,ui.dp(4),0,0);middle.addView(detail);
             LinearLayout.LayoutParams middleParams=new LinearLayout.LayoutParams(0,-2,1);
             middleParams.setMarginStart(ui.dp(10));main.addView(middle,middleParams);
-            LinearLayout numbers=ui.column();numbers.setGravity(Gravity.CENTER);
+            scoreWidth=Math.max(ui.dp(60),ui.scoreColumnWidth(20));
+            numbers=ui.column();numbers.setGravity(Gravity.CENTER);
             score=ui.score("","",false,20);numbers.addView(score,new LinearLayout.LayoutParams(-1,-2));
             result=ui.text("",11,ui.primary,true);result.setGravity(Gravity.CENTER);result.setPadding(0,ui.dp(2),0,0);numbers.addView(result);
-            LinearLayout.LayoutParams numbersParams=new LinearLayout.LayoutParams(Math.max(ui.dp(96),ui.scoreColumnWidth(20)),-2);
+            LinearLayout.LayoutParams numbersParams=new LinearLayout.LayoutParams(scoreWidth,-2);
             numbersParams.setMarginStart(ui.dp(10));main.addView(numbers,numbersParams);
             card.addView(main);
-            ui.gap(card,12);
+            ui.gap(card,8);card.addView(ui.divider());ui.gap(card,2);
             footer=ui.column();
             LinearLayout controls=ui.row();
             foot=ui.new MatchTime();
             controls.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
             action=new FrameLayout(ui.c);
             calendar=new Ui.Icon(ui.c,"calendar-add",ui.muted);
-            action.addView(calendar,new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
+            action.addView(calendar,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.CENTER));
             action.setFocusable(true);ui.clickable(action,Color.TRANSPARENT,24);
             action.setOnClickListener(v->{if(row!=null)host.toggleSubscription(row.match);});
-            LinearLayout.LayoutParams actionParams=new LinearLayout.LayoutParams(Math.max(ui.dp(96),ui.scoreColumnWidth(20)),ui.dp(48));
+            LinearLayout.LayoutParams actionParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));
             actionParams.setMarginStart(ui.dp(8));controls.addView(action,actionParams);footer.addView(controls);card.addView(footer);
             root.addView(card,new LinearLayout.LayoutParams(-1,-2));
         }
@@ -145,11 +148,14 @@ final class TeamScheduleAdapter extends BaseAdapter {
             text(opponent,value.opponent);
             text(detail,value.side.isEmpty()?value.detail:value.side+" · "+value.detail);
             boolean scored=!value.score.isEmpty();
+            numbers.setVisibility(scored||!value.result.isEmpty()?View.VISIBLE:View.GONE);
             String own=value.match.displayScore(value.home),other=value.match.displayScore(!value.home);
             score.setScore(own,other,scored);score.setResultColors(ui.scoreColor(value.match,value.home),ui.scoreColor(value.match,!value.home));
             boolean subscribed=host.isSubscribed(value.match.id);
             boolean eligible=value.match.scheduled()&&value.match.timeConfirmed&&value.match.start>System.currentTimeMillis();
             action.setVisibility(eligible?View.VISIBLE:View.GONE);
+            int actionWidth=scored?scoreWidth:ui.dp(48);
+            if(action.getLayoutParams().width!=actionWidth){action.getLayoutParams().width=actionWidth;action.requestLayout();}
             action.setEnabled(!host.isBusy());action.setAlpha(host.isBusy()?0.5f:subscribed?1f:Ui.ACTION_ICON_ALPHA);
             foot.bind(value.time,value.match.source);
             calendar.set(subscribed?"calendar-check":"calendar-add",subscribed?ui.primary:ui.muted);

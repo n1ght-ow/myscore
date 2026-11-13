@@ -191,7 +191,7 @@ final class FootballLineupView {
     }
 
     private void headingInto(LinearLayout host, String title) {
-        this.ui.gap(host, 20);
+        this.ui.gap(host, 14);
         host.addView((View)this.ui.text(title, 16, this.ui.text, true));
         this.ui.gap(host, 10);
     }
@@ -232,7 +232,7 @@ final class FootballLineupView {
 
     private View listPlayer(DetailRows.Entry entry) {
         LinearLayout row = this.ui.row();
-        row.setPadding(this.ui.dp(4.0f), this.ui.dp(10.0f), this.ui.dp(4.0f), this.ui.dp(10.0f));
+        row.setPadding(this.ui.dp(4.0f), this.ui.dp(8.0f), this.ui.dp(4.0f), this.ui.dp(8.0f));
         MatchDetail.Person person = entry.person();
         if (person != null) {
             row.addView(this.jersey(person, 30, 34, 12), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(30.0f), this.ui.dp(34.0f)));
@@ -483,8 +483,8 @@ final class FootballLineupView {
             this.setImportantForAccessibility(2);
             for (int i = 0; i < 5; ++i) {
                 double a = Math.PI * 2 * (double)i / 5.0 - 1.5707963267948966;
-                float x = 10.0f + (float)Math.cos(a) * 3.4f;
-                float y = 10.0f + (float)Math.sin(a) * 3.4f;
+                float x = 10.0f + (float)Math.cos(a) * 3.1f;
+                float y = 10.0f + (float)Math.sin(a) * 3.1f;
                 if (i == 0) {
                     this.ball.moveTo(x, y);
                     continue;
@@ -499,26 +499,35 @@ final class FootballLineupView {
             canvas.save();
             canvas.scale((float)this.getWidth() / 20.0f, (float)this.getHeight() / 20.0f);
             this.paint.setStyle(Paint.Style.FILL);
+            this.paint.setStrokeJoin(Paint.Join.ROUND);
+            this.paint.setStrokeCap(Paint.Cap.ROUND);
             if (this.kind.equals("yellow") || this.kind.equals("red")) {
                 this.paint.setColor(this.kind.equals("yellow") ? Color.rgb((int)244, (int)201, (int)64) : Color.rgb((int)217, (int)55, (int)66));
-                canvas.drawRoundRect(5.0f, 2.0f, 15.0f, 18.0f, 2.2f, 2.2f, this.paint);
+                canvas.drawRoundRect(5.2f, 2.2f, 14.8f, 17.8f, 2.4f, 2.4f, this.paint);
             } else if (this.kind.equals("goal")) {
                 this.paint.setColor(FootballLineupView.this.ui.text);
                 this.paint.setStyle(Paint.Style.STROKE);
-                this.paint.setStrokeWidth(1.6f);
-                this.paint.setStrokeCap(Paint.Cap.ROUND);
-                canvas.drawCircle(10.0f, 10.0f, 7.0f, this.paint);
+                this.paint.setStrokeWidth(1.5f);
+                canvas.drawCircle(10.0f, 10.0f, 7.2f, this.paint);
+                this.paint.setStrokeWidth(1.1f);
+                for (int i = 0; i < 5; ++i) {
+                    double a = Math.PI * 2 * (double)i / 5.0 - 1.5707963267948966;
+                    float cx = (float)Math.cos(a);
+                    float cy = (float)Math.sin(a);
+                    canvas.drawLine(10.0f + cx * 3.1f, 10.0f + cy * 3.1f, 10.0f + cx * 6.9f, 10.0f + cy * 6.9f, this.paint);
+                }
                 this.paint.setStyle(Paint.Style.FILL);
                 canvas.drawPath(this.ball, this.paint);
             } else {
                 this.paint.setColor(this.kind.equals("out") ? FootballLineupView.this.ui.error : FootballLineupView.this.ui.primary);
-                this.paint.setStrokeWidth(2.2f);
-                this.paint.setStrokeCap(Paint.Cap.ROUND);
+                this.paint.setStyle(Paint.Style.STROKE);
+                this.paint.setStrokeWidth(2.0f);
                 boolean out = this.kind.equals("out");
-                canvas.drawLine(10.0f, 4.0f, 10.0f, 16.0f, this.paint);
-                float tip = out ? 16.0f : 4.0f;
-                canvas.drawLine(10.0f, tip, 6.0f, out ? 12.0f : 8.0f, this.paint);
-                canvas.drawLine(10.0f, tip, 14.0f, out ? 12.0f : 8.0f, this.paint);
+                canvas.drawLine(10.0f, 3.8f, 10.0f, 16.2f, this.paint);
+                float tip = out ? 16.2f : 3.8f;
+                float wing = out ? 12.0f : 8.0f;
+                canvas.drawLine(6.2f, wing, 10.0f, tip, this.paint);
+                canvas.drawLine(10.0f, tip, 13.8f, wing, this.paint);
             }
             canvas.restore();
         }
@@ -529,11 +538,13 @@ final class FootballLineupView {
         private final boolean keeper;
         private final Paint ink;
         private final Path shirt;
+        private final Path collar;
 
         Jersey(boolean keeper) {
             super(FootballLineupView.this.ui.c);
             this.ink = new Paint(1);
             this.shirt = new Path();
+            this.collar = new Path();
             this.keeper = keeper;
             this.setImportantForAccessibility(2);
         }
@@ -544,28 +555,37 @@ final class FootballLineupView {
             float h = this.getHeight();
             float pad = Math.max(1, FootballLineupView.this.ui.dp(0.8f));
             this.shirt.reset();
-            this.shirt.moveTo(w * 0.3f, pad);
-            this.shirt.lineTo(w * 0.42f, pad);
-            this.shirt.quadTo(w * 0.5f, h * 0.1f, w * 0.58f, pad);
-            this.shirt.lineTo(w * 0.7f, pad);
-            this.shirt.lineTo(w * 0.97f - pad, h * 0.19f);
-            this.shirt.lineTo(w * 0.86f, h * 0.36f);
-            this.shirt.lineTo(w * 0.79f, h * 0.3f);
-            this.shirt.lineTo(w * 0.79f, h - pad);
-            this.shirt.quadTo(w * 0.79f, h - h * 0.03f, w * 0.72f, h - h * 0.03f);
-            this.shirt.lineTo(w * 0.28f, h - h * 0.03f);
-            this.shirt.quadTo(w * 0.21f, h - h * 0.03f, w * 0.21f, h - pad);
-            this.shirt.lineTo(w * 0.21f, h * 0.3f);
-            this.shirt.lineTo(w * 0.14f, h * 0.36f);
-            this.shirt.lineTo(w * 0.03f + pad, h * 0.19f);
+            this.shirt.moveTo(w * 0.31f, pad + h * 0.02f);
+            this.shirt.lineTo(w * 0.39f, pad);
+            this.shirt.cubicTo(w * 0.44f, h * 0.14f, w * 0.56f, h * 0.14f, w * 0.61f, pad);
+            this.shirt.lineTo(w * 0.69f, pad + h * 0.02f);
+            this.shirt.lineTo(w * 0.96f - pad, h * 0.21f);
+            this.shirt.lineTo(w * 0.85f, h * 0.39f);
+            this.shirt.lineTo(w * 0.78f, h * 0.33f);
+            this.shirt.lineTo(w * 0.78f, h - h * 0.06f);
+            this.shirt.quadTo(w * 0.78f, h - pad, w * 0.71f, h - pad);
+            this.shirt.lineTo(w * 0.29f, h - pad);
+            this.shirt.quadTo(w * 0.22f, h - pad, w * 0.22f, h - h * 0.06f);
+            this.shirt.lineTo(w * 0.22f, h * 0.33f);
+            this.shirt.lineTo(w * 0.15f, h * 0.39f);
+            this.shirt.lineTo(w * 0.04f + pad, h * 0.21f);
             this.shirt.close();
+            this.collar.reset();
+            this.collar.moveTo(w * 0.37f, pad + h * 0.01f);
+            this.collar.cubicTo(w * 0.43f, h * 0.17f, w * 0.57f, h * 0.17f, w * 0.63f, pad + h * 0.01f);
             this.ink.setStyle(Paint.Style.FILL);
             this.ink.setColor(this.keeper ? FootballLineupView.this.blend(FootballLineupView.this.ui.tonal, FootballLineupView.this.ui.primary, 0.2f) : FootballLineupView.this.ui.tonal);
             canvas.drawPath(this.shirt, this.ink);
             this.ink.setStyle(Paint.Style.STROKE);
+            this.ink.setStrokeJoin(Paint.Join.ROUND);
+            this.ink.setStrokeCap(Paint.Cap.ROUND);
             this.ink.setStrokeWidth((float)FootballLineupView.this.ui.dp(1.0f));
             this.ink.setColor(this.keeper ? FootballLineupView.this.ui.primary : FootballLineupView.this.ui.line);
             canvas.drawPath(this.shirt, this.ink);
+            this.ink.setStrokeWidth((float)FootballLineupView.this.ui.dp(0.8f));
+            this.ink.setAlpha(140);
+            canvas.drawPath(this.collar, this.ink);
+            this.ink.setAlpha(255);
         }
     }
 }

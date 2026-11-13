@@ -49,10 +49,10 @@ final class TeamPanelsView {
         }
         String title = nba ? "球员数据" : (category.equals("全场") ? "选手总数据" : category + " 选手数据");
         this.body.addView((View)this.ui.text(title, 16, this.ui.text, true));
-        this.ui.gap(this.body, 4);
+        this.ui.gap(this.body, 2);
         TextView hint = this.ui.text(players > 0 ? "点数值列排序 · 点姓名查看详情" : "伤停名单按来源发布", 11, this.ui.muted, false);
         this.body.addView((View)hint);
-        this.ui.gap(this.body, 12);
+        this.ui.gap(this.body, 8);
         List<HorizontalScrollView> scrollers = this.teams(category, nba, sort, descending, changed, scrollX, Map.of(), Map.of());
         this.bind(scrollers, savedScroll);
         hint.post(() -> {
@@ -76,7 +76,7 @@ final class TeamPanelsView {
         LinearLayout left = this.ui.column(), right = this.ui.column();
         scrollers.addAll(this.team(this.detail.match.homeId, category, effective, descending, changed, scrollX, anyInjuries, homeScore, left));
         scrollers.addAll(this.team(this.detail.match.awayId, category, effective, descending, changed, scrollX, anyInjuries, awayScore, right));
-        this.body.addView(this.ui.columns(left, right, 440, 24), new LinearLayout.LayoutParams(-1, -2));
+        this.body.addView(this.ui.columns(left, right, 440, 18), new LinearLayout.LayoutParams(-1, -2));
         return scrollers;
     }
 
@@ -97,11 +97,12 @@ final class TeamPanelsView {
         header.addView((View)this.ui.text(rows.size() + " 人", 11, this.ui.muted, false));
         header.setContentDescription((CharSequence)(name + "，" + rows.size() + " 人"));
         section.addView((View)header);
-        this.ui.gap(section, 8);
+        this.ui.gap(section, 6);
         if (score != null && !score.isEmpty()) {
             LinearLayout band = this.ui.row();
             band.setTag((Object)"team-map-score");
-            band.setPadding(this.ui.dp(4.0f), this.ui.dp(6.0f), this.ui.dp(4.0f), this.ui.dp(6.0f));
+            band.setBackground((Drawable)this.ui.shape(this.ui.tonal, 10));
+            band.setPadding(this.ui.dp(8.0f), this.ui.dp(6.0f), this.ui.dp(8.0f), this.ui.dp(6.0f));
             StringBuilder description = new StringBuilder(name);
             for (Map.Entry<String, String> cell : score.entrySet()) {
                 LinearLayout item = this.ui.column();
@@ -135,7 +136,7 @@ final class TeamPanelsView {
             }
         }
         if (anyInjuries) {
-            this.ui.gap(section, 16);
+            this.ui.gap(section, 12);
             this.injuries(section, teamId);
         }
         return scrollers;
@@ -178,8 +179,8 @@ final class TeamPanelsView {
         LinearLayout row = this.ui.row();
         row.setGravity(48);
         row.setTag((Object)"team-panel-injury");
-        row.setMinimumHeight(this.ui.dp(48.0f));
-        row.setPadding(this.ui.dp(4.0f), this.ui.dp(10.0f), this.ui.dp(4.0f), this.ui.dp(10.0f));
+        row.setMinimumHeight(this.ui.dp(44.0f));
+        row.setPadding(this.ui.dp(4.0f), this.ui.dp(8.0f), this.ui.dp(4.0f), this.ui.dp(8.0f));
         LinearLayout words = this.ui.column();
         words.addView((View)this.ui.text(name, 13, this.ui.text, true));
         if (!note.isBlank()) {

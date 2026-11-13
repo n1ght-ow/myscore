@@ -28,6 +28,7 @@ public final class UpdateActivity extends Activity {
     private enum State { CHECKING,CURRENT,AVAILABLE,DOWNLOADING,VERIFYING,READY,ERROR }
     private Ui ui;private UpdateRepository repository;private UpdateRelease release;
     private TextView headline,description,notes,action,cancel,progressText;private ProgressBar progress;
+    private LinearLayout notesCard;
     private State state=State.CHECKING;private String error="";private boolean active,working;
     private long operation;private int percent;private boolean waiting;
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -46,15 +47,60 @@ public final class UpdateActivity extends Activity {
     private void build(){
         LinearLayout root=ui.column();setContentView(root);
         root.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets b=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(b.left+ui.pageInset(),b.top,b.right+ui.pageInset(),b.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft()+ui.pageInset(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight()+ui.pageInset(),insets.getSystemWindowInsetBottom());return insets;});root.requestApplyInsets();
-        LinearLayout header=ui.row();header.setPadding(ui.dp(4),ui.dp(4),ui.dp(20),ui.dp(4));FrameLayout back=new FrameLayout(this);back.addView(new Ui.Icon(this,"back",ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));ui.clickable(back,android.graphics.Color.TRANSPARENT,Ui.CONTROL_RADIUS);back.setContentDescription("返回设置");back.setFocusable(true);back.setOnClickListener(v->finish());header.addView(back,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));header.addView(ui.text("软件更新",18,ui.text,true));root.addView(header);root.addView(ui.divider());
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);LinearLayout body=ui.column();body.setPadding(ui.dp(24),ui.dp(32),ui.dp(24),ui.dp(28));scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        LinearLayout product=ui.row();Ui.Icon mark=new Ui.Icon(this,"mark",ui.text);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(ui.dp(32),ui.dp(32));mp.setMarginEnd(ui.dp(12));product.addView(mark,mp);product.addView(ui.text("N1ghtScore",24,ui.text,true));body.addView(product);ui.gap(body,12);body.addView(ui.text("当前版本 "+BuildConfig.VERSION_NAME,13,ui.muted,false));ui.gap(body,32);
-        if(Ui.isPad(this)){int side=Math.max(ui.dp(24),(getResources().getDisplayMetrics().widthPixels-ui.dp(840))/2);body.setPadding(side,body.getPaddingTop(),side,body.getPaddingBottom());}
-        headline=ui.text("",20,ui.text,true);body.addView(headline);ui.gap(body,10);description=ui.text("",14,ui.muted,false);description.setLineSpacing(ui.dp(3),1);body.addView(description);ui.gap(body,20);
-        progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setProgressTintList(android.content.res.ColorStateList.valueOf(ui.primary));progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(ui.tonal));progress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ui.primary));body.addView(progress,new LinearLayout.LayoutParams(-1,ui.dp(4)));ui.gap(body,8);progressText=ui.text("",12,ui.muted,false);body.addView(progressText);ui.gap(body,16);
-        action=ui.button("检查更新",true,this::act);body.addView(action,new LinearLayout.LayoutParams(-1,-2));ui.gap(body,10);cancel=ui.button("取消下载",false,this::cancelDownload);body.addView(cancel,new LinearLayout.LayoutParams(-1,-2));ui.gap(body,24);
-        notes=ui.text("",14,ui.muted,false);notes.setLineSpacing(ui.dp(4),1);body.addView(notes);ui.gap(body,24);
-        TextView link=ui.button("打开发布页",false,()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(UpdateRelease.REPOSITORY+"/releases/latest")));}catch(android.content.ActivityNotFoundException e){Sheet.message(this,"无法打开发布页","手机没有可用的浏览器，请稍后重试应用内检查。");}});body.addView(link,new LinearLayout.LayoutParams(-1,-2));ui.gap(body,16);body.addView(ui.text("覆盖安装保留设置与日历关联，无需卸载。",12,ui.muted,false));
+        LinearLayout header=ui.row();header.setMinimumHeight(ui.dp(48));header.setPadding(ui.dp(4),ui.dp(2),ui.dp(16),ui.dp(2));
+        FrameLayout back=new FrameLayout(this);back.addView(new Ui.Icon(this,"back",ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
+        ui.clickable(back,android.graphics.Color.TRANSPARENT,Ui.CONTROL_RADIUS);back.setContentDescription("返回设置");back.setFocusable(true);back.setOnClickListener(v->finish());
+        header.addView(back,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));header.addView(ui.text("软件更新",17,ui.text,true));
+        root.addView(header);root.addView(ui.divider());
+        boolean isPad=Ui.isPad(this);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout body=ui.column();body.setPadding(ui.dp(16),ui.dp(18),ui.dp(16),ui.dp(24));
+        if(isPad){int side=Math.max(ui.dp(24),(getResources().getDisplayMetrics().widthPixels-ui.dp(560))/2);body.setPadding(side,ui.dp(28),side,ui.dp(28));}
+        scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        LinearLayout mainCard=ui.column();mainCard.setBackground(ui.panel());mainCard.setPadding(ui.dp(20),ui.dp(20),ui.dp(20),ui.dp(20));
+        LinearLayout product=ui.row();
+        Ui.Icon mark=new Ui.Icon(this,"mark",ui.text);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(ui.dp(28),ui.dp(28));mp.setMarginEnd(ui.dp(10));product.addView(mark,mp);
+        product.addView(ui.text("N1ghtScore",20,ui.text,true),new LinearLayout.LayoutParams(0,-2,1));
+        TextView version=ui.text("当前版本 "+BuildConfig.VERSION_NAME,12,ui.muted,false);
+        version.setBackground(ui.shape(ui.tonal,12));version.setPadding(ui.dp(10),ui.dp(4),ui.dp(10),ui.dp(4));
+        LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(-2,-2);vp.setMarginStart(ui.dp(8));product.addView(version,vp);
+        mainCard.addView(product);ui.gap(mainCard,14);mainCard.addView(ui.divider());ui.gap(mainCard,16);
+
+        headline=ui.text("",18,ui.text,true);mainCard.addView(headline);ui.gap(mainCard,6);
+        description=ui.text("",13,ui.muted,false);description.setLineSpacing(ui.dp(3),1);mainCard.addView(description);ui.gap(mainCard,16);
+        progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(ui.primary));
+        progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(ui.tonal));
+        progress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ui.primary));
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,ui.dp(6));pp.bottomMargin=ui.dp(8);mainCard.addView(progress,pp);
+        progressText=ui.text("",12,ui.muted,false);
+        LinearLayout.LayoutParams ptp=new LinearLayout.LayoutParams(-1,-2);ptp.bottomMargin=ui.dp(14);mainCard.addView(progressText,ptp);
+
+        LinearLayout actions=isPad?ui.row():ui.column();
+        action=ui.button("检查更新",true,this::act);
+        cancel=ui.button("取消下载",false,this::cancelDownload);
+        if(isPad){
+            action.setMinWidth(ui.dp(180));cancel.setMinWidth(ui.dp(140));
+            actions.addView(action,new LinearLayout.LayoutParams(-2,-2));
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,-2);cp.setMarginStart(ui.dp(10));actions.addView(cancel,cp);
+        }else{
+            actions.addView(action,new LinearLayout.LayoutParams(-1,-2));
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.topMargin=ui.dp(10);actions.addView(cancel,cp);
+        }
+        mainCard.addView(actions);
+        body.addView(mainCard,new LinearLayout.LayoutParams(-1,-2));
+        ui.gap(body,12);
+
+        notesCard=ui.column();notesCard.setBackground(ui.panel());notesCard.setPadding(ui.dp(18),ui.dp(16),ui.dp(18),ui.dp(16));
+        notes=ui.text("",14,ui.muted,false);notes.setLineSpacing(ui.dp(4),1);notesCard.addView(notes);
+        LinearLayout.LayoutParams ncp=new LinearLayout.LayoutParams(-1,-2);ncp.bottomMargin=ui.dp(12);
+        body.addView(notesCard,ncp);
+
+        TextView link=ui.button("打开发布页",false,()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(UpdateRelease.REPOSITORY+"/releases/latest")));}catch(android.content.ActivityNotFoundException e){Sheet.message(this,"无法打开发布页","手机没有可用的浏览器，请稍后重试应用内检查。");}});
+        if(isPad){link.setMinWidth(ui.dp(180));body.addView(link,new LinearLayout.LayoutParams(-2,-2));}
+        else body.addView(link,new LinearLayout.LayoutParams(-1,-2));
+        ui.gap(body,12);body.addView(ui.text("覆盖安装保留设置与日历关联，无需卸载。",12,ui.muted,false));
     }
     private <T> void run(Callable<T> task,Consumer<T> complete){
         long ticket=++operation;working=true;
@@ -90,6 +136,7 @@ public final class UpdateActivity extends Activity {
         if(headline==null)return;boolean busy=state==State.CHECKING||state==State.VERIFYING||state==State.DOWNLOADING;
         progress.setVisibility(busy?View.VISIBLE:View.GONE);progress.setIndeterminate(state!=State.DOWNLOADING);progress.setProgress(percent);progressText.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);progressText.setText(waiting?"正在连接下载服务器…":"已下载 "+percent+"%");cancel.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);action.setEnabled(!busy);action.setAlpha(busy?0.5f:1f);
         notes.setVisibility(release!=null&&state!=State.CURRENT&&!release.notes.isBlank()?View.VISIBLE:View.GONE);notes.setText(release==null?"":"更新内容\n\n"+release.summary());
+        if(notesCard!=null)notesCard.setVisibility(notes.getVisibility());
         switch(state){
             case CHECKING->{headline.setText(release==null?"正在检查更新":"正在准备下载");description.setText("连接 N1ghtScore 发布渠道…");action.setText("请稍候");}
             case CURRENT->{headline.setText("当前已是最新版本");description.setText("已发布的最新版本 "+release.version);action.setText("重新检查");}

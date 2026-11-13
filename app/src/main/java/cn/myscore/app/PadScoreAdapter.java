@@ -77,7 +77,7 @@ final class PadScoreAdapter extends BaseAdapter {
             }
             case ScoreRow.SECTION: {
                 TextView text=(TextView)convertView;
-                if(text==null){text=ui.text("",13,ui.text,true);text.setPadding(ui.dp(4),ui.dp(22),0,ui.dp(8));text.setLetterSpacing(-0.01f);}
+                if(text==null){text=ui.text("",13,ui.text,true);text.setPadding(ui.dp(4),ui.dp(12),0,ui.dp(6));text.setLetterSpacing(-0.01f);}
                 text.setText(row.text);text.setTextColor(row.text.startsWith("进行中")?ui.primary:ui.text);return text;
             }
             case ScoreRow.FAILURE: {
@@ -121,8 +121,8 @@ final class PadScoreAdapter extends BaseAdapter {
         final LinearLayout root,card;final FrameLayout selectedMark;final TextView time,title,state,provenance;
         Match match;
         F1Holder(){
-            root=ui.column();root.setPadding(0,0,0,ui.dp(8));
-            card=ui.row();card.setPadding(ui.dp(14),ui.dp(12),ui.dp(10),ui.dp(12));
+            root=ui.column();root.setPadding(0,0,0,ui.dp(6));
+            card=ui.row();card.setPadding(ui.dp(12),ui.dp(8),ui.dp(10),ui.dp(6));
             ui.clickable(card,ui.surface,16);card.setFocusable(true);
             LinearLayout clock=ui.column();time=ui.text("",15,ui.text,true);state=ui.text("",10,ui.muted,false);
             clock.addView(time);clock.addView(state);card.addView(clock,new LinearLayout.LayoutParams(ui.dp(62),-2));
@@ -157,8 +157,8 @@ final class PadScoreAdapter extends BaseAdapter {
         Match match;
 
         MatchHolder(){
-            root=ui.column();root.setPadding(0,0,0,ui.dp(8));
-            card=ui.column();card.setPadding(ui.dp(14),ui.dp(10),ui.dp(10),ui.dp(8));
+            root=ui.column();root.setPadding(0,0,0,ui.dp(6));
+            card=ui.column();card.setPadding(ui.dp(12),ui.dp(8),ui.dp(10),ui.dp(6));
             ui.clickable(card,ui.surface,16);card.setFocusable(true);
             card.setOnClickListener(v->{if(match==null)return;if(selectedId.equals(match.id))host.openMatch(match);else host.selectMatch(match);});
 
@@ -196,7 +196,9 @@ final class PadScoreAdapter extends BaseAdapter {
             awayRow.addView(awayScore,new LinearLayout.LayoutParams(-2,-2));
             card.addView(awayRow);
 
-            ui.gap(card,4);footer=ui.row();
+            View footGap=new View(ui.c);card.addView(footGap,new LinearLayout.LayoutParams(1,ui.dp(2)));
+            View footRule=ui.divider();card.addView(footRule);
+            footer=ui.row();
             provenance=ui.text("",11,ui.muted,false);
             footer.addView(provenance,new LinearLayout.LayoutParams(0,-2,1));
             LinearLayout.LayoutParams calendarParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));calendarParams.setMarginStart(ui.dp(8));
@@ -213,6 +215,7 @@ final class PadScoreAdapter extends BaseAdapter {
                 provenance.setTextSize(11);provenance.setGravity(Gravity.END);
                 meta.addView(provenance,new LinearLayout.LayoutParams(-2,-2));
                 card.removeView(homeRow);card.removeView(awayRow);card.removeView(footer);
+                card.removeView(footGap);card.removeView(footRule);
                 LinearLayout teams=ui.column();teams.addView(homeRow);teams.addView(awayRow);
                 LinearLayout fixture=ui.row();fixture.setGravity(Gravity.CENTER_VERTICAL);
                 fixture.addView(clock,new LinearLayout.LayoutParams(ui.dp(72*Math.max(1f,ui.c.getResources().getConfiguration().fontScale)),-2));

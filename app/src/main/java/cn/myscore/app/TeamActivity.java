@@ -57,6 +57,7 @@ public final class TeamActivity extends Activity {
     private ScoreList padUpcomingList,padFinishedList;
     private TeamScheduleAdapter padUpcomingAdapter,padFinishedAdapter;
     private TextView padStatus,padError,padUpcomingCount,padFinishedCount;
+    private TextView padStatUpcoming,padStatFinished,padStatTotal;
     private AutoCloseable networkWatch=()->{};
 
     @Override public void onCreate(Bundle saved) {
@@ -113,22 +114,22 @@ public final class TeamActivity extends Activity {
         root.addView(appbar);
 
         LinearLayout card=ui.row();card.setBackgroundColor(ui.bg);
-        card.setPadding(ui.dp(4),ui.dp(10),ui.dp(4),ui.dp(10));
+        card.setPadding(ui.dp(4),ui.dp(6),ui.dp(4),ui.dp(6));
         FrameLayout crest=new FrameLayout(this);
-        headerCrest=Logos.crest(ui,56,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
-        crest.addView(headerCrest.box,new FrameLayout.LayoutParams(ui.dp(56),ui.dp(56),Gravity.CENTER));
-        card.addView(crest,new LinearLayout.LayoutParams(ui.dp(56),ui.dp(56)));
+        headerCrest=Logos.crest(ui,48,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
+        crest.addView(headerCrest.box,new FrameLayout.LayoutParams(ui.dp(48),ui.dp(48),Gravity.CENTER));
+        card.addView(crest,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         LinearLayout names=ui.column();
-        TextView name=ui.text(team.name,22,ui.text,true);name.setLetterSpacing(-0.02f);names.addView(name);
-        ui.gap(names,6);
+        TextView name=ui.text(team.name,20,ui.text,true);name.setLetterSpacing(-0.02f);names.addView(name);
+        ui.gap(names,4);
         String competition=team.league.equals("cs2")?"CS2":team.competitionName();
         names.addView(ui.text(competition+" · 北京时间",12,ui.muted,false));
         LinearLayout.LayoutParams namesParams=new LinearLayout.LayoutParams(0,-2,1);
         namesParams.setMarginStart(ui.dp(14));card.addView(names,namesParams);
         LinearLayout.LayoutParams cardParams=new LinearLayout.LayoutParams(-1,-2);
-        cardParams.setMargins(ui.dp(16),ui.dp(2),ui.dp(16),ui.dp(6));root.addView(card,cardParams);
+        cardParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(4));root.addView(card,cardParams);
 
-        status=ui.text("正在读取"+pageName()+"…",12,ui.muted,false);status.setPadding(ui.dp(20),ui.dp(2),ui.dp(20),ui.dp(10));root.addView(status);
+        status=ui.text("正在读取"+pageName()+"…",11,ui.muted,false);status.setPadding(ui.dp(20),0,ui.dp(20),ui.dp(6));root.addView(status);
         error=ui.text("",13,ui.error,false);error.setLineSpacing(ui.dp(4),1);
         error.setBackground(ui.shape(ui.tonal,Ui.CONTROL_RADIUS));error.setPadding(ui.dp(14),ui.dp(12),ui.dp(14),ui.dp(12));
         LinearLayout.LayoutParams errorParams=new LinearLayout.LayoutParams(-1,-2);errorParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(10));
@@ -162,18 +163,28 @@ public final class TeamActivity extends Activity {
         bar.addView(iconButton("refresh","刷新"+pageName(),()->load(true)));
         root.addView(bar);root.addView(ui.divider());
 
-        LinearLayout hero=ui.row();hero.setPadding(ui.dp(36),ui.dp(24),ui.dp(36),ui.dp(22));
-        headerCrest=Logos.crest(ui,88,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
-        hero.addView(headerCrest.box,new LinearLayout.LayoutParams(ui.dp(88),ui.dp(88)));
-        LinearLayout names=ui.column();LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(0,-2,1);np.setMarginStart(ui.dp(22));
-        TextView name=ui.text(team.name,38,ui.text,true);name.setLetterSpacing(-0.04f);names.addView(name);
-        ui.gap(names,6);
+        LinearLayout hero=ui.row();hero.setPadding(ui.dp(28),ui.dp(14),ui.dp(28),ui.dp(14));
+        headerCrest=Logos.crest(ui,60,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
+        hero.addView(headerCrest.box,new LinearLayout.LayoutParams(ui.dp(60),ui.dp(60)));
+        LinearLayout names=ui.column();LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(0,-2,1);np.setMarginStart(ui.dp(18));
+        TextView name=ui.text(team.name,26,ui.text,true);name.setLetterSpacing(-0.03f);names.addView(name);
+        ui.gap(names,4);
         String competition=team.league.equals("cs2")?"CS2":team.competitionName();
         names.addView(ui.text(competition+" · 北京时间",12,ui.muted,false));
-        ui.gap(names,8);
+        ui.gap(names,6);
         padStatus=ui.text("正在读取"+pageName()+"…",11,ui.muted,false);names.addView(padStatus);
         padError=ui.text("",12,ui.error,false);padError.setLineSpacing(ui.dp(3),1);padError.setVisibility(View.GONE);ui.gap(names,6);names.addView(padError);
         hero.addView(names,np);
+        LinearLayout stats=ui.row();
+        stats.setBackground(ui.shape(ui.tonal,Ui.CARD_RADIUS));
+        stats.setPadding(ui.dp(6),ui.dp(8),ui.dp(6),ui.dp(8));
+        padStatUpcoming=padStatCell(stats,"接下来");
+        View rule1=new View(this);rule1.setBackgroundColor(ui.line);stats.addView(rule1,new LinearLayout.LayoutParams(ui.dp(1),ui.dp(28)));
+        padStatFinished=padStatCell(stats,"已结束");
+        View rule2=new View(this);rule2.setBackgroundColor(ui.line);stats.addView(rule2,new LinearLayout.LayoutParams(ui.dp(1),ui.dp(28)));
+        padStatTotal=padStatCell(stats,"总场次");
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.setMarginStart(ui.dp(20));
+        hero.addView(stats,sp);
         root.addView(hero);root.addView(ui.divider());
 
         LinearLayout columns=ui.row();
@@ -188,11 +199,21 @@ public final class TeamActivity extends Activity {
         renderPad();
     }
 
+    private TextView padStatCell(LinearLayout parent,String label){
+        LinearLayout cell=ui.column();cell.setGravity(Gravity.CENTER);cell.setMinimumWidth(ui.dp(72));
+        cell.setPadding(ui.dp(14),ui.dp(2),ui.dp(14),ui.dp(2));
+        TextView value=ui.text("—",18,ui.text,true);value.setGravity(Gravity.CENTER);cell.addView(value);
+        ui.gap(cell,2);
+        TextView caption=ui.text(label,11,ui.muted,false);caption.setGravity(Gravity.CENTER);cell.addView(caption);
+        parent.addView(cell);
+        return value;
+    }
+
     private LinearLayout padColumn(String title,String subtitle,boolean upcoming){
         LinearLayout column=ui.column();
-        LinearLayout head=ui.row();head.setPadding(ui.dp(36),ui.dp(20),ui.dp(36),ui.dp(8));
+        LinearLayout head=ui.row();head.setPadding(ui.dp(24),ui.dp(12),ui.dp(24),ui.dp(6));
         LinearLayout words=ui.column();
-        words.addView(ui.text(title,24,ui.text,true));
+        words.addView(ui.text(title,17,ui.text,true));
         ui.gap(words,3);words.addView(ui.text(subtitle,11,ui.muted,false));
         head.addView(words,new LinearLayout.LayoutParams(0,-2,1));
         TextView count=ui.text("",12,ui.muted,true);count.setGravity(Gravity.END);
@@ -200,7 +221,7 @@ public final class TeamActivity extends Activity {
         head.addView(count);
         column.addView(head);
         ScoreList list=new ScoreList(this);
-        list.setPadding(ui.dp(20),ui.dp(4),ui.dp(20),ui.dp(28));list.setClipToPadding(false);list.setVerticalScrollBarEnabled(false);
+        list.setPadding(ui.dp(20),ui.dp(4),ui.dp(20),ui.dp(24));list.setClipToPadding(false);list.setVerticalScrollBarEnabled(false);
         if(upcoming){padUpcomingList=list;padUpcomingAdapter=padScheduleAdapter();padUpcomingAdapter.attach(list);}
         else{padFinishedList=list;padFinishedAdapter=padScheduleAdapter();padFinishedAdapter.attach(list);}
         column.addView(list,new LinearLayout.LayoutParams(-1,0,1));
@@ -244,6 +265,13 @@ public final class TeamActivity extends Activity {
             for(Match m:result.matches){if(m.finalised())fin++;else if(m.live()||m.scheduled()||m.state.equals("delayed"))up++;else other++;}
             if(padUpcomingCount!=null)padUpcomingCount.setText(up+" 场");
             if(padFinishedCount!=null)padFinishedCount.setText(fin+" 场");
+            if(padStatUpcoming!=null)padStatUpcoming.setText(String.valueOf(up));
+            if(padStatFinished!=null)padStatFinished.setText(String.valueOf(fin));
+            if(padStatTotal!=null)padStatTotal.setText(String.valueOf(result.matches.size()));
+        }else{
+            if(padStatUpcoming!=null)padStatUpcoming.setText("—");
+            if(padStatFinished!=null)padStatFinished.setText("—");
+            if(padStatTotal!=null)padStatTotal.setText("—");
         }
     }
     private List<TeamScheduleRow> padRows(boolean finished){
@@ -394,9 +422,9 @@ public final class TeamActivity extends Activity {
         if(result.error.isEmpty())status.setText(result.source+" · 共 "+result.matches.size()+" 场 · "+fetched+(busy?" · 更新中":""));
         else if(result.fetched>0)status.setText(result.source+" · 显示 "+format(result.fetched,"M月d日 HH:mm")+" 的记录");
         else status.setText(pageName()+"暂不可用");
-        boolean failed=!result.error.isEmpty();
-        error.setVisibility(failed?View.VISIBLE:View.GONE);
-        if(failed)error.setText((result.fetched>0?pageName()+"未更新 · ":"无法获取"+pageName()+" · ")+result.error+(result.fetched>0?"\n下方保留上次成功获取的赛程。":""));
+        boolean showError=!result.error.isEmpty()&&!result.matches.isEmpty();
+        error.setVisibility(showError?View.VISIBLE:View.GONE);
+        if(showError)error.setText((result.fetched>0?pageName()+"未更新 · ":"无法获取"+pageName()+" · ")+result.error+(result.fetched>0?"\n下方保留上次成功获取的赛程。":""));
     }
 
     private List<TeamScheduleRow> buildRows() {

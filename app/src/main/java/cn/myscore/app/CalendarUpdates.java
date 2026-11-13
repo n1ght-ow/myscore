@@ -88,6 +88,7 @@ final class CalendarUpdates {
                 }
                 if(batch.isEmpty())continue;
                 CalendarSync.Result result=sync.syncKnown(batch,System.currentTimeMillis());
+                if(result.updated+result.completed+result.cancelled>0)CalendarJob.schedule(app);
                 if(result.failed>0){synchronized(PENDING){for(Match m:batch)CHECKED_ORPHANS.remove(m.id);}android.util.Log.w("MyScore","Calendar source update incomplete: "+result.message());}
             }catch(RuntimeException e){synchronized(PENDING){for(Match m:batch)CHECKED_ORPHANS.remove(m.id);}android.util.Log.w("MyScore","Calendar source update failed",e);}
         }

@@ -13,6 +13,7 @@ import java.util.concurrent.*;
 final class FootballProfiles {
     private static final ExecutorService NETWORK=Executors.newFixedThreadPool(3);
     private static final ConcurrentHashMap<String,Long> RETRY=new ConcurrentHashMap<>();
+    private static volatile long retryEpoch=Http.epoch();
     private static final SingleFlight<String,JSONObject> REQUESTS=new SingleFlight<>();
     private final File dir;
     FootballProfiles(Context context){dir=new File(context.getCacheDir(),"football-profiles-v1");if(!dir.exists())dir.mkdirs();}
@@ -86,6 +87,8 @@ final class FootballProfiles {
     private static void set(MatchDetail.Table table,int row,String key,String value){int column=table.columns.indexOf(key);if(column<0||value.isBlank()||row>=table.rows.size())return;List<String> values=new ArrayList<>(table.rows.get(row));while(values.size()<=column)values.add("—");if(FootballMetrics.missing(values.get(column))){values.set(column,value);table.rows.set(row,values);}}
     private JSONObject load(String key,String url){
         try{return REQUESTS.execute(dir.getAbsolutePath()+key,()->{
+            long currentEpoch=Http.epoch();
+            if(currentEpoch!=retryEpoch){retryEpoch=currentEpoch;RETRY.clear();}
             File file=new File(dir,key+".json");JSONObject cached=null;long now=System.currentTimeMillis();
             try{cached=new JSONObject(new String(new AtomicFile(file).readFully(),StandardCharsets.UTF_8));}catch(Exception ignored){}
             if(cached!=null&&now-file.lastModified()<86400_000)return cached;

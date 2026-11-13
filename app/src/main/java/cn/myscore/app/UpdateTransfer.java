@@ -15,26 +15,34 @@ final class UpdateTransfer {
     interface Progress {void changed(long bytes);}
     interface Connection {HttpURLConnection open(URL url)throws IOException;}
     private static final Set<String> HOSTS=Set.of("github.com","api.github.com","release-assets.githubusercontent.com","objects.githubusercontent.com");
+    static boolean trustedHost(URL url) {
+        return url!=null&&"https".equals(url.getProtocol())&&HOSTS.contains(url.getHost())&&url.getUserInfo()==null&&(url.getPort()==-1||url.getPort()==443);
+    }
     static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled)throws Exception {
-        download(release,partial,progress,cancelled,url->(HttpURLConnection)url.openConnection());
+        download(release,partial,progress,cancelled,url->Http.openDownload(url,0));
     }
     static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,Connection connections)throws Exception {
         download(release,partial,progress,cancelled,connections,release.assetUrl.isEmpty()?release.url:release.assetUrl,false);
     }
     static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,boolean alternate)throws Exception {
         String address=alternate||release.assetUrl.isEmpty()?release.url:release.assetUrl;
-        download(release,partial,progress,cancelled,url->(HttpURLConnection)url.openConnection(),address,false);
+        download(release,partial,progress,cancelled,url->Http.openDownload(url,alternate?1:0),address,false);
     }
     static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,boolean alternate,boolean keepPartial)throws Exception {
         String address=alternate||release.assetUrl.isEmpty()?release.url:release.assetUrl;
-        download(release,partial,progress,cancelled,url->(HttpURLConnection)url.openConnection(),address,keepPartial);
+        download(release,partial,progress,cancelled,url->Http.openDownload(url,alternate?1:0),address,keepPartial);
+    }
+    static void downloadAttempt(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,int attempt,boolean keepPartial)throws Exception {
+        boolean preferBrowserUrl=(attempt%2==0)||release.assetUrl.isEmpty();
+        String address=preferBrowserUrl?release.url:release.assetUrl;
+        download(release,partial,progress,cancelled,url->Http.openDownload(url,attempt),address,keepPartial);
     }
     static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,Connection connections,boolean alternate,boolean keepPartial)throws Exception {
         String address=alternate||release.assetUrl.isEmpty()?release.url:release.assetUrl;
         download(release,partial,progress,cancelled,connections,address,keepPartial);
     }
     private static void download(UpdateRelease release,File partial,Progress progress,BooleanSupplier cancelled,Connection connections,String address,boolean keepPartial)throws Exception {
-        boolean success=false;long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.MINUTES.toNanos(5);
+        boolean success=false;long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.MINUTES.toNanos(8);
         try {
             long existing=keepPartial&&partial.isFile()?partial.length():0;
             if(existing==release.size) {
@@ -45,7 +53,7 @@ final class UpdateTransfer {
             URL url=new URL(address);
             for(int redirects=0;redirects<=5;redirects++) {
                 interrupted(cancelled,deadline);
-                if(!"https".equals(url.getProtocol())||!HOSTS.contains(url.getHost())||url.getUserInfo()!=null||(url.getPort()!=-1&&url.getPort()!=443))throw new IOException("更新下载跳转地址不可信");
+                if(!trustedHost(url))throw new IOException("更新下载跳转地址不可信");
                 HttpURLConnection connection=connections.open(url);
                 try {
                     connection.setConnectTimeout(12000);connection.setReadTimeout(15000);connection.setInstanceFollowRedirects(false);connection.setUseCaches(false);
@@ -69,7 +77,7 @@ final class UpdateTransfer {
                     if(length>0&&existing+length!=release.size&&length!=release.size)throw new IOException("安装包大小与发布信息不一致");
                     long bytes=existing;progress.changed(bytes);
                     try(InputStream input=connection.getInputStream();FileOutputStream output=new FileOutputStream(partial,existing>0)) {
-                        byte[] buffer=new byte[32768];int read;
+                        byte[] buffer=new byte[65536];int read;
                         while((read=input.read(buffer))!=-1) {
                             interrupted(cancelled,deadline);
                             bytes+=read;if(bytes>release.size)throw new IOException("安装包大小超过发布信息");

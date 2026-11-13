@@ -270,14 +270,8 @@ final class Logos {
                 }
             }
         }
-        HttpURLConnection con=(HttpURLConnection)new URL(url).openConnection();
-        boolean complete=false;byte[] bytes;
-        try {
-            con.setConnectTimeout(6000);con.setReadTimeout(8000);con.setRequestProperty("User-Agent","MyScore-Personal/"+BuildConfig.VERSION_NAME+" Android");con.setRequestProperty("Accept","image/*");con.setInstanceFollowRedirects(false);
-            if(con.getResponseCode()!=200)throw new IOException("Image HTTP "+con.getResponseCode());
-            try(InputStream in=con.getInputStream()){bytes=bounded(in);}
-            imageBounds(bytes);complete=true;
-        } finally {if(!complete)con.disconnect();}
+        byte[] bytes=Http.bytes(url,java.util.Collections.emptyMap(),1_500_000,u->allowed(u.toString()));
+        imageBounds(bytes);
         synchronized(DISK_LOCK) {
             AtomicFile atomic=new AtomicFile(file);FileOutputStream out=null;
             try{out=atomic.startWrite();out.write(bytes);atomic.finishWrite(out);}

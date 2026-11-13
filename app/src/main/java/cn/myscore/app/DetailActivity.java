@@ -124,6 +124,7 @@ extends Activity {
     private ScrollView padLeftScroll;
     private TextView padTitle;
     private TextView padSubtitle;
+    private AutoCloseable networkWatch = () -> {};
 
     public void onCreate(Bundle saved) {
         boolean dark = Ui.isDark((Context)this);
@@ -192,6 +193,16 @@ extends Activity {
     public void onResume() {
         super.onResume();
         this.active = true;
+        this.closeNetworkWatch();
+        this.networkWatch = Http.onNetworkChanged(() -> this.handler.post(() -> {
+            if (!this.active || this.isDestroyed()) {
+                return;
+            }
+            if (!this.error.isEmpty()) {
+                this.load(true);
+            }
+            this.resolveWatch();
+        }));
         if (this.repository != null && !this.isFinishing()) {
             this.render(true);
             this.load(false);
@@ -208,10 +219,18 @@ extends Activity {
 
     public void onPause() {
         this.active = false;
+        this.closeNetworkWatch();
         this.fingerDown = false;
         this.handler.removeCallbacks(this.tick);
         this.handler.removeCallbacks(this.update);
         super.onPause();
+    }
+
+    private void closeNetworkWatch() {
+        try {
+            this.networkWatch.close();
+        } catch (Exception ignored) {}
+        this.networkWatch = () -> {};
     }
 
     public void onDestroy() {

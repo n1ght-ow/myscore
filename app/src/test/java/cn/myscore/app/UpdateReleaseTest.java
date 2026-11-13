@@ -30,4 +30,21 @@ public class UpdateReleaseTest {
     @Test public void boundsRemoteNotes()throws Exception{UpdateRelease update=UpdateRelease.parse(release(asset()).put("body","a".repeat(9000)));assertEquals(8000,update.notes.length());}
     @Test public void retainsOnlyOfficialAssetApiForFallback()throws Exception{String api="https://api.github.com/repos/n1ght-ow/myscore/releases/assets/12345";UpdateRelease update=UpdateRelease.parse(release(asset().put("url",api)));assertEquals(api,UpdateRelease.restore(update.saved()).assetUrl);for(String url:new String[]{"https://evil.invalid/assets/12345","https://api.github.com/repos/other/myscore/releases/assets/12345",api+"?redirect=other","http://api.github.com/repos/n1ght-ow/myscore/releases/assets/12345"})rejects(()->UpdateRelease.parse(release(asset().put("url",url))));}
     @Test public void restoresOlderSavedReleasesWithoutAssetApi()throws Exception{UpdateRelease update=UpdateRelease.restore(new JSONObject().put("version","0.6.1").put("url",UpdateRelease.REPOSITORY+"/releases/download/v0.6.1/MyScore-0.6.1.apk").put("digest","sha256:"+HASH).put("size",5).toString());assertEquals("",update.assetUrl);}
+    @Test public void buildsVerifiedReleaseFromWebExpandedAssetsOrSha256Sums()throws Exception {
+        String html="<li class=\"Box-row\"><a href=\"/n1ght-ow/myscore/releases/download/v4.9.1/MyScore-4.9.1.apk\">MyScore-4.9.1.apk</a>"
+            +"<clipboard-copy aria-label=\"Copy SHA-256 digest for MyScore-4.9.1.apk\" value=\"sha256:"+HASH+"\"></clipboard-copy></li>";
+        UpdateRelease fromHtml=UpdateRelease.fromWeb("4.9.1",html,"",1_234_567L,"Fix network");
+        assertEquals("4.9.1",fromHtml.version);
+        assertEquals(HASH,fromHtml.sha256);
+        assertEquals(1_234_567L,fromHtml.size);
+        assertEquals(UpdateRelease.REPOSITORY+"/releases/download/v4.9.1/MyScore-4.9.1.apk",fromHtml.url);
+
+        String sums=HASH+"  MyScore-4.9.1.apk\n";
+        UpdateRelease fromSums=UpdateRelease.fromWeb("4.9.1","<li>no inline digest</li>",sums,543_210L,"Notes");
+        assertEquals(HASH,fromSums.sha256);
+        assertEquals(543_210L,fromSums.size);
+
+        rejects(()->UpdateRelease.fromWeb("4.9.1","<li>missing</li>","",543_210L,""));
+        rejects(()->UpdateRelease.fromWeb("4.9.1",html,"",0L,""));
+    }
 }

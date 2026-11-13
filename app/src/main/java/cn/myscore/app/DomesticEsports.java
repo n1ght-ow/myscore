@@ -8,6 +8,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /** Public website feeds; no login, SDK, API key, or third-party relay. */
 public final class DomesticEsports {
@@ -15,7 +19,13 @@ public final class DomesticEsports {
     public static final String FIVE="https://esports-data.5eplaycdn.com/v1/api/csgo/";
     // Major (1), S+ (7) and S (2) are tier one; A/B/C, qualifiers and showmatches are not.
     static final String TIER_ONE="https://app.5eplay.com/api/tournament/session_list?game_type=1&game_status=0&grades=1%2C2%2C7&limit=100";
+    private static final String CURRENT_SESSIONS="https://app.5eplay.com/api/tournament/session_list?game_type=1&game_status=1&grades=&limit=100";
     static final int MAX_TIER_PAGES=8;
+    private static final ExecutorService WORKERS=Executors.newFixedThreadPool(6,r->{
+        Thread t=new Thread(r,"myscore-esports");
+        t.setDaemon(true);
+        return t;
+    });
     interface Source {String get(String url) throws Exception;}
     private static JSONObject obj(JSONObject o,String k){JSONObject v=o.optJSONObject(k);return v==null?new JSONObject():v;}
     private static JSONArray arr(JSONObject o,String k){JSONArray v=o.optJSONArray(k);return v==null?new JSONArray():v;}
@@ -145,7 +155,25 @@ public final class DomesticEsports {
         return new ArrayList<>(all.values());
     }
     public static List<Match> cs2(LocalDate from,LocalDate to,long now) throws Exception {
-        return merge(spirit(from,now),tierOneMatches(from,to,now));
+        Future<List<Match>> spiritTask=WORKERS.submit(()->spirit(from,now));
+        Future<List<Match>> tierTask=WORKERS.submit(()->tierOneMatches(from,to,now));
+        try {
+            List<Match> spiritMatches=null,tierMatches=null;
+            Exception failure=null;
+            try{spiritMatches=spiritTask.get();}catch(ExecutionException e){failure=unwrap(e);}
+            try{tierMatches=tierTask.get();}catch(ExecutionException e){if(failure==null)failure=unwrap(e);}
+            if(spiritMatches==null&&tierMatches==null)throw failure!=null?failure:new Exception("CS2 赛程读取失败");
+            return merge(spiritMatches,tierMatches);
+        } finally {
+            if(!spiritTask.isDone())spiritTask.cancel(true);
+            if(!tierTask.isDone())tierTask.cancel(true);
+        }
+    }
+    private static Exception unwrap(ExecutionException e) throws InterruptedException {
+        Throwable c=e.getCause();
+        if(c instanceof InterruptedException ie)throw ie;
+        if(c instanceof Exception ex)return ex;
+        return new RuntimeException(c);
     }
     public static List<Match> history(JSONObject root,long fetched) throws Exception {
         if(!root.optBoolean("success"))throw new Exception("5EPlay 战队赛程返回失败");
@@ -165,19 +193,42 @@ public final class DomesticEsports {
     }
     public static List<Match> spirit(LocalDate from,long now) throws Exception {
         Map<String,Match> all=new LinkedHashMap<>();
-        for(String status:new String[]{"future","past"}) {
-            for(int page=1;page<=5;page++) {
-                JSONObject root=new JSONObject(Repository.get(FIVE+"team/matches_v1/csgo_tm_7020?page="+page+"&limit=30&status="+status));
-                List<Match> parsed=history(root,now);for(Match m:parsed)all.put(m.id,m);
-                int pages=obj(root,"data").optInt("total_page");
-                boolean reachedOld=parsed.stream().anyMatch(m->m.day()!=null&&m.day().isBefore(from));
-                if(page>=pages || (status.equals("past")&&reachedOld))break;
-                if(page==5)throw new Exception("Spirit 战队赛程超过分页上限");
-            }
+        Future<List<Match>> futureTask=WORKERS.submit(()->spiritPages("future",from,now));
+        Future<List<Match>> pastTask=WORKERS.submit(()->spiritPages("past",from,now));
+        Future<List<Match>> liveTask=WORKERS.submit(()->spiritLive(now));
+        try {
+            for(Match m:awaitSpirit(futureTask))all.put(m.id,m);
+            for(Match m:awaitSpirit(pastTask))all.put(m.id,m);
+            for(Match m:awaitSpirit(liveTask))all.put(m.id,m);
+        } finally {
+            if(!futureTask.isDone())futureTask.cancel(true);
+            if(!pastTask.isDone())pastTask.cancel(true);
+            if(!liveTask.isDone())liveTask.cancel(true);
         }
+        return new ArrayList<>(all.values());
+    }
+    private static List<Match> awaitSpirit(Future<List<Match>> task) throws Exception {
+        try{return task.get();}catch(ExecutionException e){throw unwrap(e);}
+    }
+    private static List<Match> spiritPages(String status,LocalDate from,long now) throws Exception {
+        List<Match> collected=new ArrayList<>();
+        for(int page=1;page<=5;page++) {
+            if(Thread.currentThread().isInterrupted())throw new InterruptedException();
+            JSONObject root=new JSONObject(Repository.get(FIVE+"team/matches_v1/csgo_tm_7020?page="+page+"&limit=30&status="+status));
+            List<Match> parsed=history(root,now);collected.addAll(parsed);
+            int pages=obj(root,"data").optInt("total_page");
+            boolean reachedOld=parsed.stream().anyMatch(m->m.day()!=null&&m.day().isBefore(from));
+            if(page>=pages || (status.equals("past")&&reachedOld))break;
+            if(page==5)throw new Exception("Spirit 战队赛程超过分页上限");
+        }
+        return collected;
+    }
+    private static List<Match> spiritLive(long now) throws Exception {
+        List<Match> current=new ArrayList<>();
         boolean found=false;
-        for(int page=1;page<=5&&!found;page++) {
-            JSONObject root=new JSONObject(Repository.get("https://app.5eplay.com/api/tournament/session_list?game_status=1&game_type=1&grades=&page="+page+"&limit=20"));
+        for(int page=1;page<=2&&!found;page++) {
+            if(Thread.currentThread().isInterrupted())throw new InterruptedException();
+            JSONObject root=new JSONObject(Repository.get(CURRENT_SESSIONS+"&page="+page));
             if(!root.optBoolean("success") || obj(root,"data").optJSONArray("matches")==null)throw new Exception("5EPlay 当前赛程读取失败");
             JSONArray rows=arr(obj(root,"data"),"matches");
             for(int i=0;i<rows.length();i++) {
@@ -193,10 +244,10 @@ public final class DomesticEsports {
                     if(authoritative.home.equals(m.home)&&authoritative.away.equals(m.away)&&!m.results.isEmpty()) {authoritative.results.clear();authoritative.results.addAll(m.results);}
                     m=authoritative;found=true;
                 }
-                all.put(m.id,m);
+                current.add(m);
             }
-            if(rows.length()<20)break;
+            if(rows.length()<100)break;
         }
-        return new ArrayList<>(all.values());
+        return current;
     }
 }

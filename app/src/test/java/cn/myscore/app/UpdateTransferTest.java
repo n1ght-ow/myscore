@@ -66,4 +66,10 @@ public class UpdateTransferTest {
         } finally {Files.deleteIfExists(file.toPath());}
     }
     @Test public void cancellationDoesNotExposeAnInstallablePartialFile()throws Exception{Response response=new Response(200,null,"hello",5);AtomicBoolean cancelled=new AtomicBoolean();rejected(file->UpdateTransfer.download(release(),file,bytes->{if(bytes>0)cancelled.set(true);},cancelled::get,url->response));}
+    @Test public void treatsRateLimit403And429AsRetryableWhileKeeping404Permanent() {
+        assertTrue(UpdateService.retryable(new IOException("下载服务器返回 HTTP 403")));
+        assertTrue(UpdateService.retryable(new IOException("下载服务器返回 HTTP 429")));
+        assertFalse(UpdateService.retryable(new IOException("下载服务器返回 HTTP 404")));
+        assertFalse(UpdateService.retryable(new IOException("下载服务器返回 HTTP 400")));
+    }
 }

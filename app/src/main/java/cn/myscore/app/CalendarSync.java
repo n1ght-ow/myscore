@@ -276,6 +276,7 @@ public final class CalendarSync {
                 }
             }
         }
+        List<Match> newlyCompleted=new ArrayList<>();
         synchronized(LOCK) {
             for(Subscription sub:pending) {
                 Match m=resolved.get(sub.id);
@@ -293,7 +294,7 @@ public final class CalendarSync {
                         if(m.timeConfirmed&&m.start>0)updateEvent(sub.eventId,m,calendar,false);
                         deleteReminders(sub.eventId);
                         links.edit().putLong("retired:"+sub.id,sub.eventId).apply();
-                        removeLink(sub.id);result.completed++;continue;
+                        removeLink(sub.id);result.completed++;newlyCompleted.add(m);continue;
                     }
                     if(m.cancelled()) {
                         if(context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,sub.eventId),null,null)>0)
@@ -329,6 +330,7 @@ public final class CalendarSync {
             }
             if(resolveMissing&&!interrupted) preferences.edit().putLong("calendar_checked",now).putString("calendar_result",result.message()).apply();
         }
+        for(Match done:newlyCompleted)ResultNotify.notifyFinished(context,done);
         return result;
     }
     public int linkedEvents() {return subscribedIds().size();}
@@ -466,7 +468,7 @@ public final class CalendarSync {
         Competition c=Competition.find(m.league);
         ContentValues event=new ContentValues();
         event.put(CalendarContract.Events.CALENDAR_ID,calendar);
-        event.put(CalendarContract.Events.TITLE,(c==null?m.group:c.name)+" · "+m.displayTitle());
+        event.put(CalendarContract.Events.TITLE,ResultNotify.calendarTitle(c,m));
         event.put(CalendarContract.Events.DTSTART,m.start);
         event.put(CalendarContract.Events.DTEND,m.start+Rules.estimatedDuration(m.group));
         event.put(CalendarContract.Events.EVENT_TIMEZONE,"Asia/Shanghai");

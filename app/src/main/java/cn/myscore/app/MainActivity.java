@@ -185,6 +185,7 @@ implements ScoreAdapter.Host {
     private Repository.Snapshot padSettingSources;
     private LocalDate padSettingSourcesDay;
     private boolean padSettingSourcesLoading;
+    private AutoCloseable networkWatch = () -> {};
 
     public void onCreate(Bundle state) {
         this.prefs = this.getSharedPreferences("settings", 0);
@@ -306,6 +307,19 @@ implements ScoreAdapter.Host {
     public void onResume() {
         super.onResume();
         this.active = true;
+        this.closeNetworkWatch();
+        this.networkWatch = Http.onNetworkChanged(() -> this.handler.post(() -> {
+            if (!this.active || this.isDestroyed()) {
+                return;
+            }
+            this.renderedSettings = "";
+            if (this.tab == 1) {
+                this.render(true);
+            }
+            if (this.snapshot.failed()) {
+                this.load(true);
+            }
+        }));
         CalendarUpdates.start(this);
         this.refreshSubscribed();
         if (this.cacheReady) {
@@ -319,11 +333,19 @@ implements ScoreAdapter.Host {
 
     public void onPause() {
         this.active = false;
+        this.closeNetworkWatch();
         this.handler.removeCallbacks(this.tick);
         this.handler.removeCallbacks(this.renderSoon);
         this.handler.removeCallbacks(this.settleLoad);
         this.cancelPrefetch();
         super.onPause();
+    }
+
+    private void closeNetworkWatch() {
+        try {
+            this.networkWatch.close();
+        } catch (Exception ignored) {}
+        this.networkWatch = () -> {};
     }
 
     public void onDestroy() {
@@ -1050,6 +1072,7 @@ implements ScoreAdapter.Host {
     private String settingsKey() {
         StringBuilder key = new StringBuilder(128);
         key.append(CalendarCloudSync.status(this)).append('|');
+        key.append(Http.epoch()).append('|');
         key.append(this.tab).append('|').append(this.calendarBusy).append('|').append(this.calendarName()).append('|').append(this.calendarSync.linkedEvents()).append('|').append(this.prefs.getLong("calendar_checked", 0L)).append('|').append(this.snapshot.failed());
         for (Repository.Batch batch : this.snapshot.batches) {
             key.append('|').append(batch.competition.id).append(':').append(batch.error);
@@ -1220,7 +1243,7 @@ implements ScoreAdapter.Host {
         this.settingRow(calendar, "calendar-target", "接收日历", this.calendarName(), this::calendarChoice);
         this.settingRow(calendar, "subscriptions", "已订阅的比赛", this.calendarSync.linkedEvents() + " 场 · 提前 5 分钟提醒", this::subscribedList);
         long checked = this.prefs.getLong("calendar_checked", 0L);
-        this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期与取消", () -> this.syncSubscriptions(true));
+        this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期、取消与完场赛果通知", () -> this.syncSubscriptions(true));
         this.settingRow(calendar, "calendar-open", "打开系统日历", "查看日程与提醒", this::openCalendar);
         this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), () -> ShizukuCalendar.manage(this));
         this.body.addView((View)calendar);
@@ -1289,7 +1312,7 @@ implements ScoreAdapter.Host {
     }
 
     private void help() {
-        this.message("使用帮助", "在比赛卡上点日历加号订阅，点勾选可取消。提醒由系统日历发送；小米 / 澎湃 OS 需要允许日历通知与后台运行。\n\n更换接收日历只影响新订阅，已有事件保留在原日历。\n\n体育由 ESPN 提供；CS2 来自 5EPlay：一线赛事（Major / S+ / S 级）与 Team Spirit 全部比赛，一线赛事卡片显示赛事名，Spirit 的次级比赛显示 CS2 · Team Spirit；LOL 仅 Worlds，来自英雄联盟赛事官网。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");
+        this.message("使用帮助", "在比赛卡上点日历加号订阅，点勾选可取消。开赛前 5 分钟由系统日历提醒；已订阅比赛结束后由系统任务自动核对并推送最终赛果通知（无需应用常驻后台；小米 / 澎湃 OS 请开启应用通知、自启动及日历通知权限）。\n\n更换接收日历只影响新订阅，已有事件保留在原日历。\n\n网络采用多路自适应：国内源优先物理网卡直连分流，海外源自动在代理 / 直连与自有 HTTPS 节点间择优切换，切换网络或代理后自动恢复。\n\n体育由 ESPN 提供；CS2 来自 5EPlay：一线赛事（Major / S+ / S 级）与 Team Spirit 全部比赛，一线赛事卡片显示赛事名，Spirit 的次级比赛显示 CS2 · Team Spirit；LOL 仅 Worlds，来自英雄联盟赛事官网。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");
     }
 
     private String calendarName() {
@@ -1423,6 +1446,7 @@ implements ScoreAdapter.Host {
                 CalendarJob.schedule((Context)this);
                 if (finalResult.inserted + finalResult.updated > 0) {
                     Toast.makeText((Context)this, (CharSequence)"已加入日历 · 提前 5 分钟提醒", (int)0).show();
+                    ResultNotify.requestIfNeeded(this);
                 } else {
                     Sheet.message(this, "未能加入日历", finalResult.error.isEmpty() ? "请检查日历权限和目标日历。" : finalResult.error);
                 }
@@ -1480,7 +1504,7 @@ implements ScoreAdapter.Host {
         for (Match m : list) {
             items.add(new Sheet.Item(m.displayTitle(), MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · " + MatchLabel.of(m), false));
         }
-        Sheet.choose(this, "已订阅的比赛", "点选一场可取消订阅。提醒由系统日历发送。", items, -1, index -> {
+        Sheet.choose(this, "已订阅的比赛", "点选一场可取消订阅。赛前由系统日历提醒，完场自动推送赛果。", items, -1, index -> {
             Match m = (Match)list.get(index);
             Sheet.confirm(this, "取消订阅", "移除「" + m.displayTitle() + "」的日历事件和提醒？", "取消订阅", () -> this.unsubscribeAsync(m));
         });
@@ -1588,6 +1612,7 @@ implements ScoreAdapter.Host {
             }
         }
         StringBuilder content = new StringBuilder();
+        content.append(Http.statusSummary()).append("\n\n");
         for (Repository.Batch b : this.orderedSourceBatches(source)) {
             content.append(b.competition.name).append("\n").append(b.fetched > 0L ? "上次成功 " + MainActivity.formatInstant(b.fetched, "M月d日 HH:mm:ss") + " · " + b.matches.size() + " 场" : "尚未成功获取");
             if (!b.error.isEmpty()) {
@@ -2700,7 +2725,7 @@ implements ScoreAdapter.Host {
         calendar.setBackground((Drawable)this.ui.panel());
         this.settingRow(calendar, "calendar-target", "接收日历", this.calendarName(), this::calendarChoice);
         this.settingRow(calendar, "subscriptions", "已订阅的比赛", this.calendarSync.linkedEvents() + " 场 · 提前 5 分钟提醒", this::subscribedList);
-        this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期与取消", () -> this.syncSubscriptions(true));
+        this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期、取消与完场赛果通知", () -> this.syncSubscriptions(true));
         this.settingRow(calendar, "calendar-open", "打开系统日历", "查看日程与提醒", this::openCalendar);
         this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), () -> ShizukuCalendar.manage(this));
         left.addView((View)calendar);

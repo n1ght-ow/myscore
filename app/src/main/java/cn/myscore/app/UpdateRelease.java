@@ -7,11 +7,14 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Only stable, checksummed APK assets from this project's public releases. */
 final class UpdateRelease {
     static final String REPOSITORY="https://github.com/n1ght-ow/myscore";
     static final String LATEST_API="https://api.github.com/repos/n1ght-ow/myscore/releases/latest";
+    static final String LATEST_WEB=REPOSITORY+"/releases/latest";
     static final long MAX_BYTES=100L*1024*1024;
     final String version,url,assetUrl,sha256,notes;
     final long size;
@@ -35,6 +38,29 @@ final class UpdateRelease {
                 return new UpdateRelease(version,asset.optString("browser_download_url"),asset.optString("url"),asset.optString("digest"),asset.optLong("size"),root.optString("body"));
         }
         throw new IOException("新版本尚未上传安装包，请稍后重试");
+    }
+    static UpdateRelease fromWeb(String version,String expandedAssetsHtml,String sha256SumsText,long exactSize,String notes)throws IOException {
+        parts(version);
+        String apkName="MyScore-"+version+".apk";
+        String apkPath="/n1ght-ow/myscore/releases/download/v"+version+"/"+apkName;
+        String digest="";
+        if(expandedAssetsHtml!=null&&!expandedAssetsHtml.isBlank()) {
+            Matcher direct=Pattern.compile("digest for "+Pattern.quote(apkName)+"\"[^>]*?value=\"(sha256:[a-fA-F0-9]{64})\"").matcher(expandedAssetsHtml);
+            if(direct.find())digest=direct.group(1);
+            else {
+                for(String row:expandedAssetsHtml.split("<li\\b")) {
+                    if(!row.contains(apkPath))continue;
+                    Matcher m=Pattern.compile("(sha256:[a-fA-F0-9]{64})").matcher(row);
+                    if(m.find()){digest=m.group(1);break;}
+                }
+            }
+        }
+        if(digest.isEmpty()&&sha256SumsText!=null&&!sha256SumsText.isBlank()) {
+            Matcher sums=Pattern.compile("(?m)^([a-fA-F0-9]{64})\\s+\\*?(?:\\./)?"+Pattern.quote(apkName)+"\\s*$").matcher(sha256SumsText);
+            if(sums.find())digest="sha256:"+sums.group(1);
+        }
+        if(digest.isEmpty())throw new IOException("新版本尚未上传完整校验信息，请稍后重试");
+        return new UpdateRelease(version,REPOSITORY+"/releases/download/v"+version+"/"+apkName,"",digest,exactSize,notes);
     }
     static UpdateRelease restore(String json)throws Exception {
         JSONObject value=new JSONObject(json);

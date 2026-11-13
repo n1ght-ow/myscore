@@ -1,3 +1,12 @@
+# N1ghtScore 4.10.0 发布构建（2026-11-13）
+
+- 版本 4.10.0 / versionCode 57，包名 `cn.myscore.app`。日历事件前缀 `MyScore:` 与更新包文件名 `MyScore-4.10.0.apk` 保持不变，已安装的旧版可直接覆盖升级并保留设置与日历关联。
+- 发布文件为同签名个人安装 debug 包，大小 1,335,213 bytes，SHA-256 `2440003d911f0fa8f35a35c8056c1a3a3d129d8e5d56e890900d3628b9fe1764`；校验附件 `SHA256SUMS-4.10.0.txt`。证书 SHA-256 继续为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
+- 多路网络与刷新提速：新增 `Http` 统一传输层，注册默认网络与底层 `NOT_VPN` 物理网卡回调；国内源（腾讯 LoL、5EPlay、哔哩哔哩、咪咕）优先物理直连分流，海外源（ESPN、GitHub）按代理 / 直连 / 自有 HTTPS 节点（`https://43.160.228.109/api/v1/source`）自动容灾切换，启用 GZIP 解压、最多 5 跳安全 HTTPS 重定向及死连接自动重连；并行化 CS2 列表、ESPN 跨日赛程与足球球队双接口读取；更新检查支持 GitHub Releases 网页与校验清单回退及 HTTP 403/429 多路重试。
+- 完场结果推送：新增 `ResultNotify`、`ic_stat_score`、`BootReceiver` 及 `CalendarJob` 预计完场窗口持久化单次任务（`ID_FINISH = 24705`），无需应用进程常驻后台，确认已订阅比赛完场后自动更新历史日历标题为最终比分并推送一次系统结果通知。
+- 验证：`testDebugUnitTest` 256 项全部通过；`lintDebug` 0 错误；`assembleDebug` 与 `assembleDebugAndroidTest` 通过；`verifyLiveSources` 在默认环境与挂死代理（`127.0.0.1:1`）故障注入下 9 个线上赛事源均全部通过。API 35 模拟器（`Codex_MyScore_API35`）覆盖安装冷启动（1241 ms，0 崩溃）并通过前 124 项导航、日历同步与恢复检查（注：`SmokeInstrumentation` 第 125 项 `BrandChecks:25` 为 4.9.0 换新图标后遗留的旧折页 S 断言）。本次 Redmi K80 Pro 与 Xiaomi Pad 6S Pro 真机未连接，未做真机覆盖安装核对。
+- 发布目标为 `origin/main`、标签 `v4.10.0` 与 [N1ghtScore 4.10.0](https://github.com/n1ght-ow/myscore/releases/tag/v4.10.0)，本地产物存档于忽略目录 `artifacts/release-4.10.0/`。
+
 # N1ghtScore 4.9.0 发布构建（2026-11-12）
 
 - 版本 4.9.0 / versionCode 55，包名仍为 `cn.myscore.app`。桌面和应用内名称改为 N1ghtScore；日历事件前缀 `MyScore:` 与更新包文件名 `MyScore-4.9.0.apk` 保持不变，已安装的 4.8.1 可以直接覆盖升级。

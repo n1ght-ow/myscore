@@ -7,16 +7,9 @@ import android.util.AtomicFile;
 import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InterruptedIOException;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.SocketTimeoutException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -72,6 +65,7 @@ final class WatchRepository {
     private final Map<BilibiliVods.Source, List<Runnable>> biliWaiters = new LinkedHashMap<>();
     private final Map<BilibiliVods.Source, BiliState> bili = new ConcurrentHashMap<>();
     private final Map<BilibiliVods.Source, Long> biliFailedUntil = new ConcurrentHashMap<>();
+    private volatile long lastEpoch = Http.epoch();
 
     private volatile String packId;
     private volatile long packFetched;
@@ -155,6 +149,7 @@ final class WatchRepository {
     }
 
     private void ensureBili(BilibiliVods.Source source, Runnable changed) {
+        syncEpoch();
         long now = System.currentTimeMillis();
         BiliState state = bili.get(source);
         if (state != null && now - state.fetched() < BILI_TTL) return;
@@ -230,6 +225,7 @@ final class WatchRepository {
     }
 
     private void resolveMigu(Match match, Runnable changed, boolean forOpen) {
+        syncEpoch();
         String key = key(match);
         long now = System.currentTimeMillis();
         Long failed = miguFailed.get(key);
@@ -342,63 +338,39 @@ final class WatchRepository {
         return httpPost(MiguMatches.SEARCH_URL, body.toString(), headers);
     }
 
+    private void syncEpoch() {
+        long current = Http.epoch();
+        if (current != lastEpoch) {
+            lastEpoch = current;
+            miguFailed.clear();
+            synchronized (biliLock) {
+                biliFailedUntil.clear();
+            }
+        }
+    }
+
     private static String httpGet(String url, Map<String, String> headers) throws Exception {
         return httpGet(url, headers, false);
     }
 
     private static String httpGet(String url, Map<String, String> headers, boolean minimalHeaders) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        try {
-            connection.setConnectTimeout(6_000);
-            connection.setReadTimeout(10_000);
-            // The account archive endpoint accepts the same minimal headers as the public space.
-            if (!minimalHeaders) {
-                connection.setRequestProperty("Accept", "application/json");
-                connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
-            }
-            connection.setRequestProperty("User-Agent", UA);
-            for (Map.Entry<String, String> h : headers.entrySet()) connection.setRequestProperty(h.getKey(), h.getValue());
-            if (connection.getResponseCode() != 200) throw new IOException("HTTP " + connection.getResponseCode());
-            return read(connection.getInputStream());
-        } finally {
-            connection.disconnect();
+        Map<String, String> merged = new LinkedHashMap<>();
+        if (!minimalHeaders) {
+            merged.put("Accept", "application/json");
+            merged.put("Accept-Language", "zh-CN,zh;q=0.9");
         }
+        merged.put("User-Agent", UA);
+        if (headers != null) merged.putAll(headers);
+        return Http.getRaw(url, merged, !minimalHeaders);
     }
 
     private static String httpPost(String url, String body, Map<String, String> headers) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        try {
-            connection.setConnectTimeout(6_000);
-            connection.setReadTimeout(10_000);
-            connection.setRequestMethod("POST");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
-            connection.setRequestProperty("User-Agent", UA);
-            for (Map.Entry<String, String> h : headers.entrySet()) connection.setRequestProperty(h.getKey(), h.getValue());
-            try (OutputStream out = connection.getOutputStream()) {
-                out.write(body.getBytes(StandardCharsets.UTF_8));
-            }
-            if (connection.getResponseCode() != 200) throw new IOException("HTTP " + connection.getResponseCode());
-            return read(connection.getInputStream());
-        } finally {
-            connection.disconnect();
-        }
-    }
-
-    private static String read(InputStream input) throws Exception {
-        try (InputStream in = input; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[8192];
-            int n;
-            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
-            while ((n = in.read(buffer)) != -1) {
-                if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Watch request cancelled");
-                if (System.nanoTime() > deadline) throw new SocketTimeoutException("Watch response timed out");
-                if (out.size() + n > 8_000_000) throw new IOException("response too large");
-                out.write(buffer, 0, n);
-            }
-            return out.toString("UTF-8");
-        }
+        Map<String, String> merged = new LinkedHashMap<>();
+        merged.put("Accept", "application/json");
+        merged.put("Accept-Language", "zh-CN,zh;q=0.9");
+        merged.put("User-Agent", UA);
+        if (headers != null) merged.putAll(headers);
+        return Http.post(url, body, merged);
     }
 
     private String key(Match match) {

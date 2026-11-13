@@ -8,6 +8,10 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * A team's own schedule from the same public feeds as the score list. No extra service is
@@ -15,6 +19,11 @@ import java.util.Map;
  * feed, and the Worlds list is filtered by the source team id.
  */
 final class TeamSchedule {
+    private static final ExecutorService WORKERS=Executors.newFixedThreadPool(4,r->{
+        Thread t=new Thread(r,"myscore-team-schedule");
+        t.setDaemon(true);
+        return t;
+    });
     static final class Result {
         final List<Match> matches=new ArrayList<>();
         long fetched=0;
@@ -38,15 +47,32 @@ final class TeamSchedule {
     private static List<Match> espn(Team team,Competition c,long now)throws Exception {
         if(!team.id.matches("[0-9]+"))throw new Exception("球队标识无效");
         String base="https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/teams/"+team.id+"/schedule";
-        JSONObject results=new JSONObject(Repository.get(base));
-        verifyTeam(results,team);
-        JSONObject fixtures=null;
-        // ESPN's soccer team page splits completed results and remaining fixtures into two calls.
-        if(c.group.equals("足球")) {
-            fixtures=new JSONObject(Repository.get(base+"?fixture=true"));
-            verifyTeam(fixtures,team);
+        if(!c.group.equals("足球")) {
+            JSONObject results=new JSONObject(Repository.get(base));
+            verifyTeam(results,team);
+            return parseEspn(team,results,null,now);
         }
-        return parseEspn(team,results,fixtures,now);
+        // ESPN's soccer team page splits completed results and remaining fixtures into two calls.
+        Future<JSONObject> resultsTask=WORKERS.submit(()->new JSONObject(Repository.get(base)));
+        Future<JSONObject> fixturesTask=WORKERS.submit(()->new JSONObject(Repository.get(base+"?fixture=true")));
+        try {
+            JSONObject results=awaitJson(resultsTask);
+            JSONObject fixtures=awaitJson(fixturesTask);
+            verifyTeam(results,team);
+            verifyTeam(fixtures,team);
+            return parseEspn(team,results,fixtures,now);
+        } finally {
+            if(!resultsTask.isDone())resultsTask.cancel(true);
+            if(!fixturesTask.isDone())fixturesTask.cancel(true);
+        }
+    }
+    private static JSONObject awaitJson(Future<JSONObject> task)throws Exception {
+        try{return task.get();}
+        catch(ExecutionException e){
+            if(e.getCause() instanceof InterruptedException ie)throw ie;
+            if(e.getCause() instanceof Exception ex)throw ex;
+            throw new RuntimeException(e.getCause());
+        }
     }
     static void verifyTeam(JSONObject root,Team team)throws Exception {
         JSONObject source=root.optJSONObject("team");

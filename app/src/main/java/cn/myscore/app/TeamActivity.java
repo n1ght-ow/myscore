@@ -57,6 +57,7 @@ public final class TeamActivity extends Activity {
     private ScoreList padUpcomingList,padFinishedList;
     private TeamScheduleAdapter padUpcomingAdapter,padFinishedAdapter;
     private TextView padStatus,padError,padUpcomingCount,padFinishedCount;
+    private AutoCloseable networkWatch=()->{};
 
     @Override public void onCreate(Bundle saved) {
         boolean dark=Ui.isDark(this);
@@ -85,8 +86,18 @@ public final class TeamActivity extends Activity {
         root.requestApplyInsets();
         build();
     }
-    @Override public void onResume(){super.onResume();active=true;if(repository==null||isFinishing())return;CalendarUpdates.start(this);render();if(pendingForce||!TeamRepository.fresh(result,System.currentTimeMillis()))load(false);else schedule();}
-    @Override public void onPause(){active=false;handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);super.onPause();}
+    @Override public void onResume(){
+        super.onResume();active=true;if(repository==null||isFinishing())return;
+        closeNetworkWatch();
+        networkWatch=Http.onNetworkChanged(()->handler.post(()->{
+            if(!active||isDestroyed())return;
+            if(result!=null&&!result.error.isEmpty())load(true);
+        }));
+        CalendarUpdates.start(this);render();
+        if(pendingForce||!TeamRepository.fresh(result,System.currentTimeMillis()))load(false);else schedule();
+    }
+    @Override public void onPause(){active=false;closeNetworkWatch();handler.removeCallbacks(tick);handler.removeCallbacks(renderSoon);super.onPause();}
+    private void closeNetworkWatch(){try{networkWatch.close();}catch(Exception ignored){}networkWatch=()->{};}
     @Override public void onDestroy(){active=false;getSharedPreferences("calendar-links",0).unregisterOnSharedPreferenceChangeListener(calendarListener);Sheet.dismissAll(this);handler.removeCallbacksAndMessages(null);worker.shutdownNow();calendarWorker.shutdownNow();super.onDestroy();}
     @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(focus)Ui.highRefresh(getWindow());}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putInt("position",list==null?pendingPosition:list.getFirstVisiblePosition());state.putInt("pad_upcoming",padUpcomingList==null?pendingPadUpcoming:padUpcomingList.getFirstVisiblePosition());state.putInt("pad_finished",padFinishedList==null?pendingPadFinished:padFinishedList.getFirstVisiblePosition());state.putString("filter",filter);if(pendingSubscription!=null)state.putString("pending_subscription",pendingSubscription.json().toString());}
@@ -298,7 +309,10 @@ public final class TeamActivity extends Activity {
                 calendarBusy=false;if(isDestroyed())return;
                 render();refreshSubscriptionViews();CalendarJob.schedule(this);
                 if(completed.failed>0)Sheet.message(this,remove?"未能取消订阅":"未能加入日历",completed.error);
-                else android.widget.Toast.makeText(this,remove?"已取消订阅":"已加入日历 · 提前 5 分钟提醒",android.widget.Toast.LENGTH_SHORT).show();
+                else {
+                    android.widget.Toast.makeText(this,remove?"已取消订阅":"已加入日历 · 提前 5 分钟提醒",android.widget.Toast.LENGTH_SHORT).show();
+                    if(!remove)ResultNotify.requestIfNeeded(this);
+                }
             });
         });
     }

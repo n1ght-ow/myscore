@@ -6,6 +6,7 @@ import android.app.Application;
 public final class MyScoreApp extends Application {
     @Override public void onCreate() {
         super.onCreate();
+        Http.init(this);
         CalendarCloudSync.initialize(this);
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             private int started;

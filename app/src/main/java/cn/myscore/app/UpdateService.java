@@ -56,14 +56,14 @@ public final class UpdateService extends Service {
             long usable=partial.getParentFile()==null?0:partial.getParentFile().getUsableSpace();
             if(usable>0&&usable<release.size+1024*1024)throw new java.io.IOException("存储空间不足，请清理后重新下载");
             final long[] last={0};
-            for(int attempt=0;attempt<3;attempt++) {
+            for(int attempt=0;attempt<4;attempt++) {
                 if(!repository.owns(requested)||Thread.currentThread().isInterrupted())return;
                 repository.changed(requested,DownloadManager.STATUS_PENDING,0,"");
                 try {
-                    UpdateTransfer.download(release,partial,bytes->{
+                    UpdateTransfer.downloadAttempt(release,partial,bytes->{
                         long now=android.os.SystemClock.elapsedRealtime();
                         if(now-last[0]>=1000||bytes==release.size){last[0]=now;repository.changed(requested,DownloadManager.STATUS_RUNNING,bytes,"");if(running(requested))foreground(notification(bytes,release.size));}
-                    },()->!repository.owns(requested),attempt==1,true);
+                    },()->!repository.owns(requested),attempt,true);
                     synchronized(UpdateRepository.LOCK) {
                         if(!repository.owns(requested)||Thread.currentThread().isInterrupted())return;
                         if(!partial.renameTo(destination))throw new java.io.IOException("无法保存安装包，请检查存储空间后重试");
@@ -71,8 +71,8 @@ public final class UpdateService extends Service {
                     }
                     return;
                 } catch(java.io.IOException e) {
-                    if(attempt==2||!retryable(e)||Thread.currentThread().isInterrupted()||!repository.owns(requested))throw e;
-                    Thread.sleep((attempt+1)*1500L);
+                    if(attempt==3||!retryable(e)||Thread.currentThread().isInterrupted()||!repository.owns(requested))throw e;
+                    Thread.sleep((attempt+1)*1200L);
                 }
             }
         } catch(Exception e){repository.changed(requested,DownloadManager.STATUS_FAILED,0,UpdateTransfer.failure(e));}
@@ -82,7 +82,7 @@ public final class UpdateService extends Service {
             stopSelf(startId);
         }
     }
-    private static boolean retryable(java.io.IOException error) {
+    static boolean retryable(java.io.IOException error) {
         if (error instanceof java.net.SocketTimeoutException) return true;
         if (error instanceof java.io.InterruptedIOException) return false;
         if (error instanceof java.net.UnknownHostException
@@ -93,7 +93,7 @@ public final class UpdateService extends Service {
         if (message!=null&&(message.contains("安装包")||message.contains("校验")
             ||message.contains("大小")||message.contains("跳转")
             ||message.contains("失效")||message.contains("无法保存")
-            ||message.contains("HTTP 4"))) return false;
+            ||message.contains("HTTP 400")||message.contains("HTTP 404"))) return false;
         return true;
     }
     @Override public void onTimeout(int startId,int fgsType){repository.changed(token,DownloadManager.STATUS_FAILED,0,"下载超时，请返回更新页重新下载");stopSelf();}

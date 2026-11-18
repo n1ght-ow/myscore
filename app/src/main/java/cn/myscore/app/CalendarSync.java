@@ -382,6 +382,7 @@ public final class CalendarSync {
                 String description=rows.getString(1);if(description==null||!description.startsWith("MyScore:"))continue;
                 int newline=description.indexOf('\n');if(newline<=8)continue;
                 String id=description.substring(8,newline);
+                if(id.startsWith("qq:lol:"))continue;
                 if(known!=null&&!known.containsKey(id))continue;
                 if(!("myscore://match/"+Uri.encode(id)).equals(rows.getString(2)))continue;
                 OwnedEvent event=new OwnedEvent(rows.getLong(0),rows.getLong(3),rows.getLong(4),rows.getString(5),description,rows.getString(6),rows.getInt(7)!=0,rows.getInt(8)==1);

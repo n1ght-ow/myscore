@@ -10,8 +10,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 /** Measured pane geometry; fixture objects stay in memory and never enter application caches. */
 final class SpaceUsageChecks {
@@ -42,27 +40,9 @@ final class SpaceUsageChecks {
                 watch.bind(WatchLinks.of(match),true,()->actions[0]++);layout(watch,ui.dp(360));
                 require(watch.getChildCount()==3,"media row has one leading icon and no trailing duplicate icon");checks[0]++;
                 watch.performClick();require(actions[0]==1,"the remaining media action still opens its destination");checks[0]++;
-                MatchDetail lol=lolFixture();LinearLayout body=ui.column();new LolMatchView(ui,lol,body,n->{}).games(1,true);
-                layout(body,ui.dp(747));View stats=body.findViewWithTag("lol-stats-table");
-                if(scale<=1.3f){require(stats!=null&&findAll(stats,"lol-stats-player").size()==10,"wide statistics show both teams together");checks[0]++;inspect(stats);checks[0]++;}
-                layout(body,ui.dp(320));require(body.findViewWithTag("lol-stats-table")==null,"phone-width statistics retain the readable card layout");checks[0]++;inspect(body);checks[0]++;
-                layout(body,ui.dp(747));if(scale<=1.3f){require(findAll(body,"lol-stats-player").size()==10,"resizing back does not duplicate player rows");checks[0]++;}
             }
         });
         return checks[0];
-    }
-    private static MatchDetail lolFixture(){
-        Match match=new Match();match.group="LOL";match.league="lol";match.homeId="1";match.awayId="2";match.home="Home";match.away="Away";MatchDetail detail=new MatchDetail(match);
-        try{
-            JSONArray teams=new JSONArray();
-            for(String id:List.of("1","2")){
-                JSONArray players=new JSONArray();int index=0;
-                for(String role:List.of("TOP","JUNGLE","MID","BOT","SUPPORT"))players.put(new JSONObject().put("playerName","Player "+(++index)).put("playerLocation",role).put("heroName","测试英雄").put("damageDetail",new JSONObject().put("heroDamage",12345)).put("visionDetail",new JSONObject().put("visionScore",33.9)));
-                teams.put(new JSONObject().put("teamId",id).put("playerInfos",players));
-            }
-            detail.lolGames.add(LolGame.parse(new JSONObject().put("bo",1).put("matchStatus","2").put("teamInfos",teams),match));
-        }catch(Exception e){throw new AssertionError(e);}
-        return detail;
     }
     static void layout(View view,int width){view.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));view.layout(0,0,view.getMeasuredWidth(),view.getMeasuredHeight());}
     static List<View> findAll(View view,String tag){List<View> found=new ArrayList<>();if(tag.equals(view.getTag()))found.add(view);if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++)found.addAll(findAll(group.getChildAt(i),tag));return found;}

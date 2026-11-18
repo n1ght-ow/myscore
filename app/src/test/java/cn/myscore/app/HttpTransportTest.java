@@ -73,7 +73,7 @@ public class HttpTransportTest {
 
     @Test public void classifiesDomesticAndOverseasHostsCorrectly() {
         for (String domestic : new String[]{
-            "lpl.qq.com", "game.gtimg.cn", "open.tjstats.com",
+            "game.gtimg.cn",
             "app.5eplay.com", "esports-data.5eplaycdn.com",
             "api.bilibili.com", "i0.hdslb.com",
             "app-sc.miguvideo.com", "jadeite.migu.cn"

@@ -167,7 +167,7 @@ implements ScoreAdapter.Host {
             this.render(true);
         }
     };
-    private static final String[] GROUPS = new String[]{"全部", "足球", "NBA", "NFL", "F1", "CS2", "LOL"};
+    private static final String[] GROUPS = new String[]{"全部", "足球", "NBA", "NFL", "F1", "CS2"};
     private boolean pad;
     private LinearLayout padRail;
     private ScoreList padList;
@@ -227,6 +227,7 @@ implements ScoreAdapter.Host {
             }
             this.dayOffset = state.getInt("offset");
             this.group = state.getString("group", "全部");
+            if (!java.util.Arrays.asList(GROUPS).contains(this.group)) this.group = "全部";
             this.padSelectedId = state.getString("pad_selected", "");
             this.pendingScorePosition = state.getInt("score_position", -1);
             this.pendingPadPosition = state.getInt("pad_position", -1);
@@ -235,6 +236,7 @@ implements ScoreAdapter.Host {
             if (!pending.isEmpty()) {
                 try {
                     this.pendingSubscription = Match.fromJson(new JSONObject(pending));
+                    if (Competition.find(this.pendingSubscription.league) == null) this.pendingSubscription = null;
                 } catch (Exception ignored) {
                     this.pendingSubscription = null;
                 }
@@ -1372,7 +1374,7 @@ implements ScoreAdapter.Host {
     }
 
     private void help() {
-        this.message("使用帮助", "在比赛卡上点日历加号订阅，点勾选可取消。开赛前 5 分钟由系统日历提醒；已订阅比赛结束后由系统任务自动核对并推送最终赛果通知（无需应用常驻后台；小米 / 澎湃 OS 请开启应用日历读写、应用通知、自启动及系统日历通知权限）。\n\n跨设备同步：手机与平板登录同一小米账户并开启日历权限后，单场订阅与取消约 45 秒–3 分钟通过小米日历自动互通，无需安装或启动 Shizuku。更换接收日历只影响新订阅，已有事件保留在原日历。\n\n网络采用多路自适应：国内源优先物理网卡直连分流，海外源自动在代理 / 直连与自有 HTTPS 节点间择优切换，切换网络或代理后自动恢复。\n\n体育由 ESPN 提供；CS2 来自 5EPlay：一线赛事（Major / S+ / S 级）与 Team Spirit 全部比赛，一线赛事卡片显示赛事名，Spirit 的次级比赛显示 CS2 · Team Spirit；LOL 仅 Worlds，来自英雄联盟赛事官网。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");
+        this.message("使用帮助", "在比赛卡上点日历加号订阅，点勾选可取消。开赛前 5 分钟由系统日历提醒；已订阅比赛结束后由系统任务自动核对并推送最终赛果通知（无需应用常驻后台；小米 / 澎湃 OS 请开启应用日历读写、应用通知、自启动及系统日历通知权限）。\n\n跨设备同步：手机与平板登录同一小米账户并开启日历权限后，单场订阅与取消约 45 秒–3 分钟通过小米日历自动互通，无需安装或启动 Shizuku。更换接收日历只影响新订阅，已有事件保留在原日历。\n\n网络采用多路自适应：国内源优先物理网卡直连分流，海外源自动在代理 / 直连与自有 HTTPS 节点间择优切换，切换网络或代理后自动恢复。\n\n体育由 ESPN 提供；足球页按日期浏览赛程（含国家队），点队标进入对应球队赛程。CS2 来自 5EPlay：一线赛事（Major / S+ / S 级）与 Team Spirit 全部比赛，一线赛事卡片显示赛事名，Spirit 的次级比赛显示 CS2 · Team Spirit。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");
     }
 
     private String calendarName() {
@@ -1756,7 +1758,7 @@ implements ScoreAdapter.Host {
             }
             content.append("\n\n");
         }
-        content.append("来源：ESPN、5EPlay、英雄联盟赛事官网。数据可能延迟；连接失败时保留最近一次成功记录。已结束的比赛和详情只读取一次，不再自动更新；可点刷新手动核对。");
+        content.append("来源：ESPN、5EPlay。数据可能延迟；连接失败时保留最近一次成功记录。已结束的比赛和详情只读取一次，不再自动更新；可点刷新手动核对。");
         Sheet.message(this, "数据来源与连接", content.toString());
     }
 

@@ -84,7 +84,7 @@ public final class CalendarJob extends JobService {
             case "NBA" -> 130*60_000L;
             case "NFL" -> 180*60_000L;
             case "F1" -> shortF1Session(m)?65*60_000L:100*60_000L;
-            case "CS2", "LOL" -> esportsFinishOffsetMs(m);
+            case "CS2" -> esportsFinishOffsetMs(m);
             default -> 120*60_000L;
         };
     }

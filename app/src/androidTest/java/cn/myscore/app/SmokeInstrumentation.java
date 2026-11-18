@@ -24,14 +24,14 @@ public final class SmokeInstrumentation extends Instrumentation {
     private Context context;
     private long calendar=-1;
     private java.util.Map<String,?> originalSettings,originalLinks;
-    private boolean network,details,lol;
+    private boolean network,details;
     @Override public void runOnMainSync(Runnable action){
         Throwable[] failure=new Throwable[1];
         super.runOnMainSync(()->{try{action.run();}catch(Throwable e){failure[0]=e;}});
         if(failure[0] instanceof Error)throw (Error)failure[0];
         if(failure[0]!=null)throw new RuntimeException(failure[0]);
     }
-    @Override public void onCreate(Bundle arguments){super.onCreate(arguments);network=arguments!=null&&"true".equals(arguments.getString("network"));details=arguments!=null&&"true".equals(arguments.getString("details"));lol=arguments!=null&&"true".equals(arguments.getString("lol"));start();}
+    @Override public void onCreate(Bundle arguments){super.onCreate(arguments);network=arguments!=null&&"true".equals(arguments.getString("network"));details=arguments!=null&&"true".equals(arguments.getString("details"));start();}
     private void check(boolean condition,String description){if(!condition)throw new AssertionError(description);checks++;android.util.Log.i("MyScoreTests","PASS "+description);}
     @Override public void onStart() {
         Bundle report=new Bundle();int outcome=Activity.RESULT_OK;
@@ -43,7 +43,7 @@ public final class SmokeInstrumentation extends Instrumentation {
             activity=startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));waitForIdleSync();
             check(findText(activity.getWindow().getDecorView(),"N1ghtScore")!=null,"native match screen opens");
             click("设置");check(findText(activity.getWindow().getDecorView(),"单场订阅")!=null,"settings navigation");
-            click("比赛");click("CS2");click("LOL");click("全部");
+            click("比赛");click("CS2");click("全部");
             check(findText(activity.getWindow().getDecorView(),"N1ghtScore")!=null,"sport filters stay interactive during network loads");
             checks+=StabilityChecks.run(this,activity);
             calendarChecks();
@@ -52,7 +52,6 @@ public final class SmokeInstrumentation extends Instrumentation {
             checks+=LayoutChecks.run(this,context);
             checks+=CrestChecks.run(this,context);
             checks+=UpdateChecks.run(this,context);
-            if(lol)checks+=LolChecks.run(this,context);
             if(details){DetailChecks.run(this,context);checks+=DetailChecks.checks;}
             if(network)checks+=TeamChecks.run(this,context);
             if(network){LocalDate day=Match.today(System.currentTimeMillis());Repository.Snapshot snapshot=new Repository(context).fetch(day,day,"全部",true);StringBuilder sources=new StringBuilder();for(Repository.Batch batch:snapshot.batches){sources.append(batch.competition.id).append(": ").append(batch.error.isEmpty()?"OK "+batch.matches.size():batch.error).append('\n');check(batch.error.isEmpty(),"device source: "+batch.competition.id+" "+batch.error);}report.putString("sources",sources.toString());}

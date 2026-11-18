@@ -27,7 +27,6 @@ final class Formats {
     static final DateTimeFormatter MONTH_DAY_DOT = date("MM.dd");
     static final DateTimeFormatter YEAR_MONTH_DAY_WEEK = date("yyyy年M月d日 EEE");
     /** Source timestamps arrive as Beijing-local text, without a zone suffix. */
-    static final DateTimeFormatter SOURCE_TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
 
     static DateTimeFormatter zoned(String pattern) {
         DateTimeFormatter formatter = ZONED.get(pattern);

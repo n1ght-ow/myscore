@@ -36,7 +36,7 @@ final class TeamRepository {
                 if(!file.exists())return result;
                 JSONObject root=new JSONObject(new String(new AtomicFile(file).readFully(),StandardCharsets.UTF_8));
                 if(!key(team).equals(root.optString("team")))return result;
-                boolean reset=team.league.equals("cs2")&&root.optInt("schema",0)<CS2_TEAM_SCHEMA;
+                boolean reset=root.optInt("schema",0)<cacheSchema(team);
                 result.fetched=root.optLong("fetched");
                 result.source=root.optString("source");
                 JSONArray matches=root.optJSONArray("matches");
@@ -51,16 +51,19 @@ final class TeamRepository {
     }
 
     Result fetch(Team team,boolean force) {
+        return fetch(team,force,true);
+    }
+    Result fetch(Team team,boolean force,boolean observeCalendar) {
         Result cached=cached(team);
         long now=System.currentTimeMillis();
-        if(!force&&fresh(cached,now)){CalendarUpdates.observe(context,cached.matches);return cached;}
+        if(!force&&fresh(cached,now)){if(observeCalendar)CalendarUpdates.observe(context,cached.matches);return cached;}
         try {
             TeamSchedule.Result fresh=TeamSchedule.fetch(team,now);
             if(fresh.fetched<=0)fresh.fetched=now;
             save(team,fresh);
             Result result=new Result();
             result.matches.addAll(fresh.matches);result.fetched=fresh.fetched;result.source=fresh.source;
-            CalendarUpdates.observe(context,result.matches);return result;
+            if(observeCalendar)CalendarUpdates.observe(context,result.matches);return result;
         } catch(Exception e) {
             cached.error=friendly(e);
             return cached;
@@ -79,6 +82,10 @@ final class TeamRepository {
         return message==null||message.isBlank()?"连接失败":message;
     }
     private String key(Team team){return team.league+":"+team.id;}
+    private static int cacheSchema(Team team) {
+        if(team.league.equals("cs2"))return CS2_TEAM_SCHEMA;
+        return NationalTeams.follows(team)?NationalTeams.SCHEDULE_SCHEMA:0;
+    }
     private File file(Team team) {
         File dir=new File(context.getCacheDir(),"teams-v1");
         if(!dir.exists()&&!dir.mkdirs())android.util.Log.w("MyScore","Cannot create team cache directory");
@@ -91,7 +98,7 @@ final class TeamRepository {
             try {
                 JSONArray matches=new JSONArray();
                 for(Match m:value.matches)matches.put(m.json());
-                JSONObject root=new JSONObject().put("team",key(team)).put("fetched",value.fetched).put("source",value.source).put("schema",team.league.equals("cs2")?CS2_TEAM_SCHEMA:0).put("matches",matches);
+                JSONObject root=new JSONObject().put("team",key(team)).put("fetched",value.fetched).put("source",value.source).put("schema",cacheSchema(team)).put("matches",matches);
                 out=file.startWrite();out.write(root.toString().getBytes(StandardCharsets.UTF_8));file.finishWrite(out);
             } catch(Exception e) {
                 if(out!=null)file.failWrite(out);

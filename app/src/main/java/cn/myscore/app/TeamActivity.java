@@ -402,7 +402,7 @@ public final class TeamActivity extends Activity {
     }
 
     private String pageName() {
-        return team.league.equals("cs2")||team.league.equals("lol")?"队伍赛程":"球队赛程";
+        return team.league.equals("cs2")?"队伍赛程":"球队赛程";
     }
 
     private void refreshSubscriptionViews() {
@@ -496,14 +496,14 @@ public final class TeamActivity extends Activity {
     private String emptyMessage() {
         return switch(team.league) {
             case "cs2" -> "5EPlay 暂未返回这支队伍的战队赛程。";
-            case "lol" -> "官网暂未返回这支队伍在本届 Worlds 的赛程。";
+            case NationalTeams.LEAGUE -> "ESPN 暂未返回这支国家队的赛程。";
             default -> "来源暂未返回这支队伍本赛季的赛程。";
         };
     }
     private String footnote() {
         String coverage=switch(team.league) {
             case "cs2" -> "5EPlay 战队赛程与一线赛程：最多显示 30 场近期已结束的比赛，以及接下来已发布的一线赛事。";
-            case "lol" -> "只显示本应用覆盖的 Worlds 赛程，不包含其他联赛。";
+            case NationalTeams.LEAGUE -> "ESPN 提供的近期比赛及已发布赛程。";
             default -> "ESPN 本赛季球队赛程，合并已结束的比赛与接下来已发布的赛程。";
         };
         String note="比分为本队在前；点任意比赛查看完整详情。"+coverage;

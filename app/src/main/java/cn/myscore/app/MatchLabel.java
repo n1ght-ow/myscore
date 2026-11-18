@@ -15,6 +15,7 @@ final class MatchLabel {
             if (DomesticEsports.spiritMatch(match)) return "CS2 · Team Spirit";
             return "CS2";
         }
+        if (NationalTeams.LEAGUE.equals(match.league) && !match.event.isBlank()) return match.event;
         Competition competition = Competition.find(match.league);
         return competition == null ? match.group : competition.name;
     }

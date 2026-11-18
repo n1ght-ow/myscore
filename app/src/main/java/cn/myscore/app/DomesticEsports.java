@@ -3,7 +3,6 @@ package cn.myscore.app;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,7 +14,6 @@ import java.util.concurrent.Future;
 
 /** Public website feeds; no login, SDK, API key, or third-party relay. */
 public final class DomesticEsports {
-    public static final String LOL="https://lpl.qq.com/web201612/data/LOL_MATCH2_MATCH_HOMEPAGE_BMATCH_LIST.js";
     public static final String FIVE="https://esports-data.5eplaycdn.com/v1/api/csgo/";
     // Major (1), S+ (7) and S (2) are tier one; A/B/C, qualifiers and showmatches are not.
     static final String TIER_ONE="https://app.5eplay.com/api/tournament/session_list?game_type=1&game_status=0&grades=1%2C2%2C7&limit=100";
@@ -31,7 +29,6 @@ public final class DomesticEsports {
     private static JSONArray arr(JSONObject o,String k){JSONArray v=o.optJSONArray(k);return v==null?new JSONArray():v;}
     private static String score(JSONObject o,String k){return o.isNull(k)?"":o.optString(k);}
     private static long seconds(String s){try{return Long.parseLong(s)*1000;}catch(RuntimeException e){return 0;}}
-    private static long localTime(String s){try{return LocalDateTime.parse(s,Formats.SOURCE_TIMESTAMP).atZone(Match.ZONE).toInstant().toEpochMilli();}catch(RuntimeException e){return 0;}}
     static boolean isTierOne(String grade,String label){
         return "1".equals(grade)||"2".equals(grade)||"7".equals(grade)
             ||"Major".equals(label)||"S+赛事".equals(label)||"S级赛事".equals(label);
@@ -54,29 +51,6 @@ public final class DomesticEsports {
             return "csgo_tm_7020".equals(match.homeId)||"csgo_tm_7020".equals(match.awayId);
         }
         return "SPIRIT".equals(BilibiliVods.cs2Team(match.home))||"SPIRIT".equals(BilibiliVods.cs2Team(match.away));
-    }
-    public static List<Match> worlds(JSONObject root,long fetched) throws Exception {
-        if(!root.optString("status").equals("0") || root.optJSONArray("msg")==null)throw new Exception("LOL 官方赛程格式发生变化");
-        List<Match> all=new ArrayList<>();JSONArray list=arr(root,"msg");long published=localTime(root.optString("lastUpTime"));
-        for(int i=0;i<list.length();i++) {
-            JSONObject e=list.optJSONObject(i);if(e==null)continue;
-            String tournament=e.optString("GameName");if(!tournament.matches(".*全球总决赛.*") && !Rules.isWorlds(tournament,""))continue;
-            String id=e.optString("bMatchId");if(id.isEmpty())continue;
-            Match m=new Match();m.id="qq:lol:"+id;m.league="lol";m.group="LOL";m.source="英雄联盟赛事官网";
-            m.updated=published>0&&published<=fetched+300_000?published:fetched;
-            m.start=localTime(e.optString("MatchDate"));m.timeConfirmed=m.start>0;
-            m.state=switch(e.optString("MatchStatus")){case "1"->"scheduled";case "2"->"live";case "3"->"final";default->"unknown";};
-            m.status=Rules.stateLabel(m.state);String name=e.optString("bMatchName");String[] teams=name.split("(?i)\\s+vs\\s+");
-            m.home=DetailParsers.text(e,"TeamShortNameA");m.away=DetailParsers.text(e,"TeamShortNameB");
-            m.homeId=DetailParsers.text(e,"TeamA");m.awayId=DetailParsers.text(e,"TeamB");
-            if(teams.length==2){if(m.home.isEmpty())m.home=teams[0];if(m.away.isEmpty())m.away=teams[1];}
-            else if(!name.isEmpty())m.title=DetailParsers.plain(name);
-            if(m.home.isEmpty())m.home="对阵待定";if(m.away.isEmpty())m.away="对阵待定";
-            if(!m.scheduled()){m.homeScore=score(e,"ScoreA");m.awayScore=score(e,"ScoreB");}
-            m.detail=DetailParsers.text(e,"GameName")+" · "+DetailParsers.text(e,"GameModeName")+" · "+DetailParsers.text(e,"GameProcName");m.url="https://lpl.qq.com/";
-            all.add(m);
-        }
-        return all;
     }
     private static Match fiveBase(JSONObject mc,JSONObject tournament,long fetched) {
         Match m=new Match();m.id="five:cs2:"+mc.optString("id");m.league="cs2";m.group="CS2";m.source="5EPlay";m.updated=fetched;

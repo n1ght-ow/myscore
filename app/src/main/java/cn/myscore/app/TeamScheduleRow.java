@@ -26,10 +26,9 @@ final class TeamScheduleRow {
         String date=m.day()==null?"日期待定":Formats.date(m.day(),m.day().getYear()==Match.today(System.currentTimeMillis()).getYear()?Formats.MONTH_DAY_WEEK:Formats.YEAR_MONTH_DAY_WEEK,"日期待定");
         String time=m.timeConfirmed?m.time():"待定";
         Competition competition=Competition.find(m.league);
-        String detail=m.detail.isBlank()?competition==null?m.group:competition.name:m.detail;
+        String detail=NationalTeams.LEAGUE.equals(m.league)?MatchLabel.of(m):m.detail.isBlank()?competition==null?m.group:competition.name:m.detail;
         String state=m.live()&&!m.status.isBlank()?m.status:Rules.stateLabel(m.state);
-        // 5EPlay's team feed and esports series have no home venue; do not label them 主/客场.
-        String side=m.group.equals("CS2")||m.group.equals("LOL")?"":home?"主场":"客场";
+        String side=m.group.equals("CS2")||NationalTeams.LEAGUE.equals(m.league)?"":home?"主场":"客场";
         String score="",result="";
         if(m.hasScore()) {
             String own=m.displayScore(home),other=m.displayScore(!home);

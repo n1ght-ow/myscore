@@ -17,7 +17,8 @@ public class SpiritVodsTest {
 
     private List<BilibiliVods.Episode> recordings() throws Exception {
         try (var stream = getClass().getResourceAsStream("/watch/spirit.json")) {
-            return BilibiliVods.parse(new JSONObject(new String(stream.readAllBytes(), StandardCharsets.UTF_8)));
+            return BilibiliVods.parse(new JSONObject(new String(stream.readAllBytes(), StandardCharsets.UTF_8)),
+                BilibiliVods.Source.CS2);
         }
     }
 
@@ -100,15 +101,13 @@ public class SpiritVodsTest {
         assertEquals(WatchLinks.Kind.REPLAY, replay.kind);
         assertTrue(replay.note.contains("Spirit vs NAVI"));
         assertTrue(replay.note.contains("10月29日"));
-        assertFalse(replay.note.contains("全球总决赛"));
-        assertNotEquals(BilibiliVods.Source.WORLDS.cache, BilibiliVods.Source.CS2.cache);
+        assertNotEquals(BilibiliVods.Source.CS2.cache, BilibiliVods.Source.CITY_HIGHLIGHTS.cache);
         assertTrue(BilibiliVods.Source.CS2.api(2).endsWith("&pn=2"));
-        assertEquals(BilibiliVods.API, BilibiliVods.Source.WORLDS.api(1));
     }
 
     @Test public void parserDropsShortVideosFromAccountIndex() throws Exception {
         JSONObject root = new JSONObject().put("data", new JSONObject().put("archives", new JSONArray()
             .put(new JSONObject().put("bvid", "BVshort").put("title", "【PGL】Spirit vs NAVI 10月29日").put("duration", 120))));
-        assertTrue(BilibiliVods.parse(root).isEmpty());
+        assertTrue(BilibiliVods.parse(root, BilibiliVods.Source.CS2).isEmpty());
     }
 }

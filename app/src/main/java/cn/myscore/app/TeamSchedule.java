@@ -16,7 +16,7 @@ import java.util.concurrent.Future;
 /**
  * A team's own schedule from the same public feeds as the score list. No extra service is
  * contracted for team pages: ESPN exposes a per-team season schedule, 5EPlay a normalized team
- * feed, and the Worlds list is filtered by the source team id.
+ * feed.
  */
 final class TeamSchedule {
     private static final ExecutorService WORKERS=Executors.newFixedThreadPool(4,r->{
@@ -37,7 +37,6 @@ final class TeamSchedule {
         if(c.id.equals("f1"))throw new Exception("F1 没有球队赛程");
         Result result=new Result();
         if(c.id.equals("cs2")) {result.source="5EPlay · 战队赛程 + 一线赛程";result.matches.addAll(five(team,now));}
-        else if(c.id.equals("lol")) {result.source="英雄联盟赛事官网 · Worlds";result.matches.addAll(worlds(team,now));}
         else {result.source="ESPN · 球队赛程";result.matches.addAll(espn(team,c,now));}
         result.fetched=System.currentTimeMillis();
         result.matches.sort(Comparator.comparingLong((Match m)->m.start==0?Long.MAX_VALUE:m.start).thenComparing(m->m.id));
@@ -46,25 +45,35 @@ final class TeamSchedule {
 
     private static List<Match> espn(Team team,Competition c,long now)throws Exception {
         if(!team.id.matches("[0-9]+"))throw new Exception("球队标识无效");
-        String base="https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/teams/"+team.id+"/schedule";
+        String base=espnScheduleUrl(c.path,team.id);
         if(!c.group.equals("足球")) {
             JSONObject results=new JSONObject(Repository.get(base));
             verifyTeam(results,team);
             return parseEspn(team,results,null,now);
         }
         // ESPN's soccer team page splits completed results and remaining fixtures into two calls.
-        Future<JSONObject> resultsTask=WORKERS.submit(()->new JSONObject(Repository.get(base)));
-        Future<JSONObject> fixturesTask=WORKERS.submit(()->new JSONObject(Repository.get(base+"?fixture=true")));
-        try {
-            JSONObject results=awaitJson(resultsTask);
-            JSONObject fixtures=awaitJson(fixturesTask);
-            verifyTeam(results,team);
-            verifyTeam(fixtures,team);
-            return parseEspn(team,results,fixtures,now);
-        } finally {
-            if(!resultsTask.isDone())resultsTask.cancel(true);
-            if(!fixturesTask.isDone())fixturesTask.cancel(true);
+        List<String> urls=new ArrayList<>(List.of(base,base+"?fixture=true"));
+        if(NationalTeams.follows(team)) {
+            String nations=espnScheduleUrl(NationalTeams.NATIONS_PATH,team.id);
+            urls.add(nations);urls.add(nations+"?fixture=true");
         }
+        List<Future<JSONObject>> tasks=new ArrayList<>();
+        try {
+            for(String url:urls)tasks.add(WORKERS.submit(()->new JSONObject(Repository.get(url))));
+            List<JSONObject> pages=new ArrayList<>();
+            for(Future<JSONObject> task:tasks) {
+                JSONObject page=awaitJson(task);
+                verifyTeam(page,team);
+                if(page.optJSONArray("events")==null)throw new Exception("来源未返回赛事列表");
+                pages.add(page);
+            }
+            return parseEspn(team,now,pages.toArray(new JSONObject[0]));
+        } finally {
+            for(Future<JSONObject> task:tasks)if(!task.isDone())task.cancel(true);
+        }
+    }
+    private static String espnScheduleUrl(String path,String id) {
+        return "https://site.api.espn.com/apis/site/v2/sports/"+path+"/teams/"+id+"/schedule";
     }
     private static JSONObject awaitJson(Future<JSONObject> task)throws Exception {
         try{return task.get();}
@@ -79,15 +88,18 @@ final class TeamSchedule {
         if(source!=null&&!source.optString("id").isEmpty()&&!source.optString("id").equals(team.id))throw new Exception("来源返回了其他球队的赛程");
     }
     static List<Match> parseEspn(Team team,JSONObject results,JSONObject fixtures,long now)throws Exception {
+        return parseEspn(team,now,results,fixtures);
+    }
+    static List<Match> parseEspn(Team team,long now,JSONObject... pages)throws Exception {
         Map<String,Match> unique=new LinkedHashMap<>();
-        List<JSONObject> pages=new ArrayList<>();
-        pages.add(results);
-        if(fixtures!=null)pages.add(fixtures);
+        Competition competition=Competition.find(team.league);
+        boolean national=NationalTeams.LEAGUE.equals(team.league);
         for(JSONObject page:pages) {
             if(page==null)continue;
-            for(Match m:Parsers.espn(page,Competition.find(team.league),now)) {
+            for(Match m:Parsers.espn(page,competition,now)) {
                 if(!team.id.equals(m.homeId)&&!team.id.equals(m.awayId))continue;
                 Match old=unique.get(m.id);
+                if(national&&old!=null&&RefreshPolicy.terminal(old)&&!RefreshPolicy.terminal(m))continue;
                 if(old==null||m.updated>=old.updated)unique.put(m.id,m);
             }
         }
@@ -173,15 +185,4 @@ final class TeamSchedule {
         return value==null?new JSONObject():value;
     }
 
-    private static List<Match> worlds(Team team,long now)throws Exception {
-        List<Match> matches=parseWorlds(team,new JSONObject(Repository.get(DomesticEsports.LOL)),now);
-        try{DetailSources.enrichWorlds(matches);}
-        catch(Exception e){android.util.Log.i("MyScore","Worlds crests temporarily unavailable");}
-        return matches;
-    }
-    static List<Match> parseWorlds(Team team,JSONObject root,long now)throws Exception {
-        List<Match> matches=new ArrayList<>();
-        for(Match m:DomesticEsports.worlds(root,now))if(team.id.equals(m.homeId)||team.id.equals(m.awayId))matches.add(m);
-        return matches;
-    }
 }

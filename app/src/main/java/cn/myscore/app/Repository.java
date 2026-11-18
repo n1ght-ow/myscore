@@ -167,7 +167,7 @@ public final class Repository {
             b.error="";
             List<Match> matches;
             if(c.id.equals("cs2")) matches=DomesticEsports.cs2(from,to,now);
-            else if(c.id.equals("lol")) {matches=DomesticEsports.worlds(new JSONObject(get(DomesticEsports.LOL)),now);try{DetailSources.enrichWorlds(matches);}catch(Exception e){android.util.Log.i("MyScore","Worlds crests temporarily unavailable");}}
+            else if(c.id.equals(NationalTeams.LEAGUE)) matches=national(b,force);
             else {
                 matches=espn(c,from,to,now,force,retry,b);
             }
@@ -199,6 +199,24 @@ public final class Repository {
         if(failures.size()>100){long now=System.currentTimeMillis();failures.entrySet().removeIf(entry->entry.getValue().until()<=now||entry.getValue().epoch!=currentEpoch);if(failures.size()>100)failures.clear();}
         Failure next=new Failure(count,System.currentTimeMillis()+RefreshPolicy.retry(RefreshPolicy.SCORES,count),currentEpoch,message);
         failures.put(key,next);return next;
+    }
+    private List<Match> national(Batch view,boolean force)throws Exception {
+        TeamRepository teams=new TeamRepository(context);
+        List<Future<Batch>> tasks=new ArrayList<>();
+        try {
+            for(NationalTeams.Entry entry:NationalTeams.FOLLOWED)tasks.add(SOURCE_DAYS.submit(()->{
+                TeamRepository.Result result=teams.fetch(entry.team(),force,false);
+                Batch team=new Batch(view.competition);
+                team.matches.addAll(result.matches);
+                if(!result.error.isEmpty())team.error=entry.name()+"："+result.error;
+                return team;
+            }));
+            List<Batch> schedules=new ArrayList<>();
+            for(Future<Batch> task:tasks)schedules.add(task.get());
+            return mergeDays(view,schedules);
+        } finally {
+            for(Future<Batch> task:tasks)if(!task.isDone())task.cancel(true);
+        }
     }
     private List<Match> espn(Competition c,LocalDate from,LocalDate to,long now,boolean force,boolean retry,Batch view) throws Exception {
         if(c.id.equals("f1")) {
@@ -306,6 +324,13 @@ public final class Repository {
         return new File(dir,prefix+c.id+"_"+from+"_"+to+".json");
     }
     private Batch load(Competition c,LocalDate from,LocalDate to) {return load(c,from,to,"view_");}
+    private static int cacheSchema(Competition competition) {
+        return switch(competition.id) {
+            case "cs2" -> CS2_CACHE_SCHEMA;
+            case NationalTeams.LEAGUE -> NationalTeams.SCHEDULE_SCHEMA;
+            default -> 0;
+        };
+    }
     private Batch load(Competition c,LocalDate from,LocalDate to,String prefix) {
         Batch b=new Batch(c);
         synchronized(CACHE_LOCK) {
@@ -315,9 +340,9 @@ public final class Repository {
                 b.fetched=root.optLong("fetched");b.error=root.optString("error");JSONArray a=root.optJSONArray("matches");
                 // The CS2 list changed from Spirit-only to tier-one + Spirit; old view caches must be
                 // ignored once so an empty Spirit day or a locked terminal match cannot hide tier-one.
-                boolean reset=c.id.equals("cs2")&&root.optInt("schema",0)<CS2_CACHE_SCHEMA;
+                boolean reset=root.optInt("schema",0)<cacheSchema(c);
                 if(reset){b.fetched=0;b.error="";}
-                if(a!=null&&!reset)for(int i=0;i<a.length();i++)if(a.optJSONObject(i)!=null)b.matches.add(Match.fromJson(a.optJSONObject(i)));
+                if(a!=null&&(!reset||NationalTeams.LEAGUE.equals(c.id)))for(int i=0;i<a.length();i++)if(a.optJSONObject(i)!=null)b.matches.add(Match.fromJson(a.optJSONObject(i)));
             } catch(Exception e) {android.util.Log.w("MyScore","Ignoring unreadable score cache");}
         }
         return b;
@@ -328,7 +353,7 @@ public final class Repository {
             AtomicFile file=new AtomicFile(cacheFile(b.competition,from,to,prefix));FileOutputStream out=null;
             try {
                 JSONArray a=new JSONArray();for(Match m:b.matches)a.put(m.json());
-                JSONObject root=new JSONObject().put("fetched",b.fetched).put("error",b.error).put("schema",b.competition.id.equals("cs2")?CS2_CACHE_SCHEMA:0).put("matches",a);
+                JSONObject root=new JSONObject().put("fetched",b.fetched).put("error",b.error).put("schema",cacheSchema(b.competition)).put("matches",a);
                 out=file.startWrite();out.write(root.toString().getBytes(StandardCharsets.UTF_8));file.finishWrite(out);
             } catch(Exception e) {if(out!=null)file.failWrite(out);android.util.Log.w("MyScore","Cannot persist score cache");}
             // Keep score cache bounded; no personal calendar data is stored here.

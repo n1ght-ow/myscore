@@ -12,10 +12,6 @@ public class WatchAppLinksTest {
         var douyu = WatchAppLinks.targets("https://www.douyu.com/6657").get(0);
         assertEquals("air.tv.douyu.android", douyu.packageName());
         assertEquals("douyuapp://room?liveType=0&rid=6657", douyu.url());
-        var huya = WatchAppLinks.targets("https://www.huya.com/149361").get(0);
-        assertEquals("com.duowan.kiwi", huya.packageName());
-        assertTrue(decode(huya.url()).contains("hyaction=live&uid=1690094984"));
-        assertTrue(WatchAppLinks.targets("https://www.huya.com/999").isEmpty());
     }
 
     @Test public void miguUsesMatchIdRatherThanContentIdForLiveAndReplay() throws Exception {

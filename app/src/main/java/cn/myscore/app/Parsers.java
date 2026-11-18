@@ -80,6 +80,19 @@ public final class Parsers {
                     m.home=DetailParsers.text(obj(home,"team"),"displayName","主队待定");
                     m.away=DetailParsers.text(obj(away,"team"),"displayName","客队待定");
                     m.homeId=DetailParsers.text(obj(home,"team"),"id");m.awayId=DetailParsers.text(obj(away,"team"),"id");
+                    if(c.id.equals(NationalTeams.LEAGUE)) {
+                        m.home=NationalTeams.name(m.homeId,m.home);m.away=NationalTeams.name(m.awayId,m.away);
+                        JSONObject league=obj(e,"league");
+                        m.event=switch(league.optString("slug")) {
+                            case "uefa.nations" -> "欧国联";
+                            case "fifa.world" -> "世界杯";
+                            case "fifa.worldq.uefa" -> "世预赛 · 欧洲区";
+                            case "uefa.euro" -> "欧洲杯";
+                            case "uefa.euroq" -> "欧洲杯预选赛";
+                            case "fifa.friendly" -> "国际友谊赛";
+                            default -> DetailParsers.text(league,"name");
+                        };
+                    }
                     m.homeLogo=logo(obj(home,"team"));m.awayLogo=logo(obj(away,"team"));
                     if(!m.scheduled()) { m.homeScore=value(home,"score"); m.awayScore=value(away,"score"); }
                     if(c.group.equals("足球")) {

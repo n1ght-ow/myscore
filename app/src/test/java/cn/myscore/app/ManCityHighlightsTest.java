@@ -51,7 +51,6 @@ public class ManCityHighlightsTest {
         assertEquals("观看本场集锦", highlight.title); assertEquals(WatchLinks.Kind.HIGHLIGHTS, highlight.kind);
         assertEquals("集锦", highlight.kind.label); assertFalse(highlight.title.contains("全场"));
         assertNotEquals(BilibiliVods.Source.CS2.cache, BilibiliVods.Source.CITY_HIGHLIGHTS.cache);
-        assertNotEquals(BilibiliVods.Source.WORLDS.cache, BilibiliVods.Source.CITY_HIGHLIGHTS.cache);
     }
     @Test public void rejectsWomenYouthPreviewWrongResultOldAndFutureVideos() {
         Match m = match("fa", "Chelsea", "2026-05-16T23:00:00+08:00", "1", "0");
@@ -75,6 +74,6 @@ public class ManCityHighlightsTest {
         JSONObject root = new JSONObject().put("data", new JSONObject().put("archives", new org.json.JSONArray()
             .put(new JSONObject().put("bvid", "BVshort").put("title", "【比赛集锦】曼城1-0切尔西").put("duration", 120))));
         assertEquals(1, BilibiliVods.parse(root, BilibiliVods.Source.CITY_HIGHLIGHTS).size());
-        assertTrue(BilibiliVods.parse(root).isEmpty());
+        assertTrue(BilibiliVods.parse(root, BilibiliVods.Source.CS2).isEmpty());
     }
 }

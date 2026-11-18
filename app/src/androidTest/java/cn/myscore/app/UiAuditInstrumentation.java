@@ -46,7 +46,7 @@ public final class UiAuditInstrumentation extends Instrumentation {
         for(MatchDetail detail:samples.values()){
             Activity page=open(DetailActivity.class,new Intent(main,DetailActivity.class).putExtra("match",detail.match.json().toString()));
             runOnMainSync(()->{set(page,"active",false);((Handler)get(page,"handler")).removeCallbacksAndMessages(null);set(page,"match",detail.match);set(page,"detail",detail);});
-            List<String> tabs=detail.match.group.equals("CS2")?List.of("overview","lineup","events"):detail.match.group.equals("LOL")||detail.match.group.equals("F1")?List.of("overview","lineup","stats"):List.of("overview","lineup","stats","events");
+            List<String> tabs=detail.match.group.equals("CS2")?List.of("overview","lineup","events"):detail.match.group.equals("F1")?List.of("overview","lineup","stats"):List.of("overview","lineup","stats","events");
             for(String tab:tabs){runOnMainSync(()->{set(page,"tab",tab);set(page,"rendered","");call(page,"render",new Class<?>[]{boolean.class},false);});settle();review(page);capture(page.getWindow(),detail.match.group+"-"+tab);
                 if(tab.equals("lineup")&&detail.match.group.equals("足球")){View player=page.getWindow().getDecorView().findViewWithTag("football-pitch-player");if(player!=null)sheet(page,"足球-player",player::performClick);}
                 if(tab.equals("lineup")){View table=page.getWindow().getDecorView().findViewWithTag("detail-data-table");if(table instanceof ViewGroup g&&g.getChildAt(0) instanceof ViewGroup names&&names.getChildCount()>2){View person=names.getChildAt(2);sheet(page,detail.match.group+"-player",person::performClick);}}
@@ -59,15 +59,16 @@ public final class UiAuditInstrumentation extends Instrumentation {
         report.putString("stream","\nPASS: "+checks+" native UI audit checks; "+evidence.size()+" captured routes.\n"+String.join("\n",evidence)+"\n");
     }catch(Throwable e){outcome=Activity.RESULT_CANCELED;report.putString("stream","\nFAIL after "+checks+": "+android.util.Log.getStackTraceString(e)+"\nCaptured: "+evidence+"\n");}finish(outcome,report);}
     private Map<String,MatchDetail> samples()throws Exception{
-        Map<String,MatchDetail> best=new LinkedHashMap<>();File[] files=new File(getTargetContext().getCacheDir(),"details-v4").listFiles();if(files!=null)for(File file:files){if(!file.getName().endsWith(".json"))continue;try{MatchDetail raw=MatchDetail.fromJson(new JSONObject(new String(java.nio.file.Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8)));MatchDetail detail=new DetailRepository(getTargetContext()).cached(raw.match);if(detail==null)continue;MatchDetail previous=best.get(detail.match.group);if(previous==null||quality(detail)>quality(previous))best.put(detail.match.group,detail);}catch(Exception ignored){}}
+        Map<String,MatchDetail> best=new LinkedHashMap<>();File[] files=new File(getTargetContext().getCacheDir(),"details-v4").listFiles();if(files!=null)for(File file:files){if(!file.getName().endsWith(".json"))continue;try{MatchDetail raw=MatchDetail.fromJson(new JSONObject(new String(java.nio.file.Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8)));Competition competition=Competition.find(raw.match.league);if(competition==null||"LOL".equals(raw.match.group)||!competition.group.equals(raw.match.group)){android.util.Log.i("MyScoreUiAudit","Skipping obsolete detail cache "+file.getName());continue;}MatchDetail detail=new DetailRepository(getTargetContext()).cached(raw.match);if(detail==null)continue;MatchDetail previous=best.get(detail.match.group);if(previous==null||quality(detail)>quality(previous))best.put(detail.match.group,detail);}catch(Exception ignored){}}
         if(!best.containsKey("F1")){
             java.time.LocalDate raceDay=Match.today(System.currentTimeMillis()).minusDays(4);
             Repository.Snapshot race=new Repository(getTargetContext()).fetch(raceDay,raceDay,"F1",false);
             for(Match m:race.matches())if(m.group.equals("F1")){try{best.put("F1",new DetailRepository(getTargetContext()).fetch(m,false));break;}catch(Exception ignored){}}
         }
-        require(best.keySet().containsAll(List.of("足球","NBA","NFL","CS2","LOL")),"real caches cover the five populated sports");return best;
+        require(!best.containsKey("LOL"),"obsolete LOL cache is never opened");
+        require(best.keySet().containsAll(List.of("足球","NBA","NFL","CS2")),"real caches cover the four populated sports");return best;
     }
-    private int quality(MatchDetail d){return d.tables.stream().mapToInt(t->t.rows.size()).sum()*10+d.events.size()+d.stats.size()+d.lolGames.size()*100;}
+    private int quality(MatchDetail d){return d.tables.stream().mapToInt(t->t.rows.size()).sum()*10+d.events.size()+d.stats.size();}
     private Activity open(Class<? extends Activity> type,Intent intent)throws Exception{
         ActivityMonitor monitor=addMonitor(type.getName(),null,false);
         if(type==MainActivity.class){try(android.os.ParcelFileDescriptor fd=getUiAutomation().executeShellCommand("am start -W -n cn.myscore.app/.MainActivity -f 0x10008000");java.io.FileInputStream in=new java.io.FileInputStream(fd.getFileDescriptor())){in.readAllBytes();}}

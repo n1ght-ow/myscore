@@ -21,7 +21,6 @@ final class SpaceReview {
         show(test,main,"five:cs2:csgo_mc_2399751","CS2","cs2","lineup","cs2-players");
         show(test,main,"five:cs2:csgo_mc_2399751","CS2","cs2","events","cs2-map");
         if(Ui.isPad(main)){
-            show(test,main,"qq:lol:13641","LOL","lol","stats","lol-statistics");
             show(test,main,"espn:nfl:401873012:401873012","NFL","nfl","lineup","nfl-players");
         }
     }
@@ -50,10 +49,6 @@ final class SpaceReview {
         }catch(Exception e){throw new AssertionError(e);}});
         test.waitForIdleSync();Thread.sleep(700);test.waitForIdleSync();
         test.runOnMainSync(()->invalidate(screen.getWindow().getDecorView()));test.waitForIdleSync();Thread.sleep(150);
-        if(group.equals("LOL")&&screen.getResources().getConfiguration().screenWidthDp>=1000){
-            View table=screen.getWindow().getDecorView().findViewWithTag("lol-stats-table");
-            if(table==null||SpaceUsageChecks.findAll(table,"lol-stats-player").size()!=10)throw new AssertionError("Real LOL match shows both five-player teams");
-        }
         capture(test,name);
         if(tab.equals("events")){
             test.runOnMainSync(()->{try{((ScrollView)get(screen,"scroll")).scrollTo(0,screen.getResources().getDisplayMetrics().heightPixels/3);}catch(Exception e){throw new AssertionError(e);}});

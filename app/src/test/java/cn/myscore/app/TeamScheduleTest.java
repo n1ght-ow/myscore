@@ -53,16 +53,6 @@ public class TeamScheduleTest {
         assertTrue(TeamSchedule.parseEspn(team("epl","359","Arsenal"),root,null,100).isEmpty());
     }
 
-    @Test public void worldsScheduleKeepsOnlyTheRequestedTeam()throws Exception{
-        JSONObject root=new JSONObject().put("status","0").put("lastUpTime","2026-10-25 10:00:00");
-        JSONArray list=new JSONArray();
-        list.put(new JSONObject().put("GameName","2026 全球总决赛").put("bMatchId","11").put("MatchDate","2026-10-20 20:00:00").put("MatchStatus","3").put("TeamA","t1").put("TeamB","gen").put("TeamShortNameA","T1").put("TeamShortNameB","GEN").put("ScoreA","3").put("ScoreB","1"));
-        list.put(new JSONObject().put("GameName","2026 全球总决赛").put("bMatchId","12").put("MatchDate","2026-10-21 20:00:00").put("MatchStatus","3").put("TeamA","blg").put("TeamB","tes").put("TeamShortNameA","BLG").put("TeamShortNameB","TES").put("ScoreA","3").put("ScoreB","2"));
-        root.put("msg",list);
-        List<Match> matches=TeamSchedule.parseWorlds(team("lol","gen","GEN"),root,100);
-        assertEquals(1,matches.size());assertEquals("qq:lol:11",matches.get(0).id);assertEquals("final",matches.get(0).state);
-    }
-
     private static JSONObject fiveRow(String matchId,String homeId,String awayId,String homeScore,String awayScore,String matchStatus,String ts)throws Exception{
         JSONObject mc=new JSONObject()
             .put("id",matchId).put("ts",ts).put("match_status",matchStatus).put("status",matchStatus.equals("2")?"past":"future")

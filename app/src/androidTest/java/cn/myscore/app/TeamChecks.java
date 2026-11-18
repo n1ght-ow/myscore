@@ -50,16 +50,6 @@ final class TeamChecks {
         check(!opponentSchedule.matches.isEmpty(),"a CS2 opponent's schedule returns matches");
         check(opponentSchedule.matches.stream().allMatch(m->opponent.id.equals(m.homeId)||opponent.id.equals(m.awayId)),"opponent schedule keeps the requested team identity");
 
-        java.time.LocalDate day=Match.today(System.currentTimeMillis());
-        List<Match> worlds=new Repository(c).fetch(day,day,"LOL",true).batches.stream().filter(b->b.competition.id.equals("lol")).findFirst().orElseThrow().matches;
-        check(!worlds.isEmpty(),"Worlds feed returns matches for a team page");
-        Match sample=worlds.stream().filter(m->!m.homeId.isBlank()).findFirst().orElseThrow();
-        Team lol=team("lol",sample.homeId,sample.home);
-        TeamRepository.Result lolSchedule=repository.fetch(lol,true);
-        check(lolSchedule.error.isEmpty(),"live Worlds team schedule loads: "+lolSchedule.error);
-        check(!lolSchedule.matches.isEmpty(),"Worlds team schedule returns the team's matches");
-        check(lolSchedule.matches.stream().allMatch(m->lol.id.equals(m.homeId)||lol.id.equals(m.awayId)),"Worlds team schedule contains only the requested team");
-
         context.getSharedPreferences("settings",0).edit().putString("theme","dark").commit();
         Activity dark=open(arsenal);
         waitForResult(dark,30_000);
@@ -116,13 +106,6 @@ final class TeamChecks {
         checkText(cs2Page,"Team Spirit");
         checkContains(cs2Page,"5EPlay");
         capture(cs2Page,"team-cs2-dark");
-        test.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);test.waitForIdleSync();
-
-        Activity lolPage=open(lol);
-        waitForResult(lolPage,30_000);
-        checkText(lolPage,lol.name);
-        checkContains(lolPage,"Worlds");
-        capture(lolPage,"team-lol-dark");
         test.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);test.waitForIdleSync();
 
         crestShortcut();

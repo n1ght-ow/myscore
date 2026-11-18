@@ -1,3 +1,11 @@
+# N1ghtScore 4.12.0 发布构建（2026-11-18）
+
+- 版本 4.12.0 / versionCode 60，包名 `cn.myscore.app`，沿用原发布签名，证书 SHA-256 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。`MyScore-4.12.0.apk` 共 1,225,523 字节，SHA-256 `0d56d8bb31a49ab96aea55695f0f5a7d938117b6e63aadf7830f9c0d8b658a1d`；校验附件 `SHA256SUMS-4.12.0.txt`。
+- 挪威、英格兰、西班牙男足的赛程按北京时间并入「足球」和「全部」，点队徽进入球队页，不设单独选择入口。移除 LOL 数据源及界面，覆盖安装时清理旧赛事缓存和应用内订阅关联，不改动系统日历已有事件。
+- 补漏回归：ESPN 跨赛事球队接口漏掉北京时间 11 月 18 日 03:45 的丹麦 2–3 挪威。合并欧国联球队接口并重新读取旧缓存后，用实际响应调用 `TeamSchedule.fetch`，确认该场（`401861194`）只出现一次。
+- 最终包：`testDebugUnitTest` 240 项通过，`lintDebug` 0 错误、26 警告，调试 APK 与专项测试 APK 均构建通过。前一版在手机和平板 AVD 各通过 38 项国家队检查；最终版未覆盖安装到正被其他会话占用的 Mobile Dev 模拟器，未做最终包视觉或真机验收。
+- 发布目标：`origin/main`、标签 `v4.12.0` 和 [GitHub Release](https://github.com/n1ght-ow/myscore/releases/tag/v4.12.0)。本地 APK 与校验文件存档于忽略目录 `artifacts/release-4.12.0/`。
+
 # N1ghtScore 4.11.0 发布构建（2026-11-13）
 
 - 版本 4.11.0 / versionCode 59，包名 `cn.myscore.app`。日历事件前缀 `MyScore:` 与更新包文件名 `MyScore-4.11.0.apk` 保持不变，签名证书 SHA-256 继续为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。

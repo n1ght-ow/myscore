@@ -222,7 +222,6 @@ final class Http {
         String h = host.toLowerCase(Locale.ROOT);
         return h.endsWith(".qq.com") || h.equals("qq.com")
             || h.endsWith(".gtimg.cn") || h.endsWith(".gtimg.com")
-            || h.endsWith(".tjstats.com")
             || h.endsWith(".5eplay.com") || h.equals("5eplay.com") || h.endsWith(".5eplaycdn.com")
             || h.endsWith(".bilibili.com") || h.equals("bilibili.com") || h.endsWith(".hdslb.com")
             || h.endsWith(".migu.cn") || h.endsWith(".miguvideo.com");
@@ -234,7 +233,7 @@ final class Http {
         if (h.endsWith("espn.com") || h.endsWith("espncdn.com")) return "espn";
         if (h.endsWith("github.com") || h.endsWith("githubusercontent.com")) return "github";
         if (h.endsWith("5eplay.com") || h.endsWith("5eplaycdn.com")) return "5eplay";
-        if (h.endsWith("qq.com") || h.endsWith("gtimg.cn") || h.endsWith("gtimg.com") || h.endsWith("tjstats.com")) return "qq";
+        if (h.endsWith("qq.com") || h.endsWith("gtimg.cn") || h.endsWith("gtimg.com")) return "qq";
         if (h.endsWith("bilibili.com") || h.endsWith("hdslb.com")) return "bili";
         if (h.endsWith("migu.cn") || h.endsWith("miguvideo.com")) return "migu";
         if (h.endsWith("premierleague.com")) return "fpl";

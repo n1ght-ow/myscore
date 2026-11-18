@@ -27,11 +27,12 @@ import java.util.concurrent.Executors;
 /**
  * Resolves the watch destination for a match without blocking the list or detail UI.
  *
- * <p>Static destinations (Douyu / Huya / Migu league zones) are always available immediately.
- * This repository upgrades them in the background: Bilibili full-series recordings for finished
- * Worlds, CS2 tier-one events and Spirit matches, and exact Migu match pages when both Chinese team names and kickoff time agree.
- * A finished CS2 match outside tier-one events and without Spirit keeps no entry rather than an unrelated live room.
- * Everything is cached and every network failure falls back to the previous safe destination.</p>
+ * <p>Static destinations (Douyu / Migu league zones) are always available immediately. This
+ * repository upgrades them in the background: Bilibili full-series recordings for finished CS2
+ * tier-one events and Spirit matches, Manchester City highlights, and exact Migu match pages when
+ * both Chinese team names and kickoff time agree. A finished CS2 match outside tier-one events and
+ * without Spirit keeps no entry rather than an unrelated live room. Everything is cached and every
+ * network failure falls back to the previous safe destination.</p>
  */
 final class WatchRepository {
     private static final String TAG = "MyScoreWatch";
@@ -173,14 +174,13 @@ final class WatchRepository {
             try {
                 Map<String, String> headers = new LinkedHashMap<>();
                 headers.put("Referer", source.space());
-                headers.put("User-Agent", source != BilibiliVods.Source.WORLDS ? "Mozilla/5.0" : UA);
+                headers.put("User-Agent", "Mozilla/5.0");
                 List<BilibiliVods.Episode> fetched = new ArrayList<>();
                 for (int page = 1; page <= 20; page++) {
-                    JSONObject root = new JSONObject(httpGet(source.api(page), headers, source != BilibiliVods.Source.WORLDS));
+                    JSONObject root = new JSONObject(httpGet(source.api(page), headers, true));
                     if (root.optInt("code", -1) != 0) throw new IOException("Bilibili code " + root.optInt("code"));
                     fetched.addAll(BilibiliVods.parse(root, source));
                     if (!fetched.isEmpty()) episodes = fetched;
-                    if (source == BilibiliVods.Source.WORLDS) break;
                     JSONObject data = root.optJSONObject("data");
                     JSONObject pagination = data == null ? null : data.optJSONObject("page");
                     if (pagination == null || pagination.optInt("num") != page || pagination.optInt("size") <= 0)

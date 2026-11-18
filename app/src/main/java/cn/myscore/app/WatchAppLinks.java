@@ -20,12 +20,6 @@ final class WatchAppLinks {
                 return List.of(new Target("air.tv.douyu.android",
                     "douyuapp://room?liveType=0&rid=" + path.substring(1)));
             }
-            if ("www.huya.com".equals(host) && "/149361".equals(path)) {
-                // The configured room's presenter UID, confirmed by Huya's public room data.
-                return List.of(new Target("com.duowan.kiwi",
-                    "yykiwi://homepage/index.html?banneraction=" + encode(
-                        "https://diy-front.cdn.huya.com/zt/frontpage/cc/update.html?hyaction=live&uid=1690094984")));
-            }
             if ("www.miguvideo.com".equals(host)) {
                 String action;
                 if (path.matches("/p/live/[0-9]+")) {

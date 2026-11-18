@@ -27,8 +27,9 @@ public final class DetailParsers {
         Competition c=Competition.find(previous.league);if(c==null)throw new Exception("未知赛事");
         JSONObject header=obj(root,"header");List<Match> ms=Parsers.espn(new JSONObject().put("events",new JSONArray().put(header)),c,now);Match actual=null;
         for(Match m:ms)if(m.id.equals(previous.id))actual=m;if(actual==null)throw new Exception("比赛详情身份不匹配");
+        if(actual.event.isBlank())actual.event=previous.event;
         MatchDetail d=new MatchDetail(actual);d.fetched=now;
-        JSONObject gi=obj(root,"gameInfo");d.fact("场地",obj(gi,"venue").optString("fullName"));d.fact("观众",val(gi,"attendance"));d.fact("赛事",c.name);
+        JSONObject gi=obj(root,"gameInfo");d.fact("场地",obj(gi,"venue").optString("fullName"));d.fact("观众",val(gi,"attendance"));d.fact("赛事",MatchLabel.of(actual));
         JSONArray officials=arr(gi,"officials");for(int i=0;i<officials.length();i++){JSONObject o=officials.optJSONObject(i);if(o!=null){String role=val(o,"position");d.fact(role.isBlank()?"裁判":label(role),val(o,"displayName").isBlank()?val(o,"fullName"):val(o,"displayName"));}}
         JSONArray comp=arr(header,"competitions");JSONObject co=comp.optJSONObject(0);if(co!=null){JSONArray notes=arr(co,"notes");for(int i=0;i<notes.length();i++)d.fact("说明",objAt(notes,i).optString("headline"));lineScores(d,co);}
         teamStats(d,arr(obj(root,"boxscore"),"teams"));
@@ -92,36 +93,6 @@ public final class DetailParsers {
         for(int i=0;i<2;i++){MatchDetail.Table t=new MatchDetail.Table("lineup",(i==0?home:away)+" · "+map,"选手","K","D","A","ADR","KAST","Rating");t.teamId=i==0?d.match.homeId:d.match.awayId;t.category=map;JSONArray a=arr(source,i==0?hk:ak);for(int j=0;j<a.length();j++){JSONObject p=objAt(a,j);if(p.optString("name").isBlank())continue;String name=p.optString("name"),team=i==0?home:away;t.row(name,show(val(p,"kill")),show(val(p,"death")),show(val(p,"assist")),DetailFormat.number(show(val(p,"adr")),2),DetailFormat.number(show(val(p,"kast")),1),DetailFormat.number(show(val(p,"rating")),2));t.people.add(new MatchDetail.Person(p.optString("id"),name,name,DetailSources.https(p.optString("avatar")),"","",t.teamId,team,"",false,false));}d.table(t);}
     }
     static JSONObject objAt(JSONArray a,int i){JSONObject o=a.optJSONObject(i);return o==null?new JSONObject():o;}
-    public static MatchDetail lol(JSONObject base,JSONObject rich,Match previous,long now)throws Exception {
-        if(!previous.id.equals("qq:lol:"+base.optString("bMatchId")))throw new Exception("LOL 比赛身份不匹配");
-        String tournament=base.optString("GameName");if(!tournament.contains("全球总决赛")&&!Rules.isWorlds(tournament,""))throw new Exception("该比赛不是 Worlds");
-        Match m=Match.fromJson(previous.json());m.homeId=base.optString("TeamA");m.awayId=base.optString("TeamB");m.home=base.optString("TeamNameA",m.home);m.away=base.optString("TeamNameB",m.away);
-        m.state=switch(base.optString("MatchStatus")){case "1"->"scheduled";case "2"->"live";case "3"->"final";default->"unknown";};m.status=Rules.stateLabel(m.state);m.homeScore=m.scheduled()?"":val(base,"ScoreA");m.awayScore=m.scheduled()?"":val(base,"ScoreB");
-        try{m.updated=java.time.LocalDateTime.parse(base.optString("lastUpdateTime"),Formats.SOURCE_TIMESTAMP).atZone(Match.ZONE).toInstant().toEpochMilli();}catch(RuntimeException ignored){}
-        try{m.start=java.time.LocalDateTime.parse(base.optString("MatchTime"),Formats.SOURCE_TIMESTAMP).atZone(Match.ZONE).toInstant().toEpochMilli();m.timeConfirmed=true;}catch(RuntimeException ignored){}
-        JSONArray icons=arr(base,"TeamIcon");for(int i=0;i<icons.length();i++){JSONObject icon=objAt(icons,i);if(icon.optString("TeamId").equals(m.homeId))m.homeLogo=DetailSources.https(icon.optString("TeamIcon"));if(icon.optString("TeamId").equals(m.awayId))m.awayLogo=DetailSources.https(icon.optString("TeamIcon"));}
-        m.url="https://lpl.qq.com/es/stats.shtml?bmid="+base.optString("bMatchId");m.detail=tournament+" · "+base.optString("GameModeName")+" · "+base.optString("GameTypeName");MatchDetail d=new MatchDetail(m);d.fetched=now;d.fact("赛事",tournament);d.fact("赛制",base.optString("GameModeName"));d.fact("阶段",base.optString("GameTypeName"));d.fact("轮次",base.optString("GameProcName"));
-        JSONObject data=obj(rich,"data");if(rich.optBoolean("success")){
-            if(!data.optString("matchId").equals(base.optString("bMatchId"))||!data.optString("teamAId").equals(m.homeId)||!data.optString("teamBId").equals(m.awayId))throw new Exception("LOL 小局身份或战队方向不匹配");
-            if(data.optString("matchStatus").equals("1")||data.optString("matchStatus").equals("2")){
-                m.state=data.optString("matchStatus").equals("1")?"live":"final";m.status=Rules.stateLabel(m.state);
-                m.homeScore=val(data,"teamAScore");m.awayScore=val(data,"teamBScore");
-            }
-            d.source="英雄联盟赛事官网 · 腾竞数据";JSONArray games=arr(data,"matchInfos");MatchDetail.Table summary=new MatchDetail.Table("overview","已结束小局","局次","胜方","时长");
-            Set<Integer> gameNumbers=new HashSet<>();for(int i=0;i<games.length();i++){LolGame game=LolGame.parse(objAt(games,i),m);if(game!=null){if(!gameNumbers.add(game.number))throw new Exception("小局编号重复");d.lolGames.add(game);}}
-            d.lolGames.sort(Comparator.comparingInt(game->game.number));
-            if(!d.lolGames.isEmpty())d.lolFetched=now;
-            for(int i=0;i<games.length();i++){JSONObject game=objAt(games,i);if(!game.optString("matchStatus").equals("2"))continue;String win=game.optString("matchWin");if(!win.equals(m.homeId)&&!win.equals(m.awayId))continue;String gameName="第 "+game.optString("bo",String.valueOf(i+1))+" 局";long start=Match.parseTime(game.optString("matchStartTime")),end=Match.parseTime(game.optString("matchEndTime"));String duration=end>start&&start>0?((end-start)/60000)+":"+String.format(Locale.ROOT,"%02d",(end-start)/1000%60):"—";summary.row(gameName,win.equals(m.homeId)?m.home:m.away,duration);d.events.add(new MatchDetail.Event(gameName,win.equals(m.homeId)?m.home+" 获胜":m.away+" 获胜","用时 "+duration));
-                MatchDetail.Table totals=new MatchDetail.Table("stats",gameName+" · 团队数据","球队","击杀","经济","推塔","小龙","大龙","巢虫");JSONArray teams=arr(game,"teamInfos");
-                for(int j=0;j<teams.length();j++){JSONObject team=objAt(teams,j);String tid=team.optString("teamId");if(!tid.equals(m.homeId)&&!tid.equals(m.awayId))continue;String name=tid.equals(m.homeId)?m.home:m.away;totals.row(name,show(val(team,"kills")),show(val(team,"golds")),show(val(team,"turretAmount")),show(val(team,"dragonAmount")),show(val(team,"baronAmount")),show(val(team,"voidGrubAmount")));
-                    MatchDetail.Table players=new MatchDetail.Table("lineup",gameName+" · "+name+(game.optString("blueTeam").equals(tid)?" · 蓝方":" · 红方"),"选手","位置","英雄","K / D / A","补刀","伤害","经济");
-                    MatchDetail.Table gear=new MatchDetail.Table("stats",gameName+" · "+name+" 出装","选手","装备");JSONArray ps=arr(team,"playerInfos");for(int k=0;k<ps.length();k++){JSONObject p=objAt(ps,k);if(p.optString("playerName").isBlank())continue;JSONObject battle=obj(p,"battleDetail");players.row(p.optString("playerName"),role(p.optString("playerLocation")),p.optString("heroName",p.optString("heroNameEn")),show(val(battle,"kills"))+" / "+show(val(battle,"death"))+" / "+show(val(battle,"assist")),show(val(p,"minionKilled")),show(val(obj(p,"damageDetail"),"heroDamage")),show(val(obj(p,"otherDetail"),"golds")));JSONArray items=arr(p,"items");List<String> names=new ArrayList<>();for(int it=0;it<items.length();it++){String item=objAt(items,it).optString("itemName");if(!item.isBlank())names.add(item);}if(!names.isEmpty())gear.row(p.optString("playerName"),String.join("、",names));}d.table(players);d.table(gear);
-                }d.table(totals);
-            }d.table(summary);
-        }
-        return d;
-    }
-    private static String role(String r){return switch(r){case "TOP"->"上单";case "JUN","JUNGLE"->"打野";case "MID"->"中单";case "ADC","BOT"->"下路";case "SUP","SUPPORT"->"辅助";default->r;};}
     public static MatchDetail f1(JSONObject event,JSONObject session,JSONObject core,Map<String,JSONObject> statistics,Match previous,long now)throws Exception {
         List<Match> all=Parsers.espn(new JSONObject().put("events",new JSONArray().put(event)),Competition.find("f1"),now);Match actual=null;for(Match m:all)if(m.id.equals(previous.id))actual=m;if(actual==null||!core.optString("id").equals(session.optString("id")))throw new Exception("F1 场次身份不匹配");
         MatchDetail d=new MatchDetail(actual);d.fetched=now;d.fact("大奖赛",event.optString("name"));d.fact("场次",obj(session,"type").optString("abbreviation"));d.fact("赛道",obj(core,"venue").optString("fullName"));

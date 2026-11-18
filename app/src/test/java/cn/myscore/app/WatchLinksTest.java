@@ -14,7 +14,6 @@ public class WatchLinksTest {
         assertEquals("咪咕视频",nba.provider);
         assertEquals("https://www.miguvideo.com/p/home/3cd6ba04967742879aaa40bee02a99a6",nba.url);
         assertEquals("https://www.douyu.com/6657",WatchLinks.of(match("cs2")).url);
-        assertEquals("https://www.huya.com/149361",WatchLinks.of(match("lol")).url);
     }
 
     @Test public void cupsAndUnconfiguredSportsHaveNoEntry(){
@@ -25,7 +24,6 @@ public class WatchLinksTest {
     @Test public void shortLabelsFitDenseCardsAndLongTitlesExplainDestination(){
         assertEquals("咪咕",WatchLinks.of(match("epl")).shortProvider);
         assertEquals("斗鱼",WatchLinks.of(match("cs2")).shortProvider);
-        assertEquals("虎牙",WatchLinks.of(match("lol")).shortProvider);
         assertTrue(WatchLinks.of(match("nba")).title.contains("NBA"));
         assertTrue(WatchLinks.of(match("epl")).title.contains("英超"));
     }
@@ -36,17 +34,17 @@ public class WatchLinksTest {
         assertTrue(live.title.contains("本场直播"));
         assertTrue(live.note.contains("骑士 vs 森林狼"));
         assertTrue(WatchLinks.miguMatch("120000584185","epl","曼联","阿斯顿维拉",true).title.contains("本场回放"));
-        Match m=match("lol");m.start=Match.parseTime("2026-10-27T01:00:00+08:00");
+        Match m=match("cs2");m.home="Spirit";m.homeId="csgo_tm_7020";m.away="NAVI";m.state="final";
+        m.start=Match.parseTime("2026-10-27T01:00:00+08:00");
         WatchLinks.Link video=WatchLinks.biliVideo("BV1uUnf6TEch",m);
         assertEquals("https://www.bilibili.com/video/BV1uUnf6TEch",video.url);
         assertEquals("B站",video.shortProvider);
+        assertTrue(video.note.contains("CS2"));
         assertTrue(video.note.contains("10月27日"));
-        assertEquals(BilibiliVods.SPACE,WatchLinks.biliPending().url);
     }
 
     @Test public void compactControlsDistinguishFallbacksFromPlayableMatches(){
         assertEquals(WatchLinks.Kind.ZONE,WatchLinks.of(match("nba")).kind);
-        assertEquals(WatchLinks.Kind.ROOM,WatchLinks.of(match("lol")).kind);
         assertEquals(WatchLinks.Kind.ZONE,WatchLinks.miguMatch("","nba","骑士","森林狼",true).kind);
         assertEquals(WatchLinks.Kind.LIVE,WatchLinks.miguMatch("123","nba","骑士","森林狼",false).kind);
         assertEquals(WatchLinks.Kind.REPLAY,WatchLinks.miguMatch("123","nba","骑士","森林狼",true).kind);
@@ -58,15 +56,13 @@ public class WatchLinksTest {
         Match scheduled=match("cs2");scheduled.state="scheduled";assertEquals("https://www.douyu.com/6657",WatchLinks.of(scheduled).url);
     }
 
-    @Test public void pendingRecordingUsesTheRightSeries(){
-        Match lol=match("lol");lol.state="final";assertEquals(BilibiliVods.SPACE,WatchLinks.biliPending(lol).url);
+    @Test public void finishedUnverifiedCs2MatchesHaveNoPendingRecording(){
         Match cs2=match("cs2");cs2.state="final";assertNull(WatchLinks.biliPending(cs2));
     }
 
-    @Test public void unpublishedRecordingsUseWaitingStateInsteadOfPlay(){
-        assertEquals(WatchLinks.Kind.PENDING,WatchLinks.biliPending().kind);
-        assertEquals("clock",WatchLinks.biliPending().kind.icon);
-        assertEquals(WatchLinks.Kind.REPLAY,WatchLinks.biliVideo("BV123",match("lol")).kind);
-        assertEquals("play",WatchLinks.biliVideo("BV123",match("lol")).kind.icon);
+    @Test public void publishedRecordingsUseReplayPlaybackState(){
+        Match cs2=match("cs2");cs2.home="Spirit";cs2.homeId="csgo_tm_7020";cs2.away="NAVI";cs2.state="final";
+        assertEquals(WatchLinks.Kind.REPLAY,WatchLinks.biliVideo("BV123",cs2).kind);
+        assertEquals("play",WatchLinks.biliVideo("BV123",cs2).kind.icon);
     }
 }

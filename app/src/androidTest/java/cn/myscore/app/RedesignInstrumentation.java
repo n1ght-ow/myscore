@@ -30,23 +30,22 @@ public final class RedesignInstrumentation extends Instrumentation {
                 open(UpdateActivity.class,null,null);capture(theme+"-update");
                 Team team=new Team();team.id="359";team.league="epl";team.name="Arsenal";
                 open(TeamActivity.class,"team",team.json().toString());capture(theme+"-team");
-                String[][] targets={{"epl","401879256"},{"nba","401909848"},{"nfl","401872996"},{"f1","600057427:401839031"},{"cs2","csgo_mc_2398756"},{"lol","13608"}};
+                String[][] targets={{"epl","401879256"},{"nba","401909848"},{"nfl","401872996"},{"f1","600057427:401839031"},{"cs2","csgo_mc_2398756"}};
                 for(String[] target:targets){
                     Competition comp=Competition.find(target[0]);Match requested=new Match();requested.league=comp.id;requested.group=comp.group;
-                    requested.id=comp.esports()?(comp.id.equals("cs2")?"five:cs2:":"qq:lol:")+target[1]:"espn:"+comp.id+":"+(comp.id.equals("f1")?target[1]:target[1]+":"+target[1]);
+                    requested.id=comp.esports()?"five:cs2:"+target[1]:"espn:"+comp.id+":"+(comp.id.equals("f1")?target[1]:target[1]+":"+target[1]);
                     MatchDetail cached=new DetailRepository(context).cached(requested);require(cached!=null,"real cached match "+target[0]);
                     open(DetailActivity.class,"match",cached.match.json().toString());
                     long until=android.os.SystemClock.uptimeMillis()+5000;
                     while(field("detail")==null&&android.os.SystemClock.uptimeMillis()<until){Thread.sleep(60);waitForIdleSync();}
                     capture(theme+"-"+target[0]+"-overview");
                     require(((ScrollView)field("scroll")).getHeight()>=new Ui(context,theme.equals("dark")).dp(80),"detail keeps a usable scrolling viewport");
-                    String lineup=switch(comp.group){case "足球"->"阵容";case "LOL"->"比赛";case "F1"->"车手";case "CS2"->"选手";default->"球员";};
+                    String lineup=switch(comp.group){case "足球"->"阵容";case "F1"->"车手";case "CS2"->"选手";default->"球员";};
                     click(lineup);capture(theme+"-"+target[0]+"-lineup");
                     if(comp.group.equals("F1"))require(find(activity.getWindow().getDecorView(),"名次")==null,"F1 entrants do not repeat race results");
                     if(comp.group.equals("CS2"))require(find(activity.getWindow().getDecorView(),"统计")==null,"CS2 empty statistics tab removed");
                     if(comp.group.equals("足球")){require(activity.getWindow().getDecorView().findViewWithTag("football-pitch")!=null,"real starting formation is rendered");runOnMainSync(()->{try{((ScrollView)field("scroll")).scrollTo(0,new Ui(activity,theme.equals("dark")).dp(240));}catch(Exception e){throw new AssertionError(e);}});capture(theme+"-football-pitch");}
-                    if(comp.group.equals("LOL")&&getTargetContext().getResources().getConfiguration().fontScale<1.5f){runOnMainSync(()->{for(String tag:new String[]{"lol-economy-home","lol-economy-away"}){TextView value=activity.getWindow().getDecorView().findViewWithTag(tag);require(value!=null&&value.getLineCount()==1,"LoL economy stays on one line");}});}
-                    if(!compact){click(comp.group.equals("CS2")?"小局":comp.group.equals("F1")?"成绩":"统计");capture(theme+"-"+target[0]+"-stats");if(comp.group.equals("LOL"))require(find(activity.getWindow().getDecorView(),"击杀")==null,"LoL statistics omit duplicate game scoreboard");}
+                    if(!compact){click(comp.group.equals("CS2")?"小局":comp.group.equals("F1")?"成绩":"统计");capture(theme+"-"+target[0]+"-stats");}
                 }
             }
             report.putString("stream","\nPASS: "+checks+" native interface checks ("+label+").\n");

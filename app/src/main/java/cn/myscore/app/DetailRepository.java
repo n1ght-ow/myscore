@@ -35,7 +35,7 @@ final class DetailRepository {
         boolean frozen=old!=null&&old.fetched>0&&RefreshPolicy.frozenDetail(m,old.match)
             && now-old.fetched>=0&&now-old.fetched<RefreshPolicy.SETTLED_RECHECK;
         if(!force&&old!=null&&!migration&&(frozen||RefreshPolicy.freshDetail(m,old.match,old.fetched,now)))return observed(old);
-        MatchDetail next=DetailSources.fetch(m);retainGames(old,next);
+        MatchDetail next=DetailSources.fetch(m);
         if(m.group.equals("足球")&&next.facts.stream().noneMatch(f->f.label().equals("阵容资料版本")))next.fact("阵容资料版本","0");
         next.bodySignature();
         if(Thread.currentThread().isInterrupted())throw new InterruptedException();
@@ -87,10 +87,5 @@ final class DetailRepository {
             for(List<String> row:table.rows)for(int i=1;i<row.size();i++){String value=row.get(i);if(!value.equals("—")&&!value.equals("0"))return true;}
         }
         return false;
-    }
-    static void retainGames(MatchDetail old,MatchDetail next){
-        if(old!=null&&old.match.id.equals(next.match.id)&&next.match.group.equals("LOL")&&next.lolGames.isEmpty()&&!old.lolGames.isEmpty()){
-            next.lolGames.addAll(old.lolGames);next.lolFetched=old.lolFetched;next.warning="小局暂未更新，正在显示上次获取的阵容与统计。";
-        }
     }
 }

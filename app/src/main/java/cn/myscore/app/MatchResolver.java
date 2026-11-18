@@ -30,9 +30,6 @@ public final class MatchResolver implements CalendarSync.Resolver {
                 JSONObject header=root.optJSONObject("header");if(header==null)throw new Exception("已导入比赛详情未返回身份");
                 candidates=Parsers.espn(new JSONObject().put("events",new JSONArray().put(header)),c,now);
             }
-        } else if(previous.id.startsWith("qq:lol:")) {
-            if(!shared.containsKey("worlds"))shared.put("worlds",DomesticEsports.worlds(new JSONObject(source.get(DomesticEsports.LOL)),now));
-            candidates=shared.get("worlds");
         } else if(previous.id.startsWith("five:cs2:")) {
             String id=previous.id.substring("five:cs2:".length());if(!id.matches("csgo_mc_[0-9]+"))throw new Exception("CS2 比赛标识无效");
             JSONObject root=new JSONObject(source.get(DomesticEsports.FIVE+"matches/"+id+"/data"));

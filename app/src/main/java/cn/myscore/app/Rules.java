@@ -5,11 +5,6 @@ import java.util.Locale;
 public final class Rules {
     private Rules() {}
 
-    public static boolean isWorlds(String name, String slug) {
-        String text=(name+" "+slug).toLowerCase(Locale.ROOT).replace('-', ' ');
-        return !text.contains("esports world cup") && (text.matches(".*\\bworlds\\b.*") || text.contains("world championship"));
-    }
-
     public static String state(String name, String rawState) {
         String n=name.toLowerCase(Locale.ROOT);
         if(n.contains("cancel") || n.contains("abandon")) return "cancelled";
@@ -23,7 +18,7 @@ public final class Rules {
     public static long estimatedDuration(String group) {
         return switch(group) {
             case "NFL" -> 4*60*60_000L;
-            case "NBA", "CS2", "LOL" -> 3*60*60_000L;
+            case "NBA", "CS2" -> 3*60*60_000L;
             default -> 2*60*60_000L;
         };
     }

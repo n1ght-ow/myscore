@@ -10,11 +10,11 @@ public final class Competition {
         new Competition("ucl", "欧冠", "足球", "soccer/uefa.champions"),
         new Competition("efl", "Carabao Cup", "足球", "soccer/eng.league_cup"),
         new Competition("fa", "FA Cup", "足球", "soccer/eng.fa"),
+        new Competition("national", "国家队", "足球", "soccer/all"),
         new Competition("nba", "NBA", "NBA", "basketball/nba"),
         new Competition("nfl", "NFL", "NFL", "football/nfl"),
         new Competition("f1", "F1", "F1", "racing/f1"),
-        new Competition("cs2", "CS2", "CS2", ""),
-        new Competition("lol", "LOL · Worlds", "LOL", "")
+        new Competition("cs2", "CS2", "CS2", "")
     };
     public boolean esports() { return path.isEmpty(); }
     public static Competition find(String id) {

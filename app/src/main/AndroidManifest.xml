@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <queries>
-        <package android:name="com.duowan.kiwi" />
         <package android:name="com.miui.micloudsync" />
     </queries>
     <uses-permission android:name="android.permission.INTERNET" />

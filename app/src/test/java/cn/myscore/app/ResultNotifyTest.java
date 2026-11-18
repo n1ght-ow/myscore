@@ -95,7 +95,7 @@ public class ResultNotifyTest {
 
         // BO5 esports offset vs F1 qualifying offset
         Match bo5 = new Match();
-        bo5.group = "LOL";
+        bo5.group = "CS2";
         bo5.detail = "BO5 决赛";
         assertEquals(165 * 60_000L, CalendarJob.expectedFinishOffsetMs(bo5));
 

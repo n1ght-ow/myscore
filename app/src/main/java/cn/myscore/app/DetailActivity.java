@@ -33,7 +33,6 @@ import cn.myscore.app.DetailRows;
 import cn.myscore.app.DetailTableView;
 import cn.myscore.app.FootballLineupView;
 import cn.myscore.app.Logos;
-import cn.myscore.app.LolMatchView;
 import cn.myscore.app.Match;
 import cn.myscore.app.MatchDetail;
 import cn.myscore.app.PlayerStatsView;
@@ -96,7 +95,6 @@ extends Activity {
     private boolean active;
     private boolean chromeBuilt;
     private boolean fingerDown;
-    private int selectedGame = -1;
     private int failures;
     private boolean pendingForce;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -136,7 +134,7 @@ extends Activity {
         this.pad = Ui.isPad((Context)this) && getResources().getConfiguration().screenWidthDp >= 1000;
         try {
             this.match = Match.fromJson(new JSONObject(this.getIntent().getStringExtra("match")));
-            if (this.match.id.isBlank()) {
+            if (this.match.id.isBlank() || Competition.find(this.match.league) == null) {
                 throw new IllegalArgumentException();
             }
         }
@@ -146,7 +144,6 @@ extends Activity {
         }
         if (saved != null) {
             this.tab = saved.getString("tab", "overview");
-            this.selectedGame = saved.getInt("game", -1);
             this.teamFilter = saved.getString("team", "all");
             this.categoryFilter = saved.getString("category", "");
             this.sortColumn = saved.getString("sort", "");
@@ -164,7 +161,7 @@ extends Activity {
                 }
             }
         }
-        if ((this.match.group.equals("F1") || this.match.group.equals("LOL")) && this.tab.equals("events")) {
+        if (this.match.group.equals("F1") && this.tab.equals("events")) {
             this.tab = "overview";
         }
         this.repository = new DetailRepository((Context)this);
@@ -246,7 +243,6 @@ extends Activity {
     protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         state.putString("tab", this.tab);
-        state.putInt("game", this.selectedGame);
         state.putString("team", this.teamFilter);
         state.putString("category", this.categoryFilter);
         state.putString("sort", this.sortColumn);
@@ -499,7 +495,6 @@ extends Activity {
         String[] stringArray2;
         this.padTabs.removeAllViews();
         boolean f1 = this.match.group.equals("F1");
-        boolean lol = this.match.group.equals("LOL");
         boolean cs = this.match.group.equals("CS2");
         if (cs && this.tab.equals("stats")) {
             this.tab = "lineup";
@@ -510,7 +505,7 @@ extends Activity {
             stringArray3[1] = "lineup";
             stringArray2 = stringArray3;
             stringArray3[2] = "events";
-        } else if (f1 || lol) {
+        } else if (f1) {
             String[] stringArray4 = new String[3];
             stringArray4[0] = "overview";
             stringArray4[1] = "lineup";
@@ -537,12 +532,6 @@ extends Activity {
             stringArray7[1] = "车手";
             stringArray = stringArray7;
             stringArray7[2] = "成绩";
-        } else if (lol) {
-            String[] stringArray8 = new String[3];
-            stringArray8[0] = "总览";
-            stringArray8[1] = "比赛";
-            stringArray = stringArray8;
-            stringArray8[2] = "统计";
         } else {
             String[] stringArray9 = new String[4];
             stringArray9[0] = "总览";
@@ -634,7 +623,7 @@ extends Activity {
             LinearLayout source = this.ui.column();
             source.addView((View)this.ui.text(this.detail.source, 12, this.ui.text, true));
             this.ui.gap(source, 4);
-            source.addView((View)this.ui.text("获取于 " + DetailActivity.time(this.detail.fetched, "M月d日 HH:mm:ss") + (this.match.updated > 0L ? "\n来源发布 " + DetailActivity.time(this.match.updated, "M月d日 HH:mm") : "") + (this.detail.lolFetched > 0L ? "\n小局获取 " + DetailActivity.time(this.detail.lolFetched, "M月d日 HH:mm:ss") : ""), 11, this.ui.muted, false));
+            source.addView((View)this.ui.text("获取于 " + DetailActivity.time(this.detail.fetched, "M月d日 HH:mm:ss") + (this.match.updated > 0L ? "\n来源发布 " + DetailActivity.time(this.match.updated, "M月d日 HH:mm") : ""), 11, this.ui.muted, false));
             this.padLeftHost.addView((View)source);
             if (!this.match.url.isBlank()) {
                 this.ui.gap(this.padLeftHost, 10);
@@ -815,8 +804,6 @@ extends Activity {
         }
         if (this.detail == null) {
             this.empty(this.busy ? "正在读取比赛数据" : "比赛详情暂不可用", this.busy ? "正在连接本场比赛的数据来源。" : "请检查网络并重新加载，列表仍保留上次记录。");
-        } else if (this.match.group.equals("LOL")) {
-            this.lolPad();
         } else if (this.tab.equals("overview")) {
             this.padOverview();
         } else if (this.tab.equals("stats")) {
@@ -1168,7 +1155,7 @@ extends Activity {
     }
 
     private String bodyKey() {
-        StringBuilder key = new StringBuilder(96).append(this.tab).append(':').append(this.selectedGame).append(':').append(this.teamFilter).append(':').append(this.categoryFilter).append(':').append(this.mapFilter).append(':').append(this.sortColumn).append(':').append(this.descending).append(':').append(this.eventsLimit).append(':').append(this.playerLimit).append(':').append(this.error).append(':').append(this.match.group);
+        StringBuilder key = new StringBuilder(96).append(this.tab).append(':').append(this.teamFilter).append(':').append(this.categoryFilter).append(':').append(this.mapFilter).append(':').append(this.sortColumn).append(':').append(this.descending).append(':').append(this.eventsLimit).append(':').append(this.playerLimit).append(':').append(this.error).append(':').append(this.match.group);
         if (this.detail == null) {
             key.append(":empty:").append(this.busy);
         } else {
@@ -1204,8 +1191,6 @@ extends Activity {
         }
         if (this.detail == null) {
             this.empty(this.busy ? "正在读取比赛数据" : "比赛详情暂不可用", this.busy ? "正在连接本场比赛的数据来源。" : "请检查网络并重新加载，列表仍保留上次记录。");
-        } else if (this.match.group.equals("LOL")) {
-            this.lol();
         } else if (this.tab.equals("overview")) {
             this.overview();
         } else if (this.tab.equals("stats")) {
@@ -1235,9 +1220,6 @@ extends Activity {
     private String statusText() {
         if (this.detail == null) {
             return this.busy ? "正在读取详情…" : "尚未获取详情";
-        }
-        if (this.match.group.equals("LOL")) {
-            return this.detail.lolFetched > 0L ? "小局 " + DetailActivity.time(this.detail.lolFetched, "HH:mm:ss") + " 获取 · 赛程 " + DetailActivity.time(this.match.updated, "HH:mm:ss") + " 发布" : "赛程 " + DetailActivity.time(this.detail.fetched, "HH:mm:ss") + " 获取 · 小局尚未提供";
         }
         return (System.currentTimeMillis() - this.detail.fetched > 120000L ? "缓存 · " : "") + this.detail.source + " · " + DetailActivity.time(this.detail.fetched, "HH:mm:ss") + " 获取";
     }
@@ -1285,7 +1267,6 @@ extends Activity {
     private String lineupName() {
         return switch (this.match.group) {
             case "足球" -> "阵容";
-            case "LOL" -> "比赛";
             case "F1" -> "车手";
             case "CS2" -> "选手";
             default -> "球员";
@@ -1297,7 +1278,6 @@ extends Activity {
         String[] stringArray2;
         LinearLayout row = this.ui.row();
         boolean f1 = this.match.group.equals("F1");
-        boolean lol = this.match.group.equals("LOL");
         boolean cs = this.match.group.equals("CS2");
         if (cs && this.tab.equals("stats")) {
             this.tab = "lineup";
@@ -1308,7 +1288,7 @@ extends Activity {
             stringArray3[1] = "lineup";
             stringArray2 = stringArray3;
             stringArray3[2] = "events";
-        } else if (f1 || lol) {
+        } else if (f1) {
             String[] stringArray4 = new String[3];
             stringArray4[0] = "overview";
             stringArray4[1] = "lineup";
@@ -1335,12 +1315,6 @@ extends Activity {
             stringArray7[1] = "车手";
             stringArray = stringArray7;
             stringArray7[2] = "成绩";
-        } else if (lol) {
-            String[] stringArray8 = new String[3];
-            stringArray8[0] = "总览";
-            stringArray8[1] = "比赛";
-            stringArray = stringArray8;
-            stringArray8[2] = "统计";
         } else {
             String[] stringArray9 = new String[4];
             stringArray9[0] = "总览";
@@ -1479,7 +1453,7 @@ extends Activity {
 
     private void sourceLink() {
         this.ui.gap(this.body, 16);
-        this.body.addView((View)this.ui.textButton("来源与更新时间", () -> Sheet.message(this, "数据来源", this.detail.source + "\n获取时间 " + DetailActivity.time(this.detail.fetched, "M月d日 HH:mm:ss") + (this.match.group.equals("LOL") ? "\n赛程发布时间 " + DetailActivity.time(this.match.updated, "M月d日 HH:mm:ss") + (this.detail.lolFetched > 0L ? "\n小局获取时间 " + DetailActivity.time(this.detail.lolFetched, "M月d日 HH:mm:ss") : "") : "") + "\n\n数据按来源发布，未提供的字段保持未知。")));
+        this.body.addView((View)this.ui.textButton("来源与更新时间", () -> Sheet.message(this, "数据来源", this.detail.source + "\n获取时间 " + DetailActivity.time(this.detail.fetched, "M月d日 HH:mm:ss") + "\n\n数据按来源发布，未提供的字段保持未知。")));
         if (!this.match.url.isBlank()) {
             this.ui.gap(this.body, 8);
             this.body.addView((View)this.ui.textButton("打开来源页面", () -> {
@@ -1846,46 +1820,6 @@ extends Activity {
         }
         row.addView((View)words, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         timeline.addView((View)row);
-    }
-
-    private void lol() {
-        LolMatchView view = new LolMatchView(this.ui, this.detail, this.body, number -> {
-            this.selectedGame = number;
-            if (this.tab.equals("overview")) {
-                this.tab = "lineup";
-            }
-            this.render(false);
-        });
-        view.teamSelection(this.teamFilter, id -> {
-            this.teamFilter = id;
-            this.render(false);
-        });
-        if (this.tab.equals("overview")) {
-            view.overview();
-            this.information();
-            this.sourceLink();
-        } else {
-            view.games(this.selectedGame, this.tab.equals("stats"));
-        }
-    }
-
-    private void lolPad() {
-        LolMatchView view = new LolMatchView(this.ui, this.detail, this.body, number -> {
-            this.selectedGame = number;
-            if (this.tab.equals("overview")) {
-                this.tab = "lineup";
-            }
-            this.render(false);
-        });
-        view.teamSelection(this.teamFilter, id -> {
-            this.teamFilter = id;
-            this.render(false);
-        });
-        if (this.tab.equals("overview")) {
-            view.overview();
-        } else {
-            view.games(this.selectedGame, this.tab.equals("stats"));
-        }
     }
 
     private String missing() {

@@ -2,21 +2,17 @@ package cn.myscore.app;
 
 import android.app.Activity;
 import android.app.Instrumentation;
-import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 /** No calendar writes, preference changes or synthetic cache entries. */
 public final class TabletRegressionInstrumentation extends Instrumentation {
@@ -39,7 +35,6 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
             checks+=AlignmentChecks.run(this,getTargetContext());
             checks+=CrestChecks.run(this,getTargetContext());
             runOnMainSync(this::adapterTransition);
-            runOnMainSync(this::lolLayouts);
             // HyperOS may reject an instrumented app's background activity start. Launch as
             // the connected shell and use a bounded monitor instead of waiting indefinitely.
             Instrumentation.ActivityMonitor launch=addMonitor(MainActivity.class.getName(),null,false);
@@ -93,40 +88,12 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
         layout(list,ui.dp(380),ui.dp(600));
         require(list.getChildAt(0) instanceof TextView,"loading replacement safely clears the selection");
     }
-    private void lolLayouts(){
-        for(int width:new int[]{280,320,360,560})for(float scale:new float[]{1f,1.3f,2f})for(boolean dark:new boolean[]{true,false}){
-            Configuration config=new Configuration(getTargetContext().getResources().getConfiguration());config.fontScale=scale;config.screenWidthDp=width;
-            Context context=getTargetContext().createConfigurationContext(config);Ui ui=new Ui(context,dark);
-            Match match=new Match();match.id="memory-only-lol";match.group="LOL";match.league="lol";match.homeId="1";match.awayId="2";match.home="Home";match.away="Away";
-            MatchDetail detail=new MatchDetail(match);
-            try{
-                JSONObject player=new JSONObject().put("playerName","Long Player Name").put("playerLocation","TOP").put("heroName","测试英雄");
-                JSONArray teams=new JSONArray().put(new JSONObject().put("teamId","1").put("playerInfos",new JSONArray().put(player)))
-                    .put(new JSONObject().put("teamId","2").put("playerInfos",new JSONArray().put(player)));
-                detail.lolGames.add(LolGame.parse(new JSONObject().put("bo",1).put("matchStatus","2").put("teamInfos",teams),match));
-            }catch(Exception e){throw new AssertionError(e);}
-            LinearLayout body=ui.column();new LolMatchView(ui,detail,body,n->{}).games(1,false);
-            layout(body,ui.dp(width),0);
-            View panel=body.findViewWithTag("lol-lineup");require(panel!=null,"LOL lineup exists");
-            inspectNames(panel,ui.dp(60));
-            if(panel instanceof HorizontalScrollView horizontal){
-                require(horizontal.getChildAt(0).getWidth()>=horizontal.getWidth(),"wide lineup can be scrolled without compressing columns");
-            }
-        }
-    }
-    private void inspectNames(View view,int minimum){
-        if(view instanceof TextView text&&"Long Player Name".contentEquals(text.getText())){
-            require(text.getWidth()>=minimum,"LOL player identity retains a readable width: "+text.getWidth()+" >= "+minimum);
-            require(text.getLayout()!=null&&text.getLayout().getHeight()<=text.getHeight(),"LOL player name has no vertical clipping");
-        }
-        if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++)inspectNames(group.getChildAt(i),minimum);
-    }
     private void tabletNavigation(Activity activity)throws Exception{
         if(!field("pad").getBoolean(activity)){
             Method select=MainActivity.class.getDeclaredMethod("select",int.class,String.class,int.class);select.setAccessible(true);
             Object list=field("scoreList").get(activity),header=field("headerView").get(activity);
             int day=field("dayOffset").getInt(activity);String original=(String)field("group").get(activity);
-            for(String group:new String[]{"NBA","NFL","F1","CS2","LOL","足球","全部"}){
+            for(String group:new String[]{"NBA","NFL","F1","CS2","足球","全部"}){
                 runOnMainSync(()->{try{
                     select.invoke(activity,0,group,day);
                     require(list!=null&&field("scoreList").get(activity)==list,"compact window retains its list while switching sport");
@@ -138,7 +105,7 @@ public final class TabletRegressionInstrumentation extends Instrumentation {
         }
         Method select=MainActivity.class.getDeclaredMethod("select",int.class,String.class,int.class);select.setAccessible(true);
         int day=field("dayOffset").getInt(activity);String original=(String)field("group").get(activity);
-        for(String group:new String[]{"NBA","NFL","F1","CS2","LOL","足球","全部"}){
+        for(String group:new String[]{"NBA","NFL","F1","CS2","足球","全部"}){
             runOnMainSync(()->{try{select.invoke(activity,0,group,day);}catch(Exception e){throw new AssertionError(e);}});waitForIdleSync();
             runOnMainSync(()->{try{
                 View rail=(View)field("padRail").get(activity);

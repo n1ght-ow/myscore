@@ -11,7 +11,7 @@ import java.io.*;
 import java.lang.reflect.*;
 import java.util.*;
 
-/** Emulator review for the LOL pairing, CS2 team panels and photo-free football formation. */
+/** Emulator review for CS2 team panels and photo-free football formation. */
 public final class DesignReviewInstrumentation extends Instrumentation {
     private Activity activity;private int checks;private String label="review";
     @Override public void onCreate(Bundle args){super.onCreate(args);if(args!=null)label=args.getString("label","review");start();}
@@ -24,7 +24,6 @@ public final class DesignReviewInstrumentation extends Instrumentation {
                 context.getSharedPreferences("settings",0).edit().putString("theme",theme).commit();
                 football(theme);
                 cs2(theme);
-                lol(theme);
             }
             report.putString("stream","\nPASS: "+checks+" design review checks.\n");
         }catch(Throwable e){outcome=Activity.RESULT_CANCELED;report.putString("stream","\nFAIL after "+checks+": "+e.toString()+"\n"+android.util.Log.getStackTraceString(e));}
@@ -135,15 +134,6 @@ public final class DesignReviewInstrumentation extends Instrumentation {
         if(view.getVisibility()!=View.VISIBLE)return;
         if(view instanceof TextView text&&text.length()>0&&text.getWidth()>0){android.text.Layout layout=text.getLayout();require(layout!=null,"native text layout");require(layout.getHeight()<=text.getHeight()-text.getCompoundPaddingTop()-text.getCompoundPaddingBottom(),"text height: "+text.getText());for(int i=0;i<layout.getLineCount();i++)require(layout.getEllipsisCount(i)==0&&layout.getLineMax(i)<=layout.getWidth()+1,"text width: "+text.getText());}
         if(view instanceof ViewGroup group)for(int i=0;i<group.getChildCount();i++){View child=group.getChildAt(i);if(!(group instanceof HorizontalScrollView))require(child.getLeft()>=0&&child.getRight()<=group.getWidth()+1,"child fits parent");inspect(child);}
-    }
-    private void lol(String theme)throws Exception{
-        open("qq:lol:13608","LOL","lol","lineup",null,null);
-        View away=findTag("lol-kda-away"),home=findTag("lol-kda-home");require(away!=null&&home!=null,"paired KDA rows");
-        require(home.getWidth()==away.getWidth()&&home.getWidth()>0,"same KDA column width");
-        require(findAll(activity.getWindow().getDecorView(),"lol-table-header").size()==1,"one table header for all roles");
-        require(findAll(activity.getWindow().getDecorView(),"lol-role-label").size()==5,"five role labels split the pairs");
-        scroll(560);capture(theme+"-lol-pairing");
-        scroll(900);capture(theme+"-lol-pairing-lower");
     }
     private MatchDetail open(String id,String group,String league,String tab,String category,String team)throws Exception{
         MatchDetail cached=new DetailRepository(getTargetContext()).cached(request(id,group,league));require(cached!=null,"real cached "+id);

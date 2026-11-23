@@ -26,7 +26,7 @@ public final class UpdateService extends Service {
     private UpdateRepository repository;
     private NotificationManager notifications;
     static boolean running(String token){return !token.isEmpty()&&token.equals(active);}
-    @Override public void onCreate(){super.onCreate();repository=new UpdateRepository(this);notifications=getSystemService(NotificationManager.class);notifications.createNotificationChannel(new NotificationChannel(CHANNEL,"应用更新",NotificationManager.IMPORTANCE_LOW));}
+    @Override public void onCreate(){super.onCreate();repository=new UpdateRepository(this);notifications=getSystemService(NotificationManager.class);notifications.createNotificationChannel(new NotificationChannel(CHANNEL,"App updates",NotificationManager.IMPORTANCE_LOW));}
     @Override public IBinder onBind(Intent intent){return null;}
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         String requested=intent==null?repository.token():intent.getStringExtra("token");
@@ -38,13 +38,13 @@ public final class UpdateService extends Service {
         try {
             foreground(notification(0,0));
             task=worker.submit(()->download(requested,startId));
-        } catch(RuntimeException e){repository.changed(requested,DownloadManager.STATUS_FAILED,0,"无法启动后台下载，请返回更新页重试");stopSelf(startId);}
+        } catch(RuntimeException e){repository.changed(requested,DownloadManager.STATUS_FAILED,0,"Couldn't start the background download. Return to the update screen and retry.");stopSelf(startId);}
         return START_REDELIVER_INTENT;
     }
     private Notification notification(long bytes,long total){
         PendingIntent open=PendingIntent.getActivity(this,0,new Intent(this,UpdateActivity.class),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         int percent=total<=0?0:(int)Math.min(100,bytes*100/total);
-        return new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("N1ghtScore 更新下载").setContentText(total<=0?"正在连接下载服务器…":"已下载 "+percent+"%").setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setProgress(100,percent,total<=0).build();
+        return new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("N1ghtScore update download").setContentText(total<=0?"Connecting to the download server…":"Downloaded "+percent+"%").setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setProgress(100,percent,total<=0).build();
     }
     private void foreground(Notification notification){if(android.os.Build.VERSION.SDK_INT>=29)startForeground(NOTIFICATION,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);else startForeground(NOTIFICATION,notification);}
     @SuppressLint("UsableSpace")
@@ -96,6 +96,6 @@ public final class UpdateService extends Service {
             ||message.contains("HTTP 400")||message.contains("HTTP 404"))) return false;
         return true;
     }
-    @Override public void onTimeout(int startId,int fgsType){repository.changed(token,DownloadManager.STATUS_FAILED,0,"下载超时，请返回更新页重新下载");stopSelf();}
+    @Override public void onTimeout(int startId,int fgsType){repository.changed(token,DownloadManager.STATUS_FAILED,0,"Download timed out. Return to the update screen and download again.");stopSelf();}
     @Override public void onDestroy(){if(token.equals(active))active="";if(task!=null)task.cancel(true);worker.shutdownNow();stopForeground(STOP_FOREGROUND_REMOVE);super.onDestroy();}
 }

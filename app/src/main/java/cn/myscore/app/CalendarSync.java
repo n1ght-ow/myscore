@@ -35,7 +35,7 @@ public final class CalendarSync {
     public static final class Result {
         public int inserted,updated,cancelled,completed,failed;
         public String error="";
-        public String message() {return "新增 "+inserted+" · 更新 "+updated+" · 取消 "+cancelled+" · 已结束移除 "+completed+(failed>0?" · 失败 "+failed:"");}
+        public String message() {return "Added "+inserted+" · Updated "+updated+" · Cancelled "+cancelled+" · Removed after finish "+completed+(failed>0?" · Failed "+failed:"");}
     }
     private static final Object LOCK=new Object();
     private static final Object SYNC_LOCK=new Object();
@@ -144,27 +144,27 @@ public final class CalendarSync {
         String text=display==null?"":display;
         if(text.isBlank()||text.startsWith("calendar_displayname_")||text.equals("calendar")) {
             String kind=(type+" "+account).toLowerCase(Locale.ROOT);
-            if(kind.contains("miui")||kind.contains("xiaomi"))return "小米日历";
-            return local?"本机日历":"手机日历";
+            if(kind.contains("miui")||kind.contains("xiaomi"))return "Xiaomi Calendar";
+            return local?"This device's calendar":"Phone calendar";
         }
         return text;
     }
     private static String accountLabel(String account,String type,boolean local) {
         if(account==null||account.isBlank()||account.matches("[0-9]+")) {
             String kind=type==null?"":type.toLowerCase(Locale.ROOT);
-            if(kind.contains("miui")||kind.contains("xiaomi"))return "小米账户";
-            return local?"本机":"账户";
+            if(kind.contains("miui")||kind.contains("xiaomi"))return "Xiaomi account";
+            return local?"This device":"Account";
         }
-        if(CalendarContract.ACCOUNT_TYPE_LOCAL.equals(type)||"LOCAL".equalsIgnoreCase(type))return "本机";
+        if(CalendarContract.ACCOUNT_TYPE_LOCAL.equals(type)||"LOCAL".equalsIgnoreCase(type))return "This device";
         return account;
     }
     public Result subscribe(Match m,long now) {
         Result result=new Result();
-        if(!permitted(context)) {result.failed=1;result.error="未开启日历权限";return result;}
+        if(!permitted(context)) {result.failed=1;result.error="Calendar permission is not enabled";return result;}
         long calendar=calendarId();
-        if(calendar<0) {result.failed=1;result.error="请先选择手机日历";return result;}
+        if(calendar<0) {result.failed=1;result.error="Choose a phone calendar first";return result;}
         if(m==null||m.id.isBlank()||m.cancelled()||!m.scheduled()||!m.timeConfirmed||m.start<=now) {
-            result.failed=1;result.error="比赛时间未确定、已开始或已结束";return result;
+            result.failed=1;result.error="Match time is unconfirmed, or the match has started or finished";return result;
         }
         synchronized(LOCK) {
             String key="match:"+m.id;
@@ -182,11 +182,11 @@ public final class CalendarSync {
                 if(owns) {updateEvent(eventId,m,target);result.updated++;}
                 else {
                     eventId=insertEvent(m,calendar);
-                    if(eventId<=0)throw new IllegalStateException("日历未返回新事件");
+                    if(eventId<=0)throw new IllegalStateException("Calendar did not return a new event");
                     if(!links.edit().putLong(key,eventId).commit()) {
                         // Do not leave an event that this installation cannot manage later.
                         context.getContentResolver().delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),null,null);
-                        throw new IllegalStateException("无法保存日历关联");
+                        throw new IllegalStateException("Could not save the calendar link");
                     }
                     result.inserted++;
                 }
@@ -202,7 +202,7 @@ public final class CalendarSync {
     }
     public Result unsubscribe(String id) {
         Result result=new Result();
-        if(!permitted(context)) {result.failed=1;result.error="未开启日历权限";return result;}
+        if(!permitted(context)) {result.failed=1;result.error="Calendar permission is not enabled";return result;}
         synchronized(LOCK) {
             long eventId=links.getLong("match:"+id,-1);
             try {
@@ -213,7 +213,7 @@ public final class CalendarSync {
                     new String[]{CalendarContract.Events._ID,CalendarContract.Events.CALENDAR_ID,CalendarContract.Events.CUSTOM_APP_URI,CalendarContract.Events.DESCRIPTION},
                     CalendarContract.Events.CUSTOM_APP_PACKAGE+"=? AND "+CalendarContract.Events.DESCRIPTION+" LIKE ? AND "+CalendarContract.Events.DELETED+"=0",
                     new String[]{context.getPackageName(),"MyScore:"+id+"\n%"},null)) {
-                    if(rows==null)throw new IllegalStateException("无法读取日历事件");
+                    if(rows==null)throw new IllegalStateException("Could not read calendar events");
                     while(rows.moveToNext())if(("myscore://match/"+Uri.encode(id)).equals(rows.getString(2))
                         &&rows.getString(3)!=null&&rows.getString(3).startsWith("MyScore:"+id+"\n"))events.put(rows.getLong(0),rows.getLong(1));
                 }
@@ -234,8 +234,8 @@ public final class CalendarSync {
     Result syncKnown(List<Match> current,long now) {return sync(current,now,false);}
     private Result sync(List<Match> current,long now,boolean resolveMissing) {
         Result result=new Result();
-        if(!permitted(context)) {result.failed=1;result.error="未开启日历权限";return result;}
-        if(Thread.currentThread().isInterrupted()){result.failed=1;result.error="请求已取消";return result;}
+        if(!permitted(context)) {result.failed=1;result.error="Calendar permission is not enabled";return result;}
+        if(Thread.currentThread().isInterrupted()){result.failed=1;result.error="Request cancelled";return result;}
         Map<String,Match> byId=new HashMap<>();
         if(current!=null)for(Match m:current)byId.put(m.id,m);
         List<Subscription> pending=new ArrayList<>();
@@ -353,7 +353,7 @@ public final class CalendarSync {
         // A no-op UPDATE would dirty it and cause an upload/download feedback loop.
         String[] columns=values.keySet().toArray(new String[0]);
         try(Cursor row=context.getContentResolver().query(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),columns,null,null,null)) {
-            if(row==null)throw new IllegalStateException("无法读取日历事件");
+            if(row==null)throw new IllegalStateException("Could not read calendar events");
             if(row.moveToFirst()) {
                 boolean same=true;
                 for(int i=0;i<columns.length;i++)if(!java.util.Objects.equals(values.getAsString(columns[i]),row.isNull(i)?null:row.getString(i))){same=false;break;}
@@ -361,7 +361,7 @@ public final class CalendarSync {
             }
         }
         if(context.getContentResolver().update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),values,null,null)!=1)
-            throw new IllegalStateException("日历事件未更新，请稍后重试");
+            throw new IllegalStateException("Calendar event was not updated. Try again later");
         requestCloud(calendar);
     }
     /** Reuse an event created by this app on any device; repair a missing reminder for future matches. */
@@ -377,7 +377,7 @@ public final class CalendarSync {
                 CalendarContract.Events.DTSTART,CalendarContract.Events.CALENDAR_ID,CalendarContract.Events.TITLE,
                 CalendarContract.Events._SYNC_ID,CalendarContract.Events.DIRTY,CalendarContract.Events.HAS_ALARM},
             CalendarContract.Events.CUSTOM_APP_PACKAGE+"=? AND "+CalendarContract.Events.DELETED+"=0",new String[]{context.getPackageName()},CalendarContract.Events._ID+" DESC")) {
-            if(rows==null)throw new IllegalStateException("无法读取日历事件");
+            if(rows==null)throw new IllegalStateException("Could not read calendar events");
             while(rows.moveToNext()) {
                 String description=rows.getString(1);if(description==null||!description.startsWith("MyScore:"))continue;
                 int newline=description.indexOf('\n');if(newline<=8)continue;
@@ -432,7 +432,7 @@ public final class CalendarSync {
             }
             if(event.start>now&&(match==null||match.scheduled()||match.state.equals("unknown")))reminders.add(event);
         }
-        if(changed&&!edit.commit()){result.failed++;result.error="无法恢复日历关联";return 0;}
+        if(changed&&!edit.commit()){result.failed++;result.error="Could not restore calendar links";return 0;}
         // A five-minute row is not enough: HyperOS notifies for METHOD_ALERT, while a Xiaomi
         // account whose allowed list starts with METHOD_DEFAULT used to be left on that method.
         if(!reminders.isEmpty())try {
@@ -440,7 +440,7 @@ public final class CalendarSync {
             try(Cursor rows=context.getContentResolver().query(CalendarContract.Reminders.CONTENT_URI,
                 new String[]{CalendarContract.Reminders.EVENT_ID,CalendarContract.Reminders.METHOD},
                 CalendarContract.Reminders.MINUTES+"=?",new String[]{Integer.toString(REMIND_MINUTES)},null)) {
-                if(rows==null)throw new IllegalStateException("无法读取日历提醒");
+                if(rows==null)throw new IllegalStateException("Could not read calendar reminders");
                 while(rows.moveToNext()) {
                     long id=rows.getLong(0);int method=rows.getInt(1);
                     Integer previous=found.get(id);
@@ -466,7 +466,8 @@ public final class CalendarSync {
         if(c==null)return null;
         Match m=new Match();m.id=id;m.league=c.id;m.group=c.group;m.start=event.start;m.timeConfirmed=event.start>0;
         m.title=event.title==null?"":event.title;String prefix=c.name+" · ";if(m.title.startsWith(prefix))m.title=m.title.substring(prefix.length());
-        m.status="日历订阅 · 等待来源确认";
+        String englishPrefix=ResultNotify.competitionLabel(c)+" · ";if(m.title.startsWith(englishPrefix))m.title=m.title.substring(englishPrefix.length());
+        m.status="Calendar subscription · awaiting source confirmation";
         String[] lines=event.description.split("\n");String sourcePrefix="北京时间 · ";if(lines.length>1&&lines[1].startsWith(sourcePrefix))m.source=lines[1].substring(sourcePrefix.length());
         if(lines.length>2)m.url=lines[2];
         return m;
@@ -475,11 +476,11 @@ public final class CalendarSync {
         Competition c=Competition.find(m.league);
         ContentValues event=new ContentValues();
         event.put(CalendarContract.Events.CALENDAR_ID,calendar);
-        event.put(CalendarContract.Events.TITLE,ResultNotify.calendarTitle(c,m));
+        event.put(CalendarContract.Events.TITLE,EnglishDisplay.text(ResultNotify.calendarTitle(c,m)));
         event.put(CalendarContract.Events.DTSTART,m.start);
         event.put(CalendarContract.Events.DTEND,m.start+Rules.estimatedDuration(m.group));
         event.put(CalendarContract.Events.EVENT_TIMEZONE,"Asia/Shanghai");
-        event.put(CalendarContract.Events.DESCRIPTION,"MyScore:"+m.id+"\n北京时间 · "+m.source+"\n"+m.url+"\n日程结束时间为估算。比赛可能改期，请以应用最新赛程为准。");
+        event.put(CalendarContract.Events.DESCRIPTION,"MyScore:"+m.id+"\n北京时间 · "+m.source+"\n"+m.url+"\nEstimated end time. Matches may be rescheduled; check the latest schedule in the app.");
         event.put(CalendarContract.Events.CUSTOM_APP_PACKAGE,context.getPackageName());
         event.put(CalendarContract.Events.CUSTOM_APP_URI,"myscore://match/"+Uri.encode(m.id));
         event.put(CalendarContract.Events.HAS_ALARM,1);
@@ -492,7 +493,7 @@ public final class CalendarSync {
         if(!eventHasAlarm(eventId)) {
             ContentValues alarm=new ContentValues();alarm.put(CalendarContract.Events.HAS_ALARM,1);
             if(context.getContentResolver().update(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),alarm,null,null)!=1)
-                throw new IllegalStateException("日历提醒状态未更新");
+                throw new IllegalStateException("Calendar reminder status was not updated");
             changed=true;
         }
         return changed;
@@ -513,7 +514,7 @@ public final class CalendarSync {
         if(reminder<0&&method!=CalendarContract.Reminders.METHOD_DEFAULT)reminder=tryReminder(eventId,CalendarContract.Reminders.METHOD_DEFAULT);
         if(reminder<0) {
             if(hasReminder(eventId,method)||reminderId(eventId,-1)>0)return false;
-            throw new IllegalStateException("日历未接受提醒");
+            throw new IllegalStateException("Calendar did not accept the reminder");
         }
         deleteOtherReminders(eventId,reminder);
         return true;
@@ -527,7 +528,7 @@ public final class CalendarSync {
             args=new String[]{Long.toString(eventId),Integer.toString(REMIND_MINUTES),Integer.toString(method)};
         }
         try(Cursor cur=context.getContentResolver().query(CalendarContract.Reminders.CONTENT_URI,new String[]{"_id"},selection,args,null)) {
-            if(cur==null)throw new IllegalStateException("无法读取日历提醒");
+            if(cur==null)throw new IllegalStateException("Could not read calendar reminders");
             return cur.moveToFirst()?cur.getLong(0):-1;
         }
     }
@@ -537,7 +538,7 @@ public final class CalendarSync {
     private boolean eventHasAlarm(long eventId) {
         try(Cursor cur=context.getContentResolver().query(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,eventId),
             new String[]{CalendarContract.Events.HAS_ALARM},null,null,null)) {
-            if(cur==null)throw new IllegalStateException("无法读取日历事件");
+            if(cur==null)throw new IllegalStateException("Could not read calendar events");
             return cur.moveToFirst()&&cur.getInt(0)==1;
         }
     }
@@ -576,13 +577,13 @@ public final class CalendarSync {
     private String fingerprint(Match m,long calendar) {return m.start+"|"+m.displayTitle()+"|"+REMIND_MINUTES+"|"+calendar+"|"+m.state;}
     private void saveRecord(String id,Match m) {links.edit().putString("record:"+id,m.json().toString()).apply();}
     private void removeLink(String id) {links.edit().remove("match:"+id).remove("record:"+id).remove("fingerprint:"+id).apply();}
-    private static String readable(Exception e) {String m=e.getMessage();return m==null||m.isBlank()?"日历写入失败":m;}
+    private static String readable(Exception e) {String m=e.getMessage();return m==null||m.isBlank()?"Calendar write failed":m;}
     private boolean ownsEvent(long id,String matchId) {
         try(Cursor cur=context.getContentResolver().query(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI,id),
             new String[]{CalendarContract.Events.DESCRIPTION,CalendarContract.Events.CUSTOM_APP_PACKAGE,CalendarContract.Events.DELETED},null,null,null)) {
             // A null cursor means the provider is temporarily unavailable; do not treat that
             // as "not ours" and orphan the event by removing the link.
-            if(cur==null)throw new IllegalStateException("无法读取日历事件");
+            if(cur==null)throw new IllegalStateException("Could not read calendar events");
             return cur.moveToFirst() && cur.getInt(2)==0 && context.getPackageName().equals(cur.getString(1)) && cur.getString(0)!=null && cur.getString(0).startsWith("MyScore:"+matchId+"\n");
         }
     }

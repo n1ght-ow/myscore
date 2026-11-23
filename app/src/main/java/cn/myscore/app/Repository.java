@@ -112,8 +112,8 @@ public final class Repository {
                 Batch batch;
                 try{batch=task.get();}
                 catch(InterruptedException e){Thread.currentThread().interrupt();return result;}
-                catch(ExecutionException e){batch=load(c,from,to);batch.error="来源暂不可用，请稍后重试";batch.retryAt=recordFailure(c.id+":"+from+":"+to,failures.get(c.id+":"+from+":"+to),batch.error).until();android.util.Log.w("MyScore","Source task failed",e.getCause());}
-                catch(CancellationException e){batch=load(c,from,to);batch.error="来源响应超时";batch.retryAt=recordFailure(c.id+":"+from+":"+to,failures.get(c.id+":"+from+":"+to),batch.error).until();}
+                catch(ExecutionException e){batch=load(c,from,to);batch.error="Source temporarily unavailable. Try again later";batch.retryAt=recordFailure(c.id+":"+from+":"+to,failures.get(c.id+":"+from+":"+to),batch.error).until();android.util.Log.w("MyScore","Source task failed",e.getCause());}
+                catch(CancellationException e){batch=load(c,from,to);batch.error="Source response timed out";batch.retryAt=recordFailure(c.id+":"+from+":"+to,failures.get(c.id+":"+from+":"+to),batch.error).until();}
                 added.add(c.id);result.batches.add(batch);
                 if(batch.error.isEmpty())CalendarUpdates.observe(context,batch.matches);
                 if(onBatch!=null)onBatch.accept(batch);
@@ -133,7 +133,7 @@ public final class Repository {
                 try{batch=task.get();}catch(Exception ignored){}
             }
             if(batch==null) {
-                batch=load(c,from,to);batch.error="来源响应超时";
+                batch=load(c,from,to);batch.error="Source response timed out";
                 String key=c.id+":"+from+":"+to;batch.retryAt=recordFailure(key,failures.get(key),batch.error).until();
             }
             added.add(c.id);result.batches.add(batch);
@@ -186,9 +186,9 @@ public final class Repository {
             else b.retryAt=recordFailure(key,previous,b.error).until();
             save(b,from,to);
         } catch(InterruptedException e) {
-            Thread.currentThread().interrupt();b.error="请求已取消";
+            Thread.currentThread().interrupt();b.error="Request cancelled";
         } catch(Exception e) {
-            b.error=e instanceof java.net.SocketTimeoutException?"连接超时":e.getMessage()==null?"连接失败":e.getMessage();
+            b.error=e instanceof java.net.SocketTimeoutException?"Connection timed out":e.getMessage()==null?"Connection failed":e.getMessage();
             if(!Thread.currentThread().isInterrupted())b.retryAt=recordFailure(key,previous,b.error).until();
         }
         return b;
@@ -208,7 +208,7 @@ public final class Repository {
                 TeamRepository.Result result=teams.fetch(entry.team(),force,false);
                 Batch team=new Batch(view.competition);
                 team.matches.addAll(result.matches);
-                if(!result.error.isEmpty())team.error=entry.name()+"："+result.error;
+                if(!result.error.isEmpty())team.error=entry.name()+": "+result.error;
                 return team;
             }));
             List<Batch> schedules=new ArrayList<>();
@@ -270,11 +270,11 @@ public final class Repository {
             Batch fresh=new Batch(c);fresh.matches.addAll(merged);fresh.fetched=System.currentTimeMillis();save(fresh,day,day,"day_");
             return fresh;
         }catch(InterruptedException e){Thread.currentThread().interrupt();throw e;}
-        catch(Exception e){android.util.Log.w("MyScore","Score date "+c.id+" "+day+" failed: "+e.getClass().getSimpleName()+": "+e.getMessage());cached.error=day+" 赛程未更新";return cached;}
+        catch(Exception e){android.util.Log.w("MyScore","Score date "+c.id+" "+day+" failed: "+e.getClass().getSimpleName()+": "+e.getMessage());cached.error="Schedule for "+day+" was not updated";return cached;}
     }
     static List<Match> mergeDays(Batch view,List<Batch> days)throws java.io.IOException {
         List<String> errors=new ArrayList<>();for(Batch day:days)if(!day.error.isEmpty())errors.add(day.error);
-        view.error=String.join("；",errors);
+        view.error=String.join("; ",errors);
         if(errors.size()==days.size())throw new java.io.IOException(view.error);
         Map<String,Match> unique=new java.util.LinkedHashMap<>();
         // Read stale days first, then let a successful source replace the same event identity.

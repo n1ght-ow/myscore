@@ -273,7 +273,7 @@ extends Activity {
         this.pendingForce = false;
         this.busy = true;
         if (this.status != null) {
-            this.status.setText((CharSequence)"正在更新详情…");
+            this.status.setText((CharSequence)"Refreshing match details…");
         }
         Match requested = this.match;
         boolean needsCache = this.detail == null;
@@ -300,7 +300,8 @@ extends Activity {
                 next = this.repository.fetch(requested, forced);
             }
             catch (Exception e) {
-                problem = e.getMessage() == null ? "网络连接失败" : e.getMessage();
+                String message = displayText(e.getMessage());
+                problem = message.isBlank() ? "Network connection failed" : message;
             }
             MatchDetail result = next;
             String failure = problem;
@@ -428,7 +429,7 @@ extends Activity {
         this.root.removeAllViews();
         LinearLayout bar = this.ui.row();
         bar.setPadding(this.ui.dp(10.0f), this.ui.dp(6.0f), this.ui.dp(14.0f), this.ui.dp(6.0f));
-        bar.addView((View)this.iconButton("back", "返回比赛列表", () -> ((DetailActivity)this).finish()));
+        bar.addView((View)this.iconButton("back", "Back to matches", () -> ((DetailActivity)this).finish()));
         LinearLayout titles = this.ui.column();
         this.padTitle = this.ui.text("", 19, this.ui.text, true);
         this.padTitle.setLetterSpacing(-0.02f);
@@ -439,7 +440,7 @@ extends Activity {
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0, -2, 1.0f);
         tp.setMarginStart(this.ui.dp(6.0f));
         bar.addView((View)titles, (ViewGroup.LayoutParams)tp);
-        bar.addView((View)this.iconButton("refresh", "刷新比赛详情", () -> this.load(true)));
+        bar.addView((View)this.iconButton("refresh", "Refresh match details", () -> this.load(true)));
         this.root.addView((View)bar);
         this.root.addView(this.ui.divider());
         LinearLayout work = this.ui.row();
@@ -522,23 +523,23 @@ extends Activity {
         this.tabKeys = stringArray2;
         if (cs) {
             String[] stringArray6 = new String[3];
-            stringArray6[0] = "总览";
-            stringArray6[1] = "选手";
+            stringArray6[0] = "Overview";
+            stringArray6[1] = "Players";
             stringArray = stringArray6;
-            stringArray6[2] = "小局";
+            stringArray6[2] = "Maps";
         } else if (f1) {
             String[] stringArray7 = new String[3];
-            stringArray7[0] = "总览";
-            stringArray7[1] = "车手";
+            stringArray7[0] = "Overview";
+            stringArray7[1] = "Drivers";
             stringArray = stringArray7;
-            stringArray7[2] = "成绩";
+            stringArray7[2] = "Results";
         } else {
             String[] stringArray9 = new String[4];
-            stringArray9[0] = "总览";
+            stringArray9[0] = "Overview";
             stringArray9[1] = this.lineupName();
-            stringArray9[2] = "统计";
+            stringArray9[2] = "Stats";
             stringArray = stringArray9;
-            stringArray9[3] = "进程";
+            stringArray9[3] = "Events";
         }
         this.tabNames = stringArray;
         this.tabLabels = new TextView[this.tabKeys.length];
@@ -574,11 +575,11 @@ extends Activity {
 
     private void updatePadChrome() {
         if (this.padTitle != null) {
-            this.padTitle.setText((CharSequence)MatchLabel.of(this.match));
+            this.padTitle.setText((CharSequence)displayText(MatchLabel.of(this.match)));
         }
         if (this.padSubtitle != null) {
-            String when = this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M月d日 EEE HH:mm") : "时间待定";
-            this.padSubtitle.setText((CharSequence)(when + " · 北京时间"));
+            String when = this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD";
+            this.padSubtitle.setText((CharSequence)(when + " · Beijing time"));
         }
         this.updateTabs();
         // The 404dp dossier is expensive to build. A live score tick usually changes only the
@@ -609,29 +610,30 @@ extends Activity {
         this.padLeftHost.addView((View)this.padScoreCard());
         if (this.detail != null) {
             if (!this.detail.facts.isEmpty()) {
-                this.padLeftHeading("比赛信息");
+                this.padLeftHeading("Match information");
                 this.padLeftHost.addView((View)this.padFactsCard(9));
                 this.ui.gap(this.padLeftHost, 20);
             }
             if (!this.detail.warning.isBlank() && !this.match.group.equals("CS2")) {
-                TextView note = this.ui.text(this.detail.warning, 11, this.ui.muted, false);
+                TextView note = this.ui.text(displayText(this.detail.warning), 11, this.ui.muted, false);
                 note.setLineSpacing((float)this.ui.dp(3.0f), 1.0f);
                 this.padLeftHost.addView((View)note);
                 this.ui.gap(this.padLeftHost, 16);
             }
-            this.padLeftHeading("数据来源");
+            this.cs2EventLink(this.padLeftHost);
+            this.padLeftHeading("Source");
             LinearLayout source = this.ui.column();
-            source.addView((View)this.ui.text(this.detail.source, 12, this.ui.text, true));
+            source.addView((View)this.ui.text(displayText(this.detail.source), 12, this.ui.text, true));
             this.ui.gap(source, 4);
-            source.addView((View)this.ui.text("获取于 " + DetailActivity.time(this.detail.fetched, "M月d日 HH:mm:ss") + (this.match.updated > 0L ? "\n来源发布 " + DetailActivity.time(this.match.updated, "M月d日 HH:mm") : ""), 11, this.ui.muted, false));
+            source.addView((View)this.ui.text("Updated " + DetailActivity.time(this.detail.fetched, "M/d HH:mm:ss") + (this.match.updated > 0L ? "\nSource published " + DetailActivity.time(this.match.updated, "M/d HH:mm") : ""), 11, this.ui.muted, false));
             this.padLeftHost.addView((View)source);
             if (!this.match.url.isBlank()) {
                 this.ui.gap(this.padLeftHost, 10);
-                this.padLeftHost.addView((View)this.ui.textButton("打开来源页面", () -> this.openUrl()), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
+                this.padLeftHost.addView((View)this.ui.textButton("Open source page", () -> this.openUrl()), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             }
         } else {
-            this.padLeftHeading("比赛数据");
-            TextView loading = this.ui.text(this.busy ? "正在读取比赛数据…" : "尚未获取比赛数据", 12, this.ui.muted, false);
+            this.padLeftHeading("Match data");
+            TextView loading = this.ui.text(this.busy ? "Loading match data…" : "Match data not loaded", 12, this.ui.muted, false);
             loading.setLineSpacing((float)this.ui.dp(3.0f), 1.0f);
             this.padLeftHost.addView((View)loading);
         }
@@ -645,18 +647,18 @@ extends Activity {
         card.setBackground((Drawable)this.ui.panel());
         card.setPadding(this.ui.dp(18.0f), this.ui.dp(16.0f), this.ui.dp(18.0f), this.ui.dp(14.0f));
         if (this.match.group.equals("F1")) {
-            TextView title = this.ui.text(this.match.displayTitle(), 22, this.ui.text, true);
+            TextView title = this.ui.text(displayText(this.match.displayTitle()), 22, this.ui.text, true);
             title.setLetterSpacing(-0.02f);
             card.addView((View)title);
             this.ui.gap(card, 8);
-            card.addView((View)this.ui.text(this.match.status, 12, this.match.live() ? this.ui.primary : this.ui.muted, false));
+            card.addView((View)this.ui.text(displayText(this.match.status), 12, this.match.live() ? this.ui.primary : this.ui.muted, false));
             return card;
         }
         card.addView((View)this.padTeamLine(true));
         this.ui.gap(card, 12);
         card.addView((View)this.padTeamLine(false));
         this.ui.gap(card, 14);
-        TextView status = this.ui.text(this.match.live() && !this.match.status.isBlank() ? this.match.status : Rules.stateLabel(this.match.state), 12, this.match.live() ? this.ui.primary : this.ui.muted, false);
+        TextView status = this.ui.text(displayText(this.match.live() && !this.match.status.isBlank() ? this.match.status : Rules.stateLabel(this.match.state)), 12, this.match.live() ? this.ui.primary : this.ui.muted, false);
         card.addView((View)status);
         WatchLinks.Link watch = this.watches.link(this.match);
         if (watch != null) {
@@ -679,7 +681,7 @@ extends Activity {
         boolean available = id != null && !id.isBlank();
         crest.setFocusable(available);
         crest.setClickable(available);
-        crest.setContentDescription(available ? "查看 " + name + " 的赛程" : null);
+        crest.setContentDescription(available ? displayText("View " + name + " schedule") : null);
         crest.setOnClickListener(available ? v -> this.openTeam(home) : null);
         row.addView((View)crest, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(52.0f), this.ui.dp(48.0f)));
         TextView team = this.ui.text(name, 17, this.ui.text, true);
@@ -690,7 +692,7 @@ extends Activity {
         score.setGravity(0x800005);
         score.setIncludeFontPadding(false);
         row.addView((View)score);
-        row.setContentDescription((CharSequence)(name + (this.match.hasScore() ? "，比分 " + this.match.displayScore(home) : "，比分尚未提供")));
+        row.setContentDescription((CharSequence)displayText(name + (this.match.hasScore() ? ", score " + this.match.displayScore(home) : ", score unavailable")));
         return row;
     }
 
@@ -718,7 +720,7 @@ extends Activity {
             LinearLayout row = this.ui.row();
             row.setPadding(0, this.ui.dp(9.0f), 0, this.ui.dp(9.0f));
             TextView h = this.ui.text(s.home(), 13, this.ui.primary, true);
-            TextView label = this.ui.text(s.label(), 10, this.ui.muted, false);
+            TextView label = this.ui.text(this.statLabel(s.label()), 10, this.ui.muted, false);
             TextView a = this.ui.text(s.away(), 13, this.ui.secondary, true);
             label.setGravity(17);
             a.setGravity(0x800005);
@@ -756,7 +758,7 @@ extends Activity {
             if (label.equals("阵容资料版本")) continue;
             String value = DetailParsers.plain(f.value());
             if (value.isBlank()) continue;
-            facts.computeIfAbsent(label.isBlank() ? "信息" : label, k -> new ArrayList()).add(value);
+            facts.computeIfAbsent(label.isBlank() ? "Information" : label, k -> new ArrayList()).add(value);
         }
         int index = 0;
         for (Map.Entry fact : facts.entrySet()) {
@@ -767,14 +769,14 @@ extends Activity {
             LinearLayout row = this.ui.row();
             row.setGravity(48);
             row.setPadding(0, this.ui.dp(9.0f), 0, this.ui.dp(9.0f));
-            row.addView((View)this.ui.text((String)fact.getKey(), 10, this.ui.muted, false), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-            TextView value = this.ui.text(String.join((CharSequence)"\n", new LinkedHashSet((Collection)fact.getValue())), 12, this.ui.text, false);
+            row.addView((View)this.ui.text(displayText((String)fact.getKey()), 10, this.ui.muted, false), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            TextView value = this.ui.text(displayText(String.join((CharSequence)"\n", new LinkedHashSet((Collection)fact.getValue()))), 12, this.ui.text, false);
             value.setLineSpacing((float)this.ui.dp(2.0f), 1.0f);
             row.addView((View)value, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.35f));
             card.addView((View)row);
         }
         if (index == 0) {
-            card.addView((View)this.ui.text("来源尚未提供更多比赛信息", 12, this.ui.muted, false));
+            card.addView((View)this.ui.text("The source did not provide more match information", 12, this.ui.muted, false));
         }
         return card;
     }
@@ -790,20 +792,20 @@ extends Activity {
         this.status = null;
         if (!this.error.isEmpty()) {
             LinearLayout warning = this.panel();
-            warning.addView((View)this.ui.text("暂未更新 · " + this.error + (this.detail == null ? "" : "\n显示上次获取的数据"), 12, this.ui.error, false));
+            warning.addView((View)this.ui.text("Update failed · " + this.error + (this.detail == null ? "" : "\nShowing the last saved data"), 12, this.ui.error, false));
             this.ui.gap(warning, 10);
-            warning.addView((View)this.ui.button("重新加载", false, () -> this.load(true)));
+            warning.addView((View)this.ui.button("Reload", false, () -> this.load(true)));
             this.body.addView((View)warning);
             this.ui.gap(this.body, 14);
         }
         if (!(this.detail == null || this.detail.warning.isBlank() || this.match.group.equals("CS2") && !this.tab.equals("overview"))) {
-            TextView note = this.ui.text(this.detail.warning, 12, this.ui.muted, false);
+            TextView note = this.ui.text(displayText(this.detail.warning), 12, this.ui.muted, false);
             note.setLineSpacing((float)this.ui.dp(3.0f), 1.0f);
             this.body.addView((View)note);
             this.ui.gap(this.body, 16);
         }
         if (this.detail == null) {
-            this.empty(this.busy ? "正在读取比赛数据" : "比赛详情暂不可用", this.busy ? "正在连接本场比赛的数据来源。" : "请检查网络并重新加载，列表仍保留上次记录。");
+            this.empty(this.busy ? "Loading match data" : "Match details are unavailable", this.busy ? "Connecting to this match's source." : "Check your connection and reload. The match list keeps its last record.");
         } else if (this.tab.equals("overview")) {
             this.padOverview();
         } else if (this.tab.equals("stats")) {
@@ -832,7 +834,7 @@ extends Activity {
         LinearLayout left = this.ui.column();
         LinearLayout right = this.ui.column();
         if (!this.detail.stats.isEmpty()) {
-            this.headingInto(left, "数据速览");
+            this.headingInto(left, "Key stats");
             left.addView((View)this.padStatsCard(this.detail.stats, 8));
             this.ui.gap(left, 24);
         }
@@ -840,7 +842,7 @@ extends Activity {
             this.ui.gap(right, 22);
         }
         if (!this.detail.events.isEmpty()) {
-            this.headingInto(right, "最新进程");
+            this.headingInto(right, "Latest events");
             LinearLayout card = this.panel();
             for (int i = 0; i < Math.min(8, this.detail.events.size()); ++i) {
                 this.event(card, this.detail.events.get(i));
@@ -859,18 +861,18 @@ extends Activity {
         boolean hasStats = !this.detail.stats.isEmpty();
         boolean hasTables = this.detail.tables.stream().anyMatch(t -> t.tab.equals("stats"));
         if (!hasStats && !hasTables) {
-            this.empty("本场统计尚未提供", this.missing());
+            this.empty("Match statistics are not available", this.missing());
             return;
         }
         if (hasStats && hasTables) {
             LinearLayout left = this.ui.column(), right = this.ui.column();
-            this.headingInto(left, "球队对比");
+            this.headingInto(left, "Team comparison");
             left.addView(this.padStatsCard(this.detail.stats, this.detail.stats.size()));
-            this.headingInto(right, "球员与分段数据");
+            this.headingInto(right, "Players and splits");
             this.tablesInto(right, "stats");
             this.body.addView(this.ui.columns(left, right, 360, 24), new LinearLayout.LayoutParams(-1, -2));
         } else if (hasStats) {
-            this.heading("球队对比");
+            this.heading("Team comparison");
             this.body.addView((View)this.padStatsCard(this.detail.stats, this.detail.stats.size()));
         } else {
             this.tablesInto(this.body, "stats");
@@ -887,32 +889,32 @@ extends Activity {
             this.ui.gap(this.body, 22);
         }
         if (!this.detail.events.isEmpty()) {
-            this.heading(this.match.group.equals("足球") ? "关键事件" : (this.match.group.equals("NFL") ? "得分进程" : "比赛进程"));
+            this.heading(this.match.group.equals("足球") ? "Key events" : (this.match.group.equals("NFL") ? "Scoring plays" : "Play-by-play"));
             LinearLayout card = this.panel();
             for (int i = 0; i < Math.min(this.eventsLimit, this.detail.events.size()); ++i) this.event(card, this.detail.events.get(i));
             this.body.addView(card);
             if (this.detail.events.size() > this.eventsLimit) {
                 this.ui.gap(this.body, 12);
-                this.body.addView((View)this.ui.button("加载更多进程 · 剩余 " + (this.detail.events.size() - this.eventsLimit) + " 条", false, () -> {
+                this.body.addView((View)this.ui.button("Load more events · " + (this.detail.events.size() - this.eventsLimit) + " remaining", false, () -> {
                     this.eventsLimit += 50;
                     this.render(true);
                 }));
             }
         } else if (!found) {
-            this.empty("暂无比赛进程", this.missing());
+            this.empty("No events are available", this.missing());
         }
     }
 
     private void openUrl() {
         if (this.match.url.isBlank()) {
-            Sheet.message(this, "来源页面", "来源尚未提供可直接打开的页面。");
+            Sheet.message(this, "Source page", "The source did not provide a page to open.");
             return;
         }
         try {
             this.startActivity(new Intent("android.intent.action.VIEW", Uri.parse((String)this.match.url)));
         }
         catch (ActivityNotFoundException e) {
-            Sheet.message(this, "无法打开来源", "手机没有可用的浏览器。");
+            Sheet.message(this, "Unable to open source", "No browser is available on this device.");
         }
     }
 
@@ -948,7 +950,7 @@ extends Activity {
     }
 
     private void headingInto(LinearLayout into, String title) {
-        into.addView((View)this.ui.text(title, 15, this.ui.text, true));
+        into.addView((View)this.ui.text(displayText(title), 15, this.ui.text, true));
         this.ui.gap(into, 10);
     }
 
@@ -987,14 +989,12 @@ extends Activity {
         this.root.removeAllViews();
         LinearLayout appbar = this.ui.row();
         appbar.setPadding(this.ui.dp(4.0f), this.ui.dp(2.0f), this.ui.dp(4.0f), 0);
-        appbar.addView((View)this.iconButton("back", "返回比赛列表", () -> ((DetailActivity)this).finish()));
-        TextView title = this.ui.text(MatchLabel.of(this.match), 16, this.ui.text, true);
+        appbar.addView((View)this.iconButton("back", "Back to matches", () -> ((DetailActivity)this).finish()));
+        TextView title = this.ui.text(displayText(MatchLabel.of(this.match)), 16, this.ui.text, true);
         title.setGravity(17);
         appbar.addView((View)title, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        appbar.addView((View)this.iconButton("refresh", "刷新比赛详情", () -> this.load(true)));
+        appbar.addView((View)this.iconButton("refresh", "Refresh match details", () -> this.load(true)));
         this.root.addView((View)appbar);
-        this.buildTabs();
-        this.root.addView(this.ui.divider());
         this.scroll = new ScrollView((Context)this);
         this.scroll.setFillViewport(true);
         this.scroll.setVerticalScrollBarEnabled(false);
@@ -1015,6 +1015,7 @@ extends Activity {
         this.scroll.addView((View)this.content);
         this.root.addView((View)this.scroll, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, 0, 1.0f));
         this.buildScoreHeader();
+        this.buildTabs();
         this.body = this.ui.column();
         this.body.setPadding(this.ui.dp(16.0f), this.ui.dp(8.0f), this.ui.dp(16.0f), this.ui.dp(24.0f));
         this.content.addView((View)this.body);
@@ -1027,11 +1028,11 @@ extends Activity {
         card.setBackground((Drawable)this.ui.panel());
         card.setPadding(this.ui.dp(16.0f), this.ui.dp(14.0f), this.ui.dp(16.0f), this.ui.dp(12.0f));
         if (this.match.group.equals("F1")) {
-            this.headerTitle = this.ui.text(this.match.displayTitle(), 18, this.ui.text, true);
+            this.headerTitle = this.ui.text(displayText(this.match.displayTitle()), 18, this.ui.text, true);
             this.headerTitle.setGravity(17);
             card.addView((View)this.headerTitle);
             this.ui.gap(card, 8);
-            this.headerState = this.ui.text(this.match.status + " · " + (this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "时间待定"), 12, this.ui.muted, false);
+            this.headerState = this.ui.text(displayText(this.match.status) + " · " + (this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD"), 12, this.ui.muted, false);
             this.headerState.setGravity(17);
             card.addView((View)this.headerState);
         } else if (this.getResources().getConfiguration().fontScale >= 1.5f || this.getResources().getConfiguration().fontScale >= 1.25f && this.ui.contentWidthDp() < 400) {
@@ -1039,9 +1040,9 @@ extends Activity {
             this.ui.gap(card, 16);
             this.headerAwayScore = this.stackedTeam(card, false);
             this.ui.gap(card, 16);
-            this.headerState = this.ui.text(this.match.status, 12, this.match.live() ? this.ui.primary : this.ui.muted, true);
+            this.headerState = this.ui.text(displayText(this.match.status), 12, this.match.live() ? this.ui.primary : this.ui.muted, true);
             card.addView((View)this.headerState);
-            this.headerStart = this.ui.text(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "时间待定", 12, this.ui.muted, false);
+            this.headerStart = this.ui.text(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD", 12, this.ui.muted, false);
             card.addView((View)this.headerStart);
         } else {
             LinearLayout row = this.ui.row();
@@ -1054,11 +1055,11 @@ extends Activity {
             this.headerScore.setResultColors(this.ui.scoreColor(this.match, true), this.ui.scoreColor(this.match, false));
             center.addView((View)this.headerScore, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(center, 8);
-            this.headerState = this.ui.text(this.match.status, 12, this.match.live() ? this.ui.primary : this.ui.muted, true);
+            this.headerState = this.ui.text(displayText(this.match.status), 12, this.match.live() ? this.ui.primary : this.ui.muted, true);
             this.headerState.setGravity(17);
             center.addView((View)this.headerState, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(center, 6);
-            this.headerStart = this.ui.text(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "时间待定", 11, this.ui.muted, false);
+            this.headerStart = this.ui.text(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD", 11, this.ui.muted, false);
             this.headerStart.setGravity(17);
             center.addView((View)this.headerStart, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             row.addView((View)center, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.35f));
@@ -1108,8 +1109,8 @@ extends Activity {
     private void updateChrome() {
         if (this.match.group.equals("F1")) {
             if (this.headerTitle != null) {
-                this.headerTitle.setText((CharSequence)this.match.displayTitle());
-                this.headerState.setText((CharSequence)(this.match.status + " · " + (this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "时间待定")));
+                this.headerTitle.setText((CharSequence)displayText(this.match.displayTitle()));
+                this.headerState.setText((CharSequence)(displayText(this.match.status) + " · " + (this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD")));
             }
         } else if (this.headerHome != null) {
             this.headerHome.setText((CharSequence)this.match.home);
@@ -1123,9 +1124,9 @@ extends Activity {
                 this.headerHomeScore.setTextColor(this.ui.scoreColor(this.match, true));
                 this.headerAwayScore.setTextColor(this.ui.scoreColor(this.match, false));
             }
-            this.headerState.setText((CharSequence)this.match.status);
+            this.headerState.setText((CharSequence)displayText(this.match.status));
             this.headerState.setTextColor(this.match.live() ? this.ui.primary : this.ui.muted);
-            this.headerStart.setText((CharSequence)(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "时间待定"));
+            this.headerStart.setText((CharSequence)(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD"));
             this.bindHeaderTeam(true);
             this.bindHeaderTeam(false);
         }
@@ -1144,7 +1145,7 @@ extends Activity {
         boolean available = id != null && !id.isBlank();
         slot.setClickable(available);
         slot.setFocusable(available);
-        slot.setContentDescription(available ? "查看 " + name + " 的赛程" : null);
+        slot.setContentDescription(available ? displayText("View " + name + " schedule") : null);
         slot.setOnClickListener(available ? v -> this.openTeam(home) : null);
     }
 
@@ -1166,31 +1167,24 @@ extends Activity {
 
     private void rebuildBody(boolean preserve) {
         int y = preserve && this.scroll != null ? this.scroll.getScrollY() : 0;
+        LinearLayout previous = this.body;
         this.body = this.ui.column();
         this.body.setPadding(this.ui.dp(16.0f), this.ui.dp(8.0f), this.ui.dp(16.0f), this.ui.dp(24.0f));
         if (this.content != null) {
-            if (this.content.getChildCount() > 1) {
-                this.content.removeViewAt(1);
-            }
+            if (previous != null && previous.getParent() == this.content) this.content.removeView(previous);
             this.content.addView((View)this.body);
         }
-        this.status = this.ui.text(this.statusText(), 11, this.ui.muted, false);
-        this.body.addView((View)this.status);
-        this.ui.gap(this.body, 8);
+        this.status = null;
         if (!this.error.isEmpty()) {
             LinearLayout warning = this.panel();
-            warning.addView((View)this.ui.text("暂未更新 · " + this.error + (this.detail == null ? "" : "\n显示上次获取的数据"), 13, this.ui.error, false));
+            warning.addView((View)this.ui.text("Update failed · " + this.error + (this.detail == null ? "" : "\nShowing the last saved data"), 13, this.ui.error, false));
             this.ui.gap(warning, 12);
-            warning.addView((View)this.ui.button("重新加载", false, () -> this.load(true)));
+            warning.addView((View)this.ui.button("Reload", false, () -> this.load(true)));
             this.body.addView((View)warning);
             this.ui.gap(this.body, 14);
         }
-        if (!(this.detail == null || this.detail.warning.isBlank() || this.match.group.equals("CS2") && !this.tab.equals("overview"))) {
-            this.body.addView((View)this.ui.text(this.detail.warning, 12, this.ui.muted, false));
-            this.ui.gap(this.body, 12);
-        }
         if (this.detail == null) {
-            this.empty(this.busy ? "正在读取比赛数据" : "比赛详情暂不可用", this.busy ? "正在连接本场比赛的数据来源。" : "请检查网络并重新加载，列表仍保留上次记录。");
+            this.empty(this.busy ? "Loading match data" : "Match details are unavailable", this.busy ? "Connecting to this match's source." : "Check your connection and reload. The match list keeps its last record.");
         } else if (this.tab.equals("overview")) {
             this.overview();
         } else if (this.tab.equals("stats")) {
@@ -1207,6 +1201,13 @@ extends Activity {
         } else {
             this.roster("lineup");
         }
+        if (!(this.detail == null || this.detail.warning.isBlank() || this.match.group.equals("CS2") && !this.tab.equals("overview"))) {
+            this.ui.gap(this.body, 16);
+            this.body.addView((View)this.ui.text(displayText(this.detail.warning), 12, this.ui.muted, false));
+        }
+        this.status = this.ui.text(this.statusText(), 11, this.ui.muted, false);
+        this.ui.gap(this.body, 16);
+        this.body.addView((View)this.status);
         if (this.scroll != null) {
             this.scroll.post(() -> this.scroll.scrollTo(0, preserve ? y : 0));
             if (this.pendingScrollY >= 0 && this.detail != null) {
@@ -1219,9 +1220,9 @@ extends Activity {
 
     private String statusText() {
         if (this.detail == null) {
-            return this.busy ? "正在读取详情…" : "尚未获取详情";
+            return this.busy ? "Loading details…" : "Details not loaded";
         }
-        return (System.currentTimeMillis() - this.detail.fetched > 120000L ? "缓存 · " : "") + this.detail.source + " · " + DetailActivity.time(this.detail.fetched, "HH:mm:ss") + " 获取";
+        return (System.currentTimeMillis() - this.detail.fetched > 120000L ? "Cached · " : "") + displayText(this.detail.source) + " · " + DetailActivity.time(this.detail.fetched, "HH:mm:ss");
     }
 
     private LinearLayout team(boolean home) {
@@ -1245,7 +1246,7 @@ extends Activity {
         boolean available = id != null && !id.isBlank();
         slot.setClickable(available);
         slot.setFocusable(available);
-        slot.setContentDescription(available ? "查看 " + name + " 的赛程" : null);
+        slot.setContentDescription(available ? displayText("View " + name + " schedule") : null);
         slot.setOnClickListener(available ? v -> this.openTeam(home) : null);
         side.addView((View)slot, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(56.0f), this.ui.dp(56.0f)));
         this.ui.gap(side, 4);
@@ -1258,7 +1259,7 @@ extends Activity {
     private void openTeam(boolean home) {
         Team team = Team.of(this.match, home);
         if (team == null) {
-            Sheet.message(this, "球队赛程暂不可用", "来源尚未提供这支球队的完整标识。");
+            Sheet.message(this, "Team schedule unavailable", "The source did not provide a complete identity for this team.");
             return;
         }
         this.startActivity(new Intent((Context)this, TeamActivity.class).putExtra("team", team.json().toString()));
@@ -1266,10 +1267,10 @@ extends Activity {
 
     private String lineupName() {
         return switch (this.match.group) {
-            case "足球" -> "阵容";
-            case "F1" -> "车手";
-            case "CS2" -> "选手";
-            default -> "球员";
+            case "足球" -> "Lineup";
+            case "F1" -> "Drivers";
+            case "CS2" -> "Players";
+            default -> "Players";
         };
     }
 
@@ -1305,23 +1306,23 @@ extends Activity {
         this.tabKeys = stringArray2;
         if (cs) {
             String[] stringArray6 = new String[3];
-            stringArray6[0] = "总览";
-            stringArray6[1] = "选手";
+            stringArray6[0] = "Overview";
+            stringArray6[1] = "Players";
             stringArray = stringArray6;
-            stringArray6[2] = "小局";
+            stringArray6[2] = "Maps";
         } else if (f1) {
             String[] stringArray7 = new String[3];
-            stringArray7[0] = "总览";
-            stringArray7[1] = "车手";
+            stringArray7[0] = "Overview";
+            stringArray7[1] = "Drivers";
             stringArray = stringArray7;
-            stringArray7[2] = "成绩";
+            stringArray7[2] = "Results";
         } else {
             String[] stringArray9 = new String[4];
-            stringArray9[0] = "总览";
+            stringArray9[0] = "Overview";
             stringArray9[1] = this.lineupName();
-            stringArray9[2] = "统计";
+            stringArray9[2] = "Stats";
             stringArray = stringArray9;
-            stringArray9[3] = "进程";
+            stringArray9[3] = "Events";
         }
         this.tabNames = stringArray;
         this.tabLabels = new TextView[this.tabKeys.length];
@@ -1351,7 +1352,9 @@ extends Activity {
             this.tabLabels[i] = label;
             this.tabRules[i] = underline;
         }
-        this.root.addView((View)row);
+        this.ui.gap(this.content, 6);
+        this.content.addView((View)row);
+        this.content.addView(this.ui.divider());
         this.updateTabs();
     }
 
@@ -1366,7 +1369,7 @@ extends Activity {
             this.tabLabels[i].setSelected(on);
             View item = (View)this.tabLabels[i].getParent();
             item.setSelected(on);
-            item.setContentDescription((CharSequence)(this.tabNames[i] + (on ? "，已选中" : "")));
+            item.setContentDescription((CharSequence)(this.tabNames[i] + (on ? ", selected" : "")));
         }
     }
 
@@ -1379,7 +1382,7 @@ extends Activity {
 
     private void heading(String text) {
         this.ui.gap(this.body, 16);
-        this.body.addView((View)this.ui.text(text, 15, this.ui.text, true));
+        this.body.addView((View)this.ui.text(displayText(text), 15, this.ui.text, true));
         this.ui.gap(this.body, 8);
     }
 
@@ -1389,7 +1392,7 @@ extends Activity {
             this.tables("overview");
         }
         if (!this.detail.stats.isEmpty()) {
-            this.heading("数据速览");
+            this.heading("Key stats");
             LinearLayout card = this.panel();
             this.teamNames(card);
             int statLimit = Math.min(3, this.detail.stats.size());
@@ -1397,14 +1400,9 @@ extends Activity {
                 this.stat(card, this.detail.stats.get(i), i < statLimit - 1);
             }
             this.body.addView((View)card);
-            this.ui.gap(this.body, 10);
-            this.body.addView((View)this.ui.button("全部技术统计", false, () -> {
-                this.tab = "stats";
-                this.render(false);
-            }));
         }
         if (!this.detail.events.isEmpty()) {
-            this.heading("最新进程");
+            this.heading("Latest events");
             LinearLayout timeline = this.panel();
             for (i = 0; i < Math.min(3, this.detail.events.size()); ++i) {
                 this.event(timeline, this.detail.events.get(i));
@@ -1412,7 +1410,19 @@ extends Activity {
             this.body.addView((View)timeline);
         }
         this.information();
+        this.cs2EventLink(this.body);
         this.sourceLink();
+    }
+
+    private void cs2EventLink(LinearLayout into) {
+        if (!this.match.group.equals("CS2") || !this.match.eventId.matches("csgo_tt_[0-9]+")) return;
+        if (into.findViewWithTag("cs2-tournament-overview") != null) return;
+        this.ui.gap(into, 8);
+        TextView link = this.ui.textButton("Tournament overview", () -> this.startActivity(new Intent(this, Cs2EventActivity.class)
+            .putExtra("event", this.match.eventId).putExtra("name", this.match.event)
+            .putExtra("day", this.match.day() == null ? "" : this.match.day().toString())));
+        link.setTag("cs2-tournament-overview");
+        into.addView(link);
     }
 
     private void information() {
@@ -1423,13 +1433,13 @@ extends Activity {
             if (label.equals("阵容资料版本")) continue;
             String value = DetailParsers.plain(f.value());
             if (value.isBlank()) continue;
-            facts.computeIfAbsent(label.isBlank() ? "信息" : label, k -> new ArrayList()).add(value);
+            facts.computeIfAbsent(label.isBlank() ? "Information" : label, k -> new ArrayList()).add(value);
         }
         if (facts.isEmpty() && !this.match.detail.isBlank()) {
-            facts.put("赛事", List.of(this.match.detail));
+            facts.put("Competition", List.of(this.match.detail));
         }
         if (facts.isEmpty()) return;
-        this.heading("比赛信息");
+        this.heading("Match information");
         int index = 0;
         for (Map.Entry fact : facts.entrySet()) {
             if (index++ > 0) {
@@ -1438,30 +1448,30 @@ extends Activity {
             LinearLayout row = this.ui.row();
             row.setGravity(48);
             row.setPadding(0, this.ui.dp(10.0f), 0, this.ui.dp(10.0f));
-            TextView label = this.ui.text((String)fact.getKey(), 12, this.ui.muted, false);
-            TextView value = this.ui.text(String.join((CharSequence)"\n", new LinkedHashSet((Collection)fact.getValue())), 13, this.ui.text, false);
+            TextView label = this.ui.text(displayText((String)fact.getKey()), 12, this.ui.muted, false);
+            TextView value = this.ui.text(displayText(String.join((CharSequence)"\n", new LinkedHashSet((Collection)fact.getValue()))), 13, this.ui.text, false);
             value.setLineSpacing((float)this.ui.dp(4.0f), 1.0f);
             row.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             row.addView((View)value, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 2.0f));
             card.addView((View)row);
         }
         if (index == 0) {
-            card.addView((View)this.ui.text("来源尚未提供更多比赛信息", 13, this.ui.muted, false));
+            card.addView((View)this.ui.text("The source did not provide more match information", 13, this.ui.muted, false));
         }
         this.body.addView((View)card);
     }
 
     private void sourceLink() {
         this.ui.gap(this.body, 16);
-        this.body.addView((View)this.ui.textButton("来源与更新时间", () -> Sheet.message(this, "数据来源", this.detail.source + "\n获取时间 " + DetailActivity.time(this.detail.fetched, "M月d日 HH:mm:ss") + "\n\n数据按来源发布，未提供的字段保持未知。")));
+        this.body.addView((View)this.ui.textButton("Source and update time", () -> Sheet.message(this, "Source", displayText(this.detail.source) + "\nUpdated " + DetailActivity.time(this.detail.fetched, "M/d HH:mm:ss") + "\n\nData follows the source publication; fields it does not provide remain unknown.")));
         if (!this.match.url.isBlank()) {
             this.ui.gap(this.body, 8);
-            this.body.addView((View)this.ui.textButton("打开来源页面", () -> {
+            this.body.addView((View)this.ui.textButton("Open source page", () -> {
                 try {
                     this.startActivity(new Intent("android.intent.action.VIEW", Uri.parse((String)this.match.url)));
                 }
                 catch (ActivityNotFoundException e) {
-                    Sheet.message(this, "无法打开来源", "手机没有可用的浏览器。");
+                    Sheet.message(this, "Unable to open source", "No browser is available on this device.");
                 }
             }));
         }
@@ -1473,7 +1483,7 @@ extends Activity {
             return;
         }
         if (!this.detail.stats.isEmpty()) {
-            this.heading("球队对比");
+            this.heading("Team comparison");
             LinearLayout card = this.panel();
             this.teamNames(card);
             int statCount = this.detail.stats.size();
@@ -1484,13 +1494,13 @@ extends Activity {
         }
         if (!this.tables("stats") && this.detail.stats.isEmpty()) {
             if (this.match.group.equals("CS2")) {
-                this.empty("选手数据按全场与地图分类", "在选手页比较 K/D/A、ADR、KAST 与来源 Rating。");
-                this.body.addView((View)this.ui.button("查看选手数据", false, () -> {
+                this.empty("Player data is grouped by overall and map", "Use the Players tab to compare K/D/A, ADR, KAST and source Rating.");
+                this.body.addView((View)this.ui.button("View player data", false, () -> {
                     this.tab = "lineup";
                     this.render(false);
                 }));
             } else {
-                this.empty("本场统计尚未提供", this.missing());
+                this.empty("Match statistics are not available", this.missing());
             }
         }
     }
@@ -1506,12 +1516,12 @@ extends Activity {
             }
         }
         if (teams.isEmpty()) {
-            this.empty("参赛车手尚未提供", this.missing());
+            this.empty("Drivers are not available", this.missing());
             return;
         }
-        this.body.addView((View)this.ui.text("参赛车队与车手", 15, this.ui.text, true));
+        this.body.addView((View)this.ui.text("Teams and drivers", 15, this.ui.text, true));
         this.ui.gap(this.body, 4);
-        this.body.addView((View)this.ui.text("车号与本场参赛名单", 11, this.ui.muted, false));
+        this.body.addView((View)this.ui.text("Car numbers and this session's entry list", 11, this.ui.muted, false));
         this.ui.gap(this.body, 10);
         LinearLayout left = this.ui.column();
         LinearLayout right = this.ui.column();
@@ -1542,7 +1552,7 @@ extends Activity {
                 number.setGravity(Gravity.CENTER);
                 number.setBackground((Drawable)this.ui.shape(this.ui.tonal, 8));
                 number.setPadding(0, this.ui.dp(4.0f), 0, this.ui.dp(4.0f));
-                number.setContentDescription((CharSequence)("车号 " + driver.get(1)));
+                number.setContentDescription((CharSequence)("Car number " + driver.get(1)));
                 row3.addView((View)number, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(36.0f), -2));
                 TextView driverName = this.ui.text(driver.get(0), 14, this.ui.text, true);
                 LinearLayout.LayoutParams dnp = new LinearLayout.LayoutParams(0, -2, 1.0f);
@@ -1572,7 +1582,7 @@ extends Activity {
         LinearLayout row = this.ui.row();
         row.setPadding(0, this.ui.dp(9.0f), 0, this.ui.dp(7.0f));
         TextView h = this.ui.text(stat.home(), 16, this.ui.primary, true);
-        TextView label = this.ui.text(stat.label(), 12, this.ui.muted, false);
+        TextView label = this.ui.text(this.statLabel(stat.label()), 12, this.ui.muted, false);
         TextView a = this.ui.text(stat.away(), 16, this.ui.secondary, true);
         label.setGravity(17);
         a.setGravity(0x800005);
@@ -1607,6 +1617,26 @@ extends Activity {
         catch (RuntimeException e) {
             return -1.0;
         }
+    }
+
+    private String statLabel(String label) {
+        if (this.match.group.equals("足球")) {
+            return switch (label) {
+                case "进球" -> "Goals";
+                case "助攻" -> "Assists";
+                case "抢断" -> "Tackles";
+                case "传球" -> "Passes";
+                default -> displayText(label);
+            };
+        }
+        return displayText(label);
+    }
+
+    private static String displayText(String value) {
+        if (value == null) return "";
+        return EnglishDisplay.text(value
+            .replace("英超官方 FPL（照片按姓名与出生日期匹配）", "Official Premier League FPL (photos matched by name and date of birth)")
+            .replace("英超官方 FPL (照片按姓名与出生日期匹配)", "Official Premier League FPL (photos matched by name and date of birth)"));
     }
 
     private boolean tables(String key) {
@@ -1666,7 +1696,7 @@ extends Activity {
         }
         boolean found = this.tables("events");
         if (!this.detail.events.isEmpty()) {
-            this.heading(this.match.group.equals("足球") ? "关键事件" : (this.match.group.equals("NFL") ? "得分进程" : "比赛进程"));
+            this.heading(this.match.group.equals("足球") ? "Key events" : (this.match.group.equals("NFL") ? "Scoring plays" : "Play-by-play"));
             LinearLayout timeline = this.panel();
             for (int i = 0; i < Math.min(this.eventsLimit, this.detail.events.size()); ++i) {
                 this.event(timeline, this.detail.events.get(i));
@@ -1674,13 +1704,13 @@ extends Activity {
             this.body.addView((View)timeline);
             if (this.detail.events.size() > this.eventsLimit) {
                 this.ui.gap(this.body, 12);
-                this.body.addView((View)this.ui.button("加载更多进程 · 剩余 " + (this.detail.events.size() - this.eventsLimit) + " 条", false, () -> {
+                this.body.addView((View)this.ui.button("Load more events · " + (this.detail.events.size() - this.eventsLimit) + " remaining", false, () -> {
                     this.eventsLimit += 50;
                     this.render(true);
                 }));
             }
         } else if (!found) {
-            this.empty("暂无比赛进程", this.missing());
+            this.empty("No events are available", this.missing());
         }
     }
 
@@ -1691,7 +1721,7 @@ extends Activity {
             maps.add(table.category);
         }
         if (maps.isEmpty()) {
-            this.empty("本场小局数据尚未提供", this.missing());
+            this.empty("Map data is not available for this match", this.missing());
             return;
         }
         String selected = maps.contains(this.mapFilter) ? this.mapFilter : (String)maps.iterator().next();
@@ -1701,12 +1731,13 @@ extends Activity {
         LinearLayout chips = this.ui.row();
         int index = 0;
         for (String map : maps) {
-            TextView chip = this.ui.chip(map, map.equals(selected), () -> {
+            String mapText = displayText(map);
+            TextView chip = this.ui.chip(mapText, map.equals(selected), () -> {
                 this.mapFilter = map;
                 this.render(true);
             });
             chip.setTag((Object)"cs2-map-chip");
-            chip.setContentDescription((CharSequence)(map + (map.equals(selected) ? "，已选中" : "")));
+            chip.setContentDescription((CharSequence)(mapText + (map.equals(selected) ? ", selected" : "")));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
             if (index++ > 0) {
                 params.setMarginStart(this.ui.dp(8.0f));
@@ -1736,12 +1767,12 @@ extends Activity {
         List<String> missing = this.missingMaps(maps);
         if (!missing.isEmpty()) {
             this.ui.gap(this.body, 16);
-            TextView note = this.ui.text(String.join((CharSequence)"、", missing) + " 暂无逐图数据", 12, this.ui.muted, false);
+            TextView note = this.ui.text(String.join((CharSequence)", ", missing) + " have no per-map data", 12, this.ui.muted, false);
             note.setTag((Object)"map-missing");
             this.body.addView((View)note);
         }
         if (!this.detail.events.isEmpty()) {
-            this.heading("比赛进程");
+            this.heading("Play-by-play");
             LinearLayout timeline = this.panel();
             for (int i = 0; i < Math.min(this.eventsLimit, this.detail.events.size()); ++i) {
                 this.event(timeline, this.detail.events.get(i));
@@ -1806,11 +1837,11 @@ extends Activity {
         LinearLayout row = this.ui.row();
         row.setGravity(48);
         row.setPadding(0, this.ui.dp(9.0f), 0, this.ui.dp(9.0f));
-        TextView clock = this.ui.text(event.time(), 11, this.ui.muted, true);
+        TextView clock = this.ui.text(displayText(event.time()), 11, this.ui.muted, true);
         row.addView((View)clock, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(50.0f), -2));
         LinearLayout words = this.ui.column();
-        String title = DetailParsers.plain(event.title());
-        String text = DetailParsers.plain(event.text());
+        String title = displayText(DetailParsers.plain(event.title()));
+        String text = displayText(DetailParsers.plain(event.text()));
         if (!title.isBlank()) {
             words.addView((View)this.ui.text(title, 13, this.ui.text, true));
             this.ui.gap(words, 4);
@@ -1823,19 +1854,19 @@ extends Activity {
     }
 
     private String missing() {
-        return this.match.scheduled() ? "赛前数据待发布" : "暂无数据";
+        return this.match.scheduled() ? "Pre-match data has not been published" : "No data available";
     }
 
     private void empty(String title, String message) {
         this.ui.gap(this.body, 24);
         LinearLayout card = this.panel();
-        card.addView((View)this.ui.text(title, 18, this.ui.text, true));
+        card.addView((View)this.ui.text(displayText(title), 18, this.ui.text, true));
         this.ui.gap(card, 10);
-        card.addView((View)this.ui.text(message, 14, this.ui.muted, false));
+        card.addView((View)this.ui.text(displayText(message), 14, this.ui.muted, false));
         this.body.addView((View)card);
     }
 
     private static String time(long value, String pattern) {
-        return Formats.instant(value, pattern, "尚未提供");
+        return Formats.instant(value, pattern, "Not provided");
     }
 }

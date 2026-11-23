@@ -20,9 +20,10 @@ final class DetailTableView {
         int rowMinimum=ui.dp(42*scale),headerMinimum=ui.dp((sort!=null?40:36)*scale);
         int headerTint=(ui.tonal&0x00FFFFFF)|0x55000000;
         String identity=columns.isEmpty()?"":columns.get(0);
+        boolean football=football(columns);
         LinearLayout names=ui.column(),numbers=ui.column(),labels=ui.row();labels.setGravity(Gravity.TOP);
         labels.setBackgroundColor(headerTint);
-        View nameHeader=header(columns.isEmpty()?"球员":identity,false,false,null);
+        View nameHeader=header(columns.isEmpty()?"Player":EnglishDisplay.text(identity),false,false,null);
         ((LinearLayout)nameHeader).setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
         nameHeader.setPadding(ui.dp(10),ui.dp(5),ui.dp(6),ui.dp(5));
         nameHeader.setBackgroundColor(headerTint);
@@ -33,14 +34,14 @@ final class DetailTableView {
         android.graphics.Paint textPaint=ui.text("",13,ui.text,false).getPaint();
         android.graphics.Paint labelPaint=ui.text("",11,ui.muted,true).getPaint();
         for(int i=1;i<columns.size();i++){
-            String label=columns.get(i);int index=i;boolean sortable=false;
+            String label=columns.get(i),shownLabel=column(label,football);int index=i;boolean sortable=false;
             if(sort!=null)for(DetailRows.Entry entry:entries)if(!Double.isNaN(DetailRows.number(DetailRows.cell(entry.values(),i)))){sortable=true;break;}
             boolean selected=label.equals(sorted);
             int minimum=ui.dp(label.equals("说明")?176*scale:label.matches("车队|位置|状态")||label.contains("成绩")||label.contains("差距")||label.contains("计时")?84*scale:label.matches("ADR|KAST|Rating|时间|投篮|三分|罚球|C/ATT|QBR|RTG")?50*scale:36*scale);
-            float content=labelPaint.measureText(label)+ui.dp(selected?25:14)+2;
-            for(DetailRows.Entry entry:entries){String value=DetailRows.cell(entry.values(),i);if(value.length()<=18)content=Math.max(content,textPaint.measureText(value)+ui.dp(14)+2);}
+            float content=labelPaint.measureText(shownLabel)+ui.dp(selected?25:14)+2;
+            for(DetailRows.Entry entry:entries){String value=EnglishDisplay.text(DetailRows.cell(entry.values(),i));if(value.length()<=18)content=Math.max(content,textPaint.measureText(value)+ui.dp(14)+2);}
             naturalWidths[i-1]=Math.max(minimum,(int)Math.ceil(content));
-            labels.addView(header(label,selected,descending,sortable?()->sort.accept(columns.get(index)):null),new LinearLayout.LayoutParams(naturalWidths[i-1],headerMinimum));
+            labels.addView(header(shownLabel,selected,descending,sortable?()->sort.accept(columns.get(index)):null),new LinearLayout.LayoutParams(naturalWidths[i-1],headerMinimum));
         }
         numbers.addView(labels);
         int rank=0;
@@ -49,10 +50,10 @@ final class DetailTableView {
             View name=identity(entry,++rank);identities.add(name);names.addView(name,new LinearLayout.LayoutParams(-1,rowMinimum));
             LinearLayout line=ui.row();
             for(int i=1;i<columns.size();i++){
-                String value=DetailRows.cell(entry.values(),i);boolean selected=columns.get(i).equals(sorted);int color=value.equals("—")?ui.muted:ui.text;
+                String value=DetailRows.cell(entry.values(),i),shownValue=EnglishDisplay.text(value);boolean selected=columns.get(i).equals(sorted);int color=shownValue.equals("—")?ui.muted:ui.text;
                 if(identity.equals("地图")&&(i==1||i==2)&&DetailRows.cell(entry.values(),3).equals("已结束"))color=ui.scoreColor(value,DetailRows.cell(entry.values(),i==1?2:1),true);
-                TextView number=ui.text(value,13,color,selected);if(selected)number.setBackgroundColor(ui.tonal);
-                number.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);number.setPadding(ui.dp(7),ui.dp(5),ui.dp(7),ui.dp(5));number.setContentDescription(columns.get(i)+" "+value);
+                TextView number=ui.text(shownValue,13,color,selected);if(selected)number.setBackgroundColor(ui.tonal);
+                number.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);number.setPadding(ui.dp(7),ui.dp(5),ui.dp(7),ui.dp(5));number.setContentDescription(column(columns.get(i),football)+" "+shownValue);
                 line.addView(number,new LinearLayout.LayoutParams(naturalWidths[i-1],rowMinimum));
             }
             metricRows.add(line);numbers.addView(line);
@@ -100,19 +101,29 @@ final class DetailTableView {
         return shell;
     }
     private int naturalHeight(View view,int width){view.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1,width),View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));return view.getMeasuredHeight();}
-    private View header(String label,boolean selected,boolean descending,Runnable action){LinearLayout box=ui.row();box.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);box.setPadding(ui.dp(7),ui.dp(5),ui.dp(7),ui.dp(5));int bg=selected?ui.tonal:Color.TRANSPARENT;box.setBackgroundColor(bg);TextView text=ui.text(label,11,selected?ui.text:ui.muted,true);text.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);box.addView(text,new LinearLayout.LayoutParams(-2,-2));if(selected){Ui.Icon arrow=new Ui.Icon(ui.c,"chevron",ui.text);arrow.setRotation(descending?90:-90);LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(ui.dp(9),ui.dp(9));ap.setMarginStart(ui.dp(2));box.addView(arrow,ap);}if(action!=null){ui.clickable(box,bg,0);box.setFocusable(true);box.setContentDescription(label+(selected?descending?"，降序":"，升序":"，点击排序"));box.setOnClickListener(v->action.run());}return box;}
+    private View header(String label,boolean selected,boolean descending,Runnable action){LinearLayout box=ui.row();box.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);box.setPadding(ui.dp(7),ui.dp(5),ui.dp(7),ui.dp(5));int bg=selected?ui.tonal:Color.TRANSPARENT;box.setBackgroundColor(bg);TextView text=ui.text(label,11,selected?ui.text:ui.muted,true);text.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);box.addView(text,new LinearLayout.LayoutParams(-2,-2));if(selected){Ui.Icon arrow=new Ui.Icon(ui.c,"chevron",ui.text);arrow.setRotation(descending?90:-90);LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(ui.dp(9),ui.dp(9));ap.setMarginStart(ui.dp(2));box.addView(arrow,ap);}if(action!=null){ui.clickable(box,bg,0);box.setFocusable(true);box.setContentDescription(label+(selected?descending?", descending":", ascending":", tap to sort"));box.setOnClickListener(v->action.run());}return box;}
     private View identity(DetailRows.Entry entry,int rank){
         LinearLayout row=ui.row();row.setPadding(ui.dp(10),ui.dp(5),ui.dp(6),ui.dp(5));MatchDetail.Person p=entry.person();
         boolean compact=entry.table().columns.get(0).equals("选手");
         if(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())){FrameLayout portrait=new FrameLayout(ui.c);View avatar=p.photo().startsWith("https://resources.premierleague.com/")?Logos.portrait(ui,p.photo(),p.name(),28,()->new FootballProfiles(ui.c).backup(p)):Logos.artwork(ui,p.photo(),p.name(),28);portrait.addView(avatar);if((nba||!p.photo().isBlank())&&!p.teamLogo().isBlank())portrait.addView(Logos.view(ui,p.teamLogo(),p.team(),13),new FrameLayout.LayoutParams(ui.dp(13),ui.dp(13),Gravity.BOTTOM|Gravity.END));if(nba)portrait.setTag("nba-player-portrait");row.addView(portrait,new LinearLayout.LayoutParams(ui.dp(28),ui.dp(28)));}
         LinearLayout words=ui.column();LinearLayout.LayoutParams wp=new LinearLayout.LayoutParams(0,-2,1);wp.setMarginStart(!compact&&p!=null&&(!p.photo().isBlank()||!p.teamLogo().isBlank())?ui.dp(8):0);String name=p==null?DetailRows.cell(entry.values(),0):entry.table().columns.get(0).equals("球员")?p.shortName().matches("^\\p{L}\\..*|^[A-Z]{2}\\..*")?p.shortName():DetailFormat.shortName(p.name()):p.name();TextView title=ui.text(name,12,ui.text,true);words.addView(title);
         boolean nbaPlayer=nba&&p!=null&&entry.table().category.equals("球员");
-        String sub=p==null?"":String.join(" · ",java.util.stream.Stream.of(p.jersey(),p.position(),nba?"":p.absent()?"未出场":p.starter()?"首发":showTeam?p.team():"").filter(s->!s.isBlank()).toArray(String[]::new));
+        String sub=p==null?"":String.join(" · ",java.util.stream.Stream.of(p.jersey(),EnglishDisplay.text(p.position()),nba?"":p.absent()?"Did not play":p.starter()?"Starter":showTeam?p.team():"").filter(s->!s.isBlank()).toArray(String[]::new));
         if(nbaPlayer){title.setTag("nba-player-name");row.setTag("nba-player-row");ui.gap(words,2);words.addView(nbaCaption(p,sub));}
         else if(!sub.isBlank()){ui.gap(words,2);TextView caption=ui.text(sub,11,ui.muted,false);words.addView(caption);}row.addView(words,wp);
-        ui.clickable(row,Color.TRANSPARENT,0);row.setFocusable(true);row.setContentDescription(p==null?DetailRows.cell(entry.values(),0):p.name()+"，"+(nba?p.team()+"，":"")+(nbaPlayer?role(p)+"，":"")+sub);row.setOnClickListener(v->{StringBuilder detail=new StringBuilder();if(p!=null){if(!p.team().isBlank())detail.append(p.team()).append('\n');if(!p.jersey().isBlank())detail.append("球衣号  ").append(p.jersey()).append('\n');if(!p.position().isBlank())detail.append("位置  ").append(p.position()).append('\n');if(nbaPlayer||p.absent()||p.starter())detail.append(role(p)).append('\n');detail.append('\n');}for(int i=1;i<entry.table().columns.size();i++)detail.append(entry.table().columns.get(i)).append("  ").append(DetailRows.cell(entry.values(),i)).append('\n');Sheet.message((Activity)ui.c,p==null?DetailRows.cell(entry.values(),0):p.name(),detail.toString());});return row;
+        ui.clickable(row,Color.TRANSPARENT,0);row.setFocusable(true);row.setContentDescription(EnglishDisplay.text(p==null?DetailRows.cell(entry.values(),0):p.name()+", "+(nba?p.team()+", ":"")+(nbaPlayer?role(p)+", ":"")+sub));row.setOnClickListener(v->{StringBuilder detail=new StringBuilder();if(p!=null){if(!p.team().isBlank())detail.append(p.team()).append('\n');if(!p.jersey().isBlank())detail.append("Jersey  ").append(p.jersey()).append('\n');if(!p.position().isBlank())detail.append("Position  ").append(EnglishDisplay.text(p.position())).append('\n');if(nbaPlayer||p.absent()||p.starter())detail.append(role(p)).append('\n');detail.append('\n');}boolean football=football(entry.table().columns);for(int i=1;i<entry.table().columns.size();i++)detail.append(column(entry.table().columns.get(i),football)).append("  ").append(EnglishDisplay.text(DetailRows.cell(entry.values(),i))).append('\n');Sheet.message((Activity)ui.c,p==null?EnglishDisplay.text(DetailRows.cell(entry.values(),0)):p.name(),detail.toString());});return row;
     }
-    private String role(MatchDetail.Person person){return person.absent()?"未出场":person.starter()?"首发":"替补";}
+    private String role(MatchDetail.Person person){return person.absent()?"Did not play":person.starter()?"Starter":"Bench";}
+    private static boolean football(List<String> columns){return columns.contains("评分")&&columns.contains("换人");}
+    private static String column(String key,boolean football){
+        if(football){
+            if(key.equals("进球"))return "Goals";
+            if(key.equals("助攻"))return "Assists";
+            if(key.equals("抢断"))return "Tackles";
+            if(key.equals("传球"))return "Passes";
+        }
+        return EnglishDisplay.text(key);
+    }
     private View nbaCaption(MatchDetail.Person person,String metadata){
         String label=role(person);boolean starter=person.starter()&&!person.absent();
         TextView badge=ui.text(label,11,starter?ui.onPrimary:ui.muted,true);badge.setTag("nba-player-role");badge.setPadding(ui.dp(5),ui.dp(1),ui.dp(5),ui.dp(1));badge.setBackground(ui.shape(starter?ui.primary:ui.tonal,4));

@@ -51,14 +51,14 @@ final class ResultNotify {
     static NotificationManager ensureChannel(Context context) {
         NotificationManager nm = context.getSystemService(NotificationManager.class);
         if (nm == null) return null;
-        NotificationChannel channel = new NotificationChannel(CHANNEL, "比赛结果", NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("已订阅比赛结束时推送最终比分与赛果");
+        NotificationChannel channel = new NotificationChannel(CHANNEL, "Match results", NotificationManager.IMPORTANCE_HIGH);
+        channel.setDescription("Final scores and results for subscribed matches");
         nm.createNotificationChannel(channel);
         return nm;
     }
 
     static String calendarTitle(Competition c, Match m) {
-        String prefix = (c == null ? m.group : c.name) + " · ";
+        String prefix = (c == null ? groupLabel(m == null ? "" : m.group) : competitionLabel(c)) + " · ";
         if (m != null && m.finalised()) {
             if (m.hasScore() && !m.home.isBlank() && !m.away.isBlank()) {
                 return prefix + m.home + " " + m.displayScore(true) + " - " + m.displayScore(false) + " " + m.away;
@@ -71,8 +71,8 @@ final class ResultNotify {
     }
 
     static String title(Match m) {
-        String label = MatchLabel.of(m);
-        return (label.isBlank() ? m.group : label) + " · 比赛已结束";
+        String label = matchLabel(m);
+        return (label.isBlank() ? groupLabel(m.group) : label) + " · Match finished";
     }
 
     static String body(Match m) {
@@ -85,13 +85,35 @@ final class ResultNotify {
             String main = m.hasScore()
                 ? m.home + " " + m.displayScore(true) + " : " + m.displayScore(false) + " " + m.away
                 : m.displayTitle();
-            return extras.isEmpty() ? main : main + "（" + String.join(" · ", extras) + "）";
+            return extras.isEmpty() ? main : main + " (" + String.join(" · ", extras) + ")";
         }
         if (!extras.isEmpty()) {
             return m.displayTitle() + " · " + String.join(" / ", extras.subList(0, Math.min(3, extras.size())));
         }
         String status = !m.detail.isBlank() ? m.detail : m.status;
         return status.isBlank() ? m.displayTitle() : m.displayTitle() + " · " + status;
+    }
+
+    static String competitionLabel(Competition competition) {
+        if (competition == null) return "";
+        return switch (competition.id) {
+            case "epl" -> "Premier League";
+            case "ucl" -> "Champions League";
+            case "national" -> "National teams";
+            default -> competition.name;
+        };
+    }
+
+    private static String groupLabel(String group) {
+        return "足球".equals(group) ? "Football" : group;
+    }
+
+    private static String matchLabel(Match match) {
+        String label = MatchLabel.of(match);
+        Competition competition = match == null ? null : Competition.find(match.league);
+        if (competition != null && label.equals(competition.name)) return competitionLabel(competition);
+        if (match != null && label.equals(match.group)) return groupLabel(match.group);
+        return label;
     }
 
     static boolean notifyFinished(Context context, Match m) {
@@ -126,10 +148,10 @@ final class ResultNotify {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             PendingIntent open = PendingIntent.getActivity(
                 app, id, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            String content = body(m);
+            String content = EnglishDisplay.text(body(m));
             Notification notification = new Notification.Builder(app, CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_score)
-                .setContentTitle(title(m))
+                .setContentTitle(EnglishDisplay.text(title(m)))
                 .setContentText(content)
                 .setStyle(new Notification.BigTextStyle().bigText(content))
                 .setContentIntent(open)

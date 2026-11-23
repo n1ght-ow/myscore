@@ -123,11 +123,16 @@ final class Ui {
         @Override protected void onScrollChanged(int x,int y,int oldX,int oldY){super.onScrollChanged(x,y,oldX,oldY);lastScroll=android.os.SystemClock.uptimeMillis();}
         @Override protected void onDetachedFromWindow(){fingerDown=false;super.onDetachedFromWindow();}
     }
+    private static class DisplayText extends TextView {
+        DisplayText(Context context) { super(context); }
+        @Override public void setText(CharSequence value, BufferType type) { super.setText(EnglishDisplay.text(value), type); }
+        @Override public void setContentDescription(CharSequence value) { super.setContentDescription(value == null ? null : EnglishDisplay.text(value)); }
+    }
     TextView text(String s,int sp,int color,boolean bold) {
         // AOSP JSONObject.optString turns explicit JSON null into "null"; keep that sentinel
         // out of the rendered UI even if a parser missed it.
         if ("null".equals(s)) s = "";
-        TextView v=new TextView(c);v.setText(s);v.setTextSize(sp);v.setTextColor(color);
+        TextView v=new DisplayText(c);v.setText(s);v.setTextSize(sp);v.setTextColor(color);
         v.setFontFeatureSettings("tnum");v.setIncludeFontPadding(true);v.setFallbackLineSpacing(true);
         v.setTypeface(bold?medium:regular);
         v.setLineSpacing(dp(2),1f);
@@ -153,7 +158,7 @@ final class Ui {
             this.home=home;this.away=away;this.available=available;single=available?home+"–"+away:"VS";
             int next=available?maxSp:Math.min(24,maxSp);
             ceiling=next;
-            setContentDescription(available?"比分 "+home+" 比 "+away:"来源尚未提供比分");
+            setContentDescription(available?"Score: "+home+" to "+away:"Score not available");
             if(!single.contentEquals(getText()))setText(single);
         }
         void setResultColors(int home,int away){if(homeColor==home&&awayColor==away&&getText() instanceof android.text.Spanned)return;homeColor=home;awayColor=away;paintScore(getText().toString());}
@@ -195,21 +200,22 @@ final class Ui {
     }
     /** Text tabs share one underline and grow vertically with system font size. */
     TextView tab(String label,boolean selected,Runnable action) {
-        TextView tab=new TextView(c){
+        String display=EnglishDisplay.text(label);
+        TextView tab=new DisplayText(c){
             final Paint ink=new Paint(Paint.ANTI_ALIAS_FLAG);
             @Override protected void onDraw(Canvas canvas){
                 super.onDraw(canvas);
                 if(isSelected()){ink.setColor(text);float inset=dp(14);canvas.drawRoundRect(inset,getHeight()-dp(2),getWidth()-inset,getHeight(),dp(1),dp(1),ink);}
             }
         };
-        tab.setText(label);tab.setTextSize(14);tab.setTextColor(selected?text:muted);tab.setTypeface(selected?medium:regular);
+        tab.setText(display);tab.setTextSize(14);tab.setTextColor(selected?text:muted);tab.setTypeface(selected?medium:regular);
         tab.setIncludeFontPadding(true);tab.setFallbackLineSpacing(true);tab.setGravity(Gravity.CENTER);
         tab.setMinHeight(dp(48));tab.setPadding(dp(14),dp(10),dp(14),dp(12));
         // Reserve the wider weight so changing the selection cannot shift nearby tabs.
         Paint measure=new Paint(tab.getPaint());
-        measure.setTypeface(regular);float regularWidth=measure.measureText(label);
+        measure.setTypeface(regular);float regularWidth=measure.measureText(display);
         measure.setTypeface(medium);
-        tab.setMinWidth((int)Math.ceil(Math.max(regularWidth,measure.measureText(label)))+dp(28));
+        tab.setMinWidth((int)Math.ceil(Math.max(regularWidth,measure.measureText(display)))+dp(28));
         clickable(tab,Color.TRANSPARENT,0);tab.setSelected(selected);tab.setFocusable(true);tab.setOnClickListener(v->action.run());return tab;
     }
     void selectTab(TextView tab,boolean selected) {
@@ -247,8 +253,8 @@ final class Ui {
                 shown=next;
                 play.set(link.kind.icon,muted);
             }
-            setContentDescription(link.provider+"，"+link.title+"，"+link.kind.label+"，在外部应用打开");
-            setTooltipText(link.shortProvider+" · "+link.kind.label);
+            setContentDescription(EnglishDisplay.watchTitle(link)+", opens in "+EnglishDisplay.text(link.provider));
+            setTooltipText(EnglishDisplay.text(link.shortProvider)+" · "+EnglishDisplay.text(link.kind.label));
             setOnClickListener(v->action.run());setVisibility(VISIBLE);
         }
     }
@@ -285,8 +291,8 @@ final class Ui {
             state.setText(link.kind.label);
             state.setTextColor(live&&link.kind!=WatchLinks.Kind.PENDING&&link.kind!=WatchLinks.Kind.REPLAY?primary:muted);
             play.set(link.kind.icon,muted);
-            setContentDescription(link.title+"。"+link.note+"。通过"+link.provider+"在外部应用打开。");
-            setTooltipText(link.title);
+            setContentDescription(EnglishDisplay.watchTitle(link)+". Open with "+EnglishDisplay.text(link.provider)+".");
+            setTooltipText(EnglishDisplay.watchTitle(link));
             setOnClickListener(v->action.run());
             setVisibility(VISIBLE);
         }
@@ -313,7 +319,7 @@ final class Ui {
         }
         void bind(ScoreRow row) {
             title.setText(row.title);message.setText(row.message);
-            action.setText(row.text==null?"刷新赛程":row.text);
+            action.setText(row.text==null?"Refresh scores":row.text);
         }
     }
     View divider(){View d=new View(c);d.setBackgroundColor(line);d.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(1)));return d;}
@@ -329,8 +335,9 @@ final class Ui {
             addView(caption,new LinearLayout.LayoutParams(-1,-2));
         }
         void bind(String start,String provenance){
-            if(!start.contentEquals(time.getText()))time.setText(start);
-            if(!provenance.contentEquals(caption.getText()))caption.setText(provenance);
+            String shownTime=EnglishDisplay.text(start), shownSource=EnglishDisplay.text(provenance);
+            if(!shownTime.contentEquals(time.getText()))time.setText(shownTime);
+            if(!shownSource.contentEquals(caption.getText()))caption.setText(shownSource);
             caption.setVisibility(provenance.isBlank()?GONE:VISIBLE);
         }
     }

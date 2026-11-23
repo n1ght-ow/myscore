@@ -51,7 +51,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
                 text.setPadding(ui.dp(4),ui.dp(12),0,ui.dp(6));
             }
             text.setText(row.title);
-            text.setTextColor(row.title.startsWith("进行中")?ui.primary:ui.text);
+            text.setTextColor(row.title.startsWith("Live")?ui.primary:ui.text);
             return text;
         }
         if(row.type==TeamScheduleRow.NOTE) {
@@ -142,11 +142,11 @@ final class TeamScheduleAdapter extends BaseAdapter {
 
         void bind(TeamScheduleRow value) {
             row=value;
-            text(date,value.date);
-            text(state,value.state);
+            text(date,value.displayDate());
+            text(state,value.displayState());
             state.setTextColor(value.match.live()?ui.primary:value.match.cancelled()||value.match.state.equals("delayed")?ui.error:ui.muted);
-            text(opponent,value.opponent);
-            text(detail,value.side.isEmpty()?value.detail:value.side+" · "+value.detail);
+            text(opponent,value.displayOpponent());
+            text(detail,value.side.isEmpty()?value.displayDetail():value.displaySide()+" · "+value.displayDetail());
             boolean scored=!value.score.isEmpty();
             numbers.setVisibility(scored||!value.result.isEmpty()?View.VISIBLE:View.GONE);
             String own=value.match.displayScore(value.home),other=value.match.displayScore(!value.home);
@@ -157,15 +157,17 @@ final class TeamScheduleAdapter extends BaseAdapter {
             int actionWidth=scored?scoreWidth:ui.dp(48);
             if(action.getLayoutParams().width!=actionWidth){action.getLayoutParams().width=actionWidth;action.requestLayout();}
             action.setEnabled(!host.isBusy());action.setAlpha(host.isBusy()?0.5f:subscribed?1f:Ui.ACTION_ICON_ALPHA);
-            foot.bind(value.time,value.match.source);
+            foot.bind(value.displayTime(),value.match.source);
             calendar.set(subscribed?"calendar-check":"calendar-add",subscribed?ui.primary:ui.muted);
-            action.setContentDescription((subscribed?"取消订阅":"订阅")+"对阵"+value.opponent+"的比赛");
+            action.setContentDescription((subscribed?"Remove match against ":"Add match against ")+value.displayOpponent()+(subscribed?" from calendar":" to calendar"));
             score.setVisibility(scored?View.VISIBLE:View.GONE);
-            text(result,value.result);
+            text(result,value.displayResult());
             result.setVisibility(value.result.isEmpty()?View.GONE:View.VISIBLE);
             result.setTextColor("胜".equals(value.result)?ui.primary:"平".equals(value.result)?ui.muted:ui.error);
             Logos.bind(crest,value.home?value.match.awayLogo:value.match.homeLogo,value.opponent);
-            card.setContentDescription(value.date+" "+value.time+"，"+(value.side.isEmpty()?"":value.side+"，")+"对阵"+value.opponent+"，"+value.state+(scored?"，比分 "+value.score:""));
+            card.setContentDescription(value.displayDate()+", "+value.displayTime()
+                +(value.side.isEmpty()?"":", "+value.displaySide())+", vs "+value.displayOpponent()
+                +", "+value.displayState()+(scored?", score "+value.score:""));
         }
     }
 }

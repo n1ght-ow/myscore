@@ -25,12 +25,12 @@ public final class Rules {
 
     public static String stateLabel(String state) {
         return switch(state) {
-            case "live" -> "进行中";
-            case "scheduled" -> "未开始";
-            case "final" -> "已结束";
-            case "cancelled" -> "已取消";
-            case "delayed" -> "延期 / 暂停";
-            default -> "状态待确认";
+            case "live" -> "Live";
+            case "scheduled" -> "Upcoming";
+            case "final" -> "Final";
+            case "cancelled" -> "Cancelled";
+            case "delayed" -> "Delayed / Suspended";
+            default -> "Status pending";
         };
     }
 }

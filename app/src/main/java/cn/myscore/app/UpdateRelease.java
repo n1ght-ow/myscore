@@ -16,28 +16,31 @@ final class UpdateRelease {
     static final String LATEST_API="https://api.github.com/repos/n1ght-ow/myscore/releases/latest";
     static final String LATEST_WEB=REPOSITORY+"/releases/latest";
     static final long MAX_BYTES=100L*1024*1024;
+    static final class PermanentUpdateException extends java.io.InterruptedIOException {
+        PermanentUpdateException(String message){super(message);}
+    }
     final String version,url,assetUrl,sha256,notes;
     final long size;
     private UpdateRelease(String version,String url,String assetUrl,String digest,long size,String notes)throws IOException {
         parts(version);
-        if(!url.equals(REPOSITORY+"/releases/download/v"+version+"/MyScore-"+version+".apk"))throw new IOException("更新文件地址不属于 N1ghtScore 发布渠道");
-        if(!assetUrl.isEmpty()&&!assetUrl.matches("https://api\\.github\\.com/repos/n1ght-ow/myscore/releases/assets/[1-9][0-9]{0,18}"))throw new IOException("更新附件接口不属于 N1ghtScore 发布渠道");
-        if(!digest.matches("sha256:[a-fA-F0-9]{64}"))throw new IOException("发布文件缺少有效的校验信息，请稍后重试");
-        if(size<=0||size>MAX_BYTES)throw new IOException("更新文件大小异常");
+        if(!url.equals(REPOSITORY+"/releases/download/v"+version+"/MyScore-"+version+".apk"))throw new PermanentUpdateException("Update file address is not part of the N1ghtScore release channel");
+        if(!assetUrl.isEmpty()&&!assetUrl.matches("https://api\\.github\\.com/repos/n1ght-ow/myscore/releases/assets/[1-9][0-9]{0,18}"))throw new PermanentUpdateException("Update asset endpoint is not part of the N1ghtScore release channel");
+        if(!digest.matches("sha256:[a-fA-F0-9]{64}"))throw new PermanentUpdateException("Release is missing valid checksum information. Try again later");
+        if(size<=0||size>MAX_BYTES)throw new PermanentUpdateException("Update file size is invalid");
         this.version=version;this.url=url;this.assetUrl=assetUrl;this.sha256=digest.substring(7).toLowerCase(Locale.ROOT);this.size=size;
         this.notes=notes==null?"":notes.substring(0,Math.min(notes.length(),8000));
     }
     static UpdateRelease parse(JSONObject root)throws IOException {
-        if(root.optBoolean("draft")||root.optBoolean("prerelease"))throw new IOException("当前没有可用的正式更新");
+        if(root.optBoolean("draft")||root.optBoolean("prerelease"))throw new PermanentUpdateException("No stable update is currently available");
         String tag=root.optString("tag_name");
-        if(!tag.startsWith("v"))throw new IOException("无法识别发布版本");
+        if(!tag.startsWith("v"))throw new PermanentUpdateException("Could not recognize the release version");
         String version=tag.substring(1);parts(version);JSONArray assets=root.optJSONArray("assets");
         if(assets!=null)for(int i=0;i<assets.length();i++){
             JSONObject asset=assets.optJSONObject(i);
             if(asset!=null&&asset.optString("name").equals("MyScore-"+version+".apk")&&asset.optString("state").equals("uploaded"))
                 return new UpdateRelease(version,asset.optString("browser_download_url"),asset.optString("url"),asset.optString("digest"),asset.optLong("size"),root.optString("body"));
         }
-        throw new IOException("新版本尚未上传安装包，请稍后重试");
+        throw new PermanentUpdateException("The new version does not have an uploaded package yet. Try again later");
     }
     static UpdateRelease fromWeb(String version,String expandedAssetsHtml,String sha256SumsText,long exactSize,String notes)throws IOException {
         parts(version);
@@ -59,7 +62,7 @@ final class UpdateRelease {
             Matcher sums=Pattern.compile("(?m)^([a-fA-F0-9]{64})\\s+\\*?(?:\\./)?"+Pattern.quote(apkName)+"\\s*$").matcher(sha256SumsText);
             if(sums.find())digest="sha256:"+sums.group(1);
         }
-        if(digest.isEmpty())throw new IOException("新版本尚未上传完整校验信息，请稍后重试");
+        if(digest.isEmpty())throw new PermanentUpdateException("The new version does not have complete checksum information yet. Try again later");
         return new UpdateRelease(version,REPOSITORY+"/releases/download/v"+version+"/"+apkName,"",digest,exactSize,notes);
     }
     static UpdateRelease restore(String json)throws Exception {
@@ -78,14 +81,14 @@ final class UpdateRelease {
         int[] a=parts(left),b=parts(right);for(int i=0;i<3;i++){int difference=Integer.compare(a[i],b[i]);if(difference!=0)return difference;}return 0;
     }
     private static int[] parts(String value)throws IOException {
-        if(value==null||!value.matches("(?:0|[1-9][0-9]{0,3})\\.(?:0|[1-9][0-9]{0,3})(?:\\.(?:0|[1-9][0-9]{0,3}))?"))throw new IOException("无法识别发布版本");
+        if(value==null||!value.matches("(?:0|[1-9][0-9]{0,3})\\.(?:0|[1-9][0-9]{0,3})(?:\\.(?:0|[1-9][0-9]{0,3}))?"))throw new PermanentUpdateException("Could not recognize the release version");
         String[] tokens=value.split("\\.");return new int[]{Integer.parseInt(tokens[0]),Integer.parseInt(tokens[1]),tokens.length==3?Integer.parseInt(tokens[2]):0};
     }
     void verifyFile(File file)throws Exception {
-        if(!file.isFile()||file.length()!=size)throw new IOException("安装包不完整，请重新下载");
+        if(!file.isFile()||file.length()!=size)throw new PermanentUpdateException("The update package is incomplete. Download it again");
         MessageDigest digest=MessageDigest.getInstance("SHA-256");long total=0;
-        try(FileInputStream input=new FileInputStream(file)){byte[] buffer=new byte[32768];int count;while((count=input.read(buffer))!=-1){total+=count;if(total>size)throw new IOException("安装包大小异常");digest.update(buffer,0,count);}}
+        try(FileInputStream input=new FileInputStream(file)){byte[] buffer=new byte[32768];int count;while((count=input.read(buffer))!=-1){total+=count;if(total>size)throw new PermanentUpdateException("Update package size is invalid");digest.update(buffer,0,count);}}
         StringBuilder actual=new StringBuilder();for(byte value:digest.digest())actual.append(String.format(Locale.ROOT,"%02x",value));
-        if(total!=size||!sha256.equals(actual.toString()))throw new IOException("安装包校验未通过，请重新下载");
+        if(total!=size||!sha256.equals(actual.toString()))throw new PermanentUpdateException("Update package checksum verification failed. Download it again");
     }
 }

@@ -78,7 +78,7 @@ final class PadScoreAdapter extends BaseAdapter {
             case ScoreRow.SECTION: {
                 TextView text=(TextView)convertView;
                 if(text==null){text=ui.text("",13,ui.text,true);text.setPadding(ui.dp(4),ui.dp(12),0,ui.dp(6));text.setLetterSpacing(-0.01f);}
-                text.setText(row.text);text.setTextColor(row.text.startsWith("进行中")?ui.primary:ui.text);return text;
+                text.setText(row.text);text.setTextColor(row.text.startsWith("Live")?ui.primary:ui.text);return text;
             }
             case ScoreRow.FAILURE: {
                 TextView banner=(TextView)convertView;
@@ -137,13 +137,13 @@ final class PadScoreAdapter extends BaseAdapter {
         void bind(Match value){
             match=value;
             boolean active=value.id.equals(selectedId);
-            time.setText(value.timeConfirmed?value.time():"待定");
-            state.setText(Rules.stateLabel(value.state));state.setTextColor(value.live()?ui.primary:ui.muted);
-            title.setText(value.displayTitle());
-            provenance.setText(value.source+" · "+updated(value));
+            time.setText(value.timeConfirmed?value.time():"Time TBD");
+            state.setText(EnglishDisplay.text(Rules.stateLabel(value.state)));state.setTextColor(value.live()?ui.primary:ui.muted);
+            title.setText(EnglishDisplay.text(value.displayTitle()));
+            provenance.setText(EnglishDisplay.text(value.source)+" · "+updated(value));
             selected(card,active);
             selectedMark.setVisibility(active?View.VISIBLE:View.INVISIBLE);
-            root.setContentDescription(value.displayTitle()+"，"+state.getText()+"，"+provenance.getText()+(active?"，已选中":""));
+            root.setContentDescription(EnglishDisplay.text(value.displayTitle())+", "+state.getText()+", "+provenance.getText()+(active?", selected":""));
         }
     }
 
@@ -209,18 +209,14 @@ final class PadScoreAdapter extends BaseAdapter {
             root.addView(card);
             if(listOnly){
                 // One fixture occupies one ledger row: 72dp clock + flexible teams + 48dp actions.
-                // The header holds competition and provenance, without another enclosing card.
                 root.setPadding(0,0,0,0);card.setPadding(ui.dp(14),ui.dp(16),ui.dp(10),ui.dp(16));
-                meta.removeView(clock);footer.removeView(provenance);
-                provenance.setTextSize(11);provenance.setGravity(Gravity.END);
-                meta.addView(provenance,new LinearLayout.LayoutParams(-2,-2));
+                meta.removeView(clock);
                 card.removeView(homeRow);card.removeView(awayRow);card.removeView(footer);
                 card.removeView(footGap);card.removeView(footRule);
                 LinearLayout teams=ui.column();teams.addView(homeRow);teams.addView(awayRow);
                 LinearLayout fixture=ui.row();fixture.setGravity(Gravity.CENTER_VERTICAL);
                 fixture.addView(clock,new LinearLayout.LayoutParams(ui.dp(72*Math.max(1f,ui.c.getResources().getConfiguration().fontScale)),-2));
                 fixture.addView(teams,new LinearLayout.LayoutParams(0,-2,1));
-                footer.addView(new View(ui.c),0,new LinearLayout.LayoutParams(0,1,1));
                 teams.addView(footer);card.addView(fixture);
                 time.setTextSize(16);state.setTextSize(11);home.setTextSize(16);away.setTextSize(16);
                 root.addView(ui.divider());
@@ -230,24 +226,25 @@ final class PadScoreAdapter extends BaseAdapter {
         void bind(Match value){
             match=value;
             boolean active=value.id.equals(selectedId);
-            time.setText(value.timeConfirmed?value.time():"待定");
-            state.setText(value.live()&&!value.status.isBlank()?value.status:Rules.stateLabel(value.state));
+            time.setText(value.timeConfirmed?value.time():"Time TBD");
+            state.setText(EnglishDisplay.text(value.live()&&!value.status.isBlank()?value.status:Rules.stateLabel(value.state)));
             state.setTextColor(value.live()?ui.primary:value.cancelled()?ui.error:ui.muted);
-            league.setText(MatchLabel.of(value));
-            home.setText(value.home);away.setText(value.away);
+            league.setText(EnglishDisplay.text(MatchLabel.of(value)));
+            home.setText(EnglishDisplay.text(value.home));away.setText(EnglishDisplay.text(value.away));
             homeScore.setText(value.displayScore(true));awayScore.setText(value.displayScore(false));
             homeScore.setTextColor(ui.scoreColor(value,true));awayScore.setTextColor(ui.scoreColor(value,false));
-            provenance.setText(value.source+" · "+updated(value));
+            provenance.setText(EnglishDisplay.text(value.source)+" · "+updated(value));
             selected(card,active);
             selectedMark.setVisibility(listOnly?View.GONE:active?View.VISIBLE:View.INVISIBLE);
             bindTeam(homeSlot,value,true);bindTeam(awaySlot,value,false);
             WatchLinks.Link link=host.watchLink(value);
             watch.bind(link,value.live(),()->host.openWatch(value));
+            watch.setContentDescription(watchDescription(link));
             int scoreWidth=ui.scoreColumnWidth(21,value);
             homeScore.setMinWidth(scoreWidth);awayScore.setMinWidth(scoreWidth);
             ui.alignFixtureActions(calendar,watch,scoreWidth);
             bindCalendar(value,active);
-            card.setContentDescription(value.displayTitle()+"，"+state.getText()+"，"+provenance.getText()+(active?"，已选中":""));
+            card.setContentDescription(EnglishDisplay.text(value.displayTitle())+", "+state.getText()+", "+provenance.getText()+(active?", selected":""));
         }
 
         private void bindTeam(FrameLayout slot,Match m,boolean home){
@@ -256,7 +253,7 @@ final class PadScoreAdapter extends BaseAdapter {
             Logos.bind(crest,home?m.homeLogo:m.awayLogo,name);
             boolean available=id!=null&&!id.isBlank();
             slot.setClickable(available);slot.setFocusable(available);
-            slot.setContentDescription(available?"查看 "+name+" 的赛程":null);
+            slot.setContentDescription(available?"View "+EnglishDisplay.text(name)+" schedule":null);
             slot.setOnClickListener(available?v->host.openTeam(m,home):null);
         }
 
@@ -266,7 +263,8 @@ final class PadScoreAdapter extends BaseAdapter {
             calendar.setVisibility(canSubscribe?View.VISIBLE:View.GONE);
             calendar.setSelected(subscribed);calendar.setAlpha(subscribed?1f:Ui.ACTION_ICON_ALPHA);
             calendarIcon.set(subscribed?"calendar-check":"calendar-add",subscribed?ui.primary:ui.muted);
-            calendar.setContentDescription(subscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
+            String match=EnglishDisplay.text(m.displayTitle());
+            calendar.setContentDescription(subscribed?"Unsubscribe from "+match+"; 5-minute reminder":canSubscribe?"Subscribe to "+match+"; 5-minute reminder":match+" has started or finished and cannot be subscribed to.");
             calendar.setOnClickListener(v->host.toggleSubscription(m));
         }
     }
@@ -279,6 +277,13 @@ final class PadScoreAdapter extends BaseAdapter {
     }
 
     private static String updated(Match m){
-        return Formats.updated(m.updated);
+        return m.updated>0L?"Updated "+Formats.instant(m.updated,"HH:mm",""):"Update time unknown";
+    }
+
+    private static String watchDescription(WatchLinks.Link link){
+        if(link==null)return "";
+        String note=EnglishDisplay.text(link.note);
+        return EnglishDisplay.text(link.title)+". "+EnglishDisplay.text(link.kind.label)
+            +(note.isBlank()?"":" · "+note)+". Opens in "+EnglishDisplay.text(link.provider)+".";
     }
 }

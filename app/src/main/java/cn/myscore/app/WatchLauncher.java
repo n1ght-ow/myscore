@@ -27,17 +27,17 @@ final class WatchLauncher {
             return;
         }
         opening = true;
-        Toast.makeText(activity, "正在查找本场比赛…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(activity, "Looking for this match…", Toast.LENGTH_SHORT).show();
         watches.resolveForOpen(match, link -> {
             opening = false;
             if (activity.isFinishing() || activity.isDestroyed()
                 || !activity.getWindow().getDecorView().hasWindowFocus()) return;
             if (link == null) return;
             if (link.kind == WatchLinks.Kind.ZONE) {
-                String league = "epl".equals(match.league) ? "英超" : "NBA";
-                Sheet.confirm(activity, "暂无本场播放链接",
-                    "暂时未能找到这场比赛的咪咕页面，请稍后重试。也可以前往" + league + "专区自行查找。",
-                    "打开" + league + "专区", () -> launch(link));
+                String league = "epl".equals(match.league) ? "Premier League" : "NBA";
+                Sheet.confirm(activity, "No match link yet",
+                    "We couldn't find this match on Migu yet. Try again shortly, or open the " + league + " zone and search there.",
+                    "Open " + league + " zone", () -> launch(link));
             } else {
                 launch(link);
             }
@@ -53,13 +53,12 @@ final class WatchLauncher {
                 activity.startActivity(destination);
                 return;
             } catch (android.content.ActivityNotFoundException | SecurityException ignored) {
-                // Try the other supported edition, then preserve the original web destination.
             }
         }
         try {
             activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link.url)));
         } catch (RuntimeException e) {
-            Sheet.message(activity, "无法打开播放页面", "未找到可用的平台 App 或浏览器。");
+            Sheet.message(activity, "Couldn't open playback", "No supported app or browser is available.");
         }
     }
 }

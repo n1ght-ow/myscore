@@ -18,26 +18,37 @@ final class Formats {
 
     /** Beijing wall-clock time for an epoch timestamp. */
     static final DateTimeFormatter TIME = zoned("HH:mm");
-    static final DateTimeFormatter MONTH_DAY = date("M月d日");
-    static final DateTimeFormatter YEAR_MONTH_DAY = date("yyyy/M/d");
+    static final DateTimeFormatter MONTH_DAY = date("MMM d");
+    static final DateTimeFormatter YEAR_MONTH_DAY = date("M/d/yyyy");
     static final DateTimeFormatter WEEKDAY = date("EEE");
-    static final DateTimeFormatter MONTH_DAY_WEEK = date("M月d日 EEE");
-    static final DateTimeFormatter MONTH_DAY_FULL_WEEK = date("M月d日 EEEE");
-    static final DateTimeFormatter YEAR_MONTH = date("yyyy年M月");
+    static final DateTimeFormatter MONTH_DAY_WEEK = date("EEE, MMM d");
+    static final DateTimeFormatter MONTH_DAY_FULL_WEEK = date("EEEE, MMM d");
+    static final DateTimeFormatter YEAR_MONTH = date("MMM yyyy");
     static final DateTimeFormatter MONTH_DAY_DOT = date("MM.dd");
-    static final DateTimeFormatter YEAR_MONTH_DAY_WEEK = date("yyyy年M月d日 EEE");
+    static final DateTimeFormatter YEAR_MONTH_DAY_WEEK = date("EEE, MMM d, yyyy");
     /** Source timestamps arrive as Beijing-local text, without a zone suffix. */
 
     static DateTimeFormatter zoned(String pattern) {
         DateTimeFormatter formatter = ZONED.get(pattern);
         if (formatter != null) return formatter;
-        return ZONED.computeIfAbsent(pattern, p -> DateTimeFormatter.ofPattern(p, Locale.CHINA).withZone(Match.ZONE));
+        return ZONED.computeIfAbsent(pattern, p -> DateTimeFormatter.ofPattern(displayPattern(p), Locale.ENGLISH).withZone(Match.ZONE));
     }
 
     static DateTimeFormatter date(String pattern) {
         DateTimeFormatter formatter = DATES.get(pattern);
         if (formatter != null) return formatter;
-        return DATES.computeIfAbsent(pattern, p -> DateTimeFormatter.ofPattern(p, Locale.CHINA));
+        return DATES.computeIfAbsent(pattern, p -> DateTimeFormatter.ofPattern(displayPattern(p), Locale.ENGLISH));
+    }
+
+    private static String displayPattern(String pattern) {
+        return pattern
+            .replace("yyyy年M月d日 EEEE", "EEEE, MMM d, yyyy")
+            .replace("yyyy年M月d日 EEE", "EEE, MMM d, yyyy")
+            .replace("yyyy年M月d日", "MMM d, yyyy")
+            .replace("yyyy年M月", "MMM yyyy")
+            .replace("M月d日 EEEE", "EEEE, MMM d")
+            .replace("M月d日 EEE", "EEE, MMM d")
+            .replace("M月d日", "MMM d");
     }
 
     /** Epoch millis as Beijing time; {@code fallback} when the source has no timestamp. */
@@ -49,9 +60,9 @@ final class Formats {
         return day == null ? fallback : formatter.format(day);
     }
 
-    /** "更新于 HH:mm" without allocating a formatter for every bound row. */
+    /** "Updated HH:mm" without allocating a formatter for every bound row. */
     static String updated(long millis) {
-        return millis > 0 ? "更新于 " + TIME.format(Instant.ofEpochMilli(millis)) : "更新时间未知";
+        return millis > 0 ? "Updated " + TIME.format(Instant.ofEpochMilli(millis)) : "Update time unknown";
     }
 
     static String kickoff(long millis, String fallback) {

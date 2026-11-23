@@ -61,6 +61,7 @@ public final class DomesticEsports {
         // The live feed uses ts for the scheduled start; the team feed may only carry plan_ts.
         m.start=seconds(mc.optString("ts"));if(m.start==0)m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
         m.event=DetailParsers.text(tournament,"disp_name").trim();
+        m.eventId=DetailParsers.text(tournament,"id");
         m.tierOne=isTierOne(DetailParsers.text(tournament,"grade",DetailParsers.text(mc,"grade")),DetailParsers.text(tournament,"grade_label"));
         String format=DetailParsers.text(mc,"format"),stage=DetailParsers.text(mc,"tt_stage_desc"),detail=m.event;
         if(!format.isEmpty())detail+=(detail.isEmpty()?"":" · ")+"BO"+format;

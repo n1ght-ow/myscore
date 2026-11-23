@@ -53,7 +53,7 @@ final class UpdateTransfer {
             URL url=new URL(address);
             for(int redirects=0;redirects<=5;redirects++) {
                 interrupted(cancelled,deadline);
-                if(!trustedHost(url))throw new IOException("更新下载跳转地址不可信");
+                if(!trustedHost(url))throw new UpdateRelease.PermanentUpdateException("Update download redirect target is not trusted");
                 HttpURLConnection connection=connections.open(url);
                 try {
                     connection.setConnectTimeout(12000);connection.setReadTimeout(15000);connection.setInstanceFollowRedirects(false);connection.setUseCaches(false);
@@ -64,23 +64,23 @@ final class UpdateTransfer {
                     int code=connection.getResponseCode();
                     if(code==301||code==302||code==303||code==307||code==308) {
                         String location=connection.getHeaderField("Location");
-                        if(location==null||location.isBlank())throw new IOException("更新下载跳转缺少地址");
+                        if(location==null||location.isBlank())throw new UpdateRelease.PermanentUpdateException("Update download redirect is missing a location");
                         url=new URL(url,location);continue;
                     }
                     if(code==206) {
-                        if(!keepPartial||existing<=0)throw new IOException("下载服务器返回了异常的续传响应");
+                        if(!keepPartial||existing<=0)throw new UpdateRelease.PermanentUpdateException("Download server returned an invalid resume response");
                     } else if(code==200) {
                         // The server ignored Range (or this is the first attempt): start over.
                         existing=0;
-                    } else throw new IOException("下载服务器返回 HTTP "+code+"，请稍后重试");
+                    } else throw new IOException("Download server returned HTTP "+code+". Try again later");
                     long length=connection.getContentLengthLong();
-                    if(length>0&&existing+length!=release.size&&length!=release.size)throw new IOException("安装包大小与发布信息不一致");
+                    if(length>0&&existing+length!=release.size&&length!=release.size)throw new UpdateRelease.PermanentUpdateException("Update package size does not match the release information");
                     long bytes=existing;progress.changed(bytes);
                     try(InputStream input=connection.getInputStream();FileOutputStream output=new FileOutputStream(partial,existing>0)) {
                         byte[] buffer=new byte[65536];int read;
                         while((read=input.read(buffer))!=-1) {
                             interrupted(cancelled,deadline);
-                            bytes+=read;if(bytes>release.size)throw new IOException("安装包大小超过发布信息");
+                            bytes+=read;if(bytes>release.size)throw new UpdateRelease.PermanentUpdateException("Update package exceeds the published size");
                             output.write(buffer,0,read);progress.changed(bytes);
                         }
                         output.getFD().sync();
@@ -91,18 +91,18 @@ final class UpdateTransfer {
                     success=true;return;
                 } finally {connection.disconnect();}
             }
-            throw new IOException("更新下载跳转次数过多，请稍后重试");
+            throw new UpdateRelease.PermanentUpdateException("Too many update download redirects. Try again later");
         } finally {if(!success&&!keepPartial&&partial.exists())partial.delete();}
     }
     private static void interrupted(BooleanSupplier cancelled,long deadline)throws IOException {
-        if(Thread.currentThread().isInterrupted()||cancelled.getAsBoolean())throw new InterruptedIOException("下载已取消");
-        if(System.nanoTime()>deadline)throw new java.net.SocketTimeoutException("下载超时，请检查网络后重试");
+        if(Thread.currentThread().isInterrupted()||cancelled.getAsBoolean())throw new InterruptedIOException("Download cancelled");
+        if(System.nanoTime()>deadline)throw new java.net.SocketTimeoutException("Download timed out. Check your network and try again");
     }
     static String failure(Exception error) {
-        if(error instanceof java.net.SocketTimeoutException)return "下载连接超时，请检查网络后重新下载";
-        if(error instanceof java.net.UnknownHostException)return "无法解析下载服务器，请检查网络或 DNS 后重试";
-        if(error instanceof javax.net.ssl.SSLException)return "下载安全连接失败，请检查网络和手机时间后重试";
+        if(error instanceof java.net.SocketTimeoutException)return "Download connection timed out. Check your network and download again";
+        if(error instanceof java.net.UnknownHostException)return "Could not resolve the download server. Check your network or DNS and try again";
+        if(error instanceof javax.net.ssl.SSLException)return "Secure download connection failed. Check your network and device time, then try again";
         if(error instanceof IOException&&error.getMessage()!=null&&!error.getMessage().contains("https://"))return error.getMessage();
-        return "下载未完成，请检查网络和存储空间后重试";
+        return "Download did not complete. Check your network and storage space, then try again";
     }
 }

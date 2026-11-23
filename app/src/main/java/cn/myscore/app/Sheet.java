@@ -16,6 +16,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -49,7 +50,7 @@ final class Sheet {
             ui.clickable(row, on ? ui.tonal : Color.TRANSPARENT, Ui.CONTROL_RADIUS);
             row.setSelected(on);
             row.setFocusable(true);
-            row.setContentDescription(item.title + (item.detail.isEmpty() ? "" : "，" + item.detail) + (on ? "，已选中" : ""));
+            row.setContentDescription(item.title + (item.detail.isEmpty() ? "" : ", " + item.detail) + (on ? ", selected" : ""));
             LinearLayout texts = ui.column();
             texts.addView(ui.text(item.title, 15, ui.text, true));
             if (!item.detail.isEmpty()) { ui.gap(texts, 3); texts.addView(ui.text(item.detail, 12, ui.muted, false)); }
@@ -66,7 +67,7 @@ final class Sheet {
             if (i < items.size() - 1) { View gap = new View(activity); gap.setMinimumHeight(ui.dp(2)); list.addView(gap); }
         }
         content.addView(list, new LinearLayout.LayoutParams(-1, -2));
-        TextView cancel = ui.button("取消", false, dialog::dismiss);
+        TextView cancel = ui.button("Cancel", false, dialog::dismiss);
         LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(-1, -2);
         cancelParams.topMargin = ui.dp(12);
         content.addView(cancel, cancelParams);
@@ -76,7 +77,7 @@ final class Sheet {
     static void date(Activity activity, LocalDate selected, PickDate pick) {
         Ui ui=ui(activity);
         Dialog dialog=base(activity,ui);
-        LinearLayout content=content(activity,ui,dialog,"选择日期",null);
+        LinearLayout content=content(activity,ui,dialog,"Select date",null);
         // Keep seven 48dp date targets on compact phones without shrinking the type.
         int side=Math.max(0,Math.min(ui.dp(20),(activity.getResources().getDisplayMetrics().widthPixels-ui.dp(336))/2));
         content.setPadding(side,content.getPaddingTop(),side,content.getPaddingBottom());
@@ -84,23 +85,23 @@ final class Sheet {
         LinearLayout nav=ui.row();
         FrameLayout prev=new FrameLayout(activity);
         prev.addView(new Ui.Icon(activity,"back",ui.text),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
-        ui.clickable(prev,ui.tonal,Ui.CONTROL_RADIUS);prev.setFocusable(true);prev.setContentDescription("上一个月");
+        ui.clickable(prev,ui.tonal,Ui.CONTROL_RADIUS);prev.setFocusable(true);prev.setContentDescription("Previous month");
         nav.addView(prev,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         TextView title=ui.text("",16,ui.text,true);title.setGravity(Gravity.CENTER);
         nav.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         FrameLayout next=new FrameLayout(activity);
         next.addView(new Ui.Icon(activity,"chevron",ui.text),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
-        ui.clickable(next,ui.tonal,Ui.CONTROL_RADIUS);next.setFocusable(true);next.setContentDescription("下一个月");
+        ui.clickable(next,ui.tonal,Ui.CONTROL_RADIUS);next.setFocusable(true);next.setContentDescription("Next month");
         nav.addView(next,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
         content.addView(nav);
         ui.gap(content,4);
         LinearLayout weekdays=ui.row();
-        for(String label:new String[]{"一","二","三","四","五","六","日"}){TextView d=ui.text(label,11,ui.muted,false);d.setGravity(Gravity.CENTER);d.setPadding(0,ui.dp(4),0,ui.dp(4));weekdays.addView(d,new LinearLayout.LayoutParams(0,-2,1));}
+        for(String label:new String[]{"Mon","Tue","Wed","Thu","Fri","Sat","Sun"}){TextView d=ui.text(label,11,ui.muted,false);d.setGravity(Gravity.CENTER);d.setPadding(0,ui.dp(4),0,ui.dp(4));weekdays.addView(d,new LinearLayout.LayoutParams(0,-2,1));}
         content.addView(weekdays);
         LinearLayout grid=ui.column();content.addView(grid);
         Runnable[] draw=new Runnable[1];
         draw[0]=()-> {
-            title.setText(String.format(Locale.CHINA,"%d年%d月",month[0].getYear(),month[0].getMonthValue()));
+            title.setText(month[0].getMonth().getDisplayName(TextStyle.SHORT,Locale.ENGLISH)+" "+month[0].getYear());
             grid.removeAllViews();
             LocalDate first=month[0].atDay(1);
             int offset=first.getDayOfWeek().getValue()-1;
@@ -117,7 +118,7 @@ final class Sheet {
                     TextView cell=ui.text(String.valueOf(value.getDayOfMonth()),14,picked?ui.onAction:ui.text,picked||today);
                     cell.setGravity(Gravity.CENTER);cell.setMinHeight(ui.dp(48));ui.clickable(cell,picked?ui.action:today?ui.tonal:Color.TRANSPARENT,Ui.CONTROL_RADIUS);cell.setSelected(picked);
                     cell.setFocusable(true);
-                    cell.setContentDescription(value.getMonthValue()+"月"+value.getDayOfMonth()+"日"+(picked?"，已选中":today?"，今天":""));
+                    cell.setContentDescription(value.getMonth().getDisplayName(TextStyle.FULL,Locale.ENGLISH)+" "+value.getDayOfMonth()+", "+value.getYear()+(picked?", selected":today?", today":""));
                     cell.setOnClickListener(v->{dialog.dismiss();pick.onDate(value);});
                     line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
                 }
@@ -126,7 +127,7 @@ final class Sheet {
         };
         prev.setOnClickListener(v->{month[0]=month[0].minusMonths(1);draw[0].run();});
         next.setOnClickListener(v->{month[0]=month[0].plusMonths(1);draw[0].run();});
-        TextView cancel=ui.button("取消",false,dialog::dismiss);
+        TextView cancel=ui.button("Cancel",false,dialog::dismiss);
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.topMargin=ui.dp(12);content.addView(cancel,cp);
         draw[0].run();
         show(activity,dialog,content);
@@ -135,7 +136,7 @@ final class Sheet {
     static void message(Activity activity, String title, String message) {        Ui ui = ui(activity);
         Dialog dialog = base(activity, ui);
         LinearLayout content = content(activity, ui, dialog, title, message);
-        content.addView(actions(activity, ui, dialog, "知道了", () -> {}, null));
+        content.addView(actions(activity, ui, dialog, "OK", () -> {}, null));
         show(activity, dialog, content);
     }
 
@@ -143,7 +144,7 @@ final class Sheet {
         Ui ui = ui(activity);
         Dialog dialog = base(activity, ui);
         LinearLayout content = content(activity, ui, dialog, title, message);
-        content.addView(actions(activity, ui, dialog, confirmLabel, action, "取消"));
+        content.addView(actions(activity, ui, dialog, confirmLabel, action, "Cancel"));
         show(activity, dialog, content);
     }
 

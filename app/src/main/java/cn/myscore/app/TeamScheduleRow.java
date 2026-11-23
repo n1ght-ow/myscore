@@ -1,8 +1,14 @@
 package cn.myscore.app;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+
 /** One row of a team schedule. Scores are presented in this team's order, never home-first. */
 final class TeamScheduleRow {
     static final int SECTION=0,MATCH=1,NOTE=2;
+    private static final DateTimeFormatter MONTH_DAY_WEEK = DateTimeFormatter.ofPattern("MMM d EEE", Locale.ENGLISH);
+    private static final DateTimeFormatter YEAR_MONTH_DAY_WEEK = DateTimeFormatter.ofPattern("MMM d, yyyy EEE", Locale.ENGLISH);
     final int type;
     final String key,title,message;
     final Match match;
@@ -45,5 +51,64 @@ final class TeamScheduleRow {
         } catch(NumberFormatException e) {
             return "";
         }
+    }
+
+    String displayOpponent() {
+        return switch(opponent) {
+            case "对阵待定", "待定", "TBD" -> "Opponent TBD";
+            default -> opponent;
+        };
+    }
+
+    String displayDate() {
+        if(match==null||match.day()==null)return "Date TBD";
+        LocalDate day=match.day();
+        return day.format(day.getYear()==Match.today(System.currentTimeMillis()).getYear()?MONTH_DAY_WEEK:YEAR_MONTH_DAY_WEEK);
+    }
+
+    String displayTime() {
+        if(match==null||!match.timeConfirmed||match.start<=0)return "TBD";
+        String value=match.time();
+        return value.isBlank()||"时间待定".equals(value)?"TBD":value;
+    }
+
+    String displaySide() {
+        return switch(side) {
+            case "主场" -> "Home";
+            case "客场" -> "Away";
+            default -> side;
+        };
+    }
+
+    String displayDetail() {
+        return switch(detail) {
+            case "英超" -> "Premier League";
+            case "欧冠" -> "Champions League";
+            case "国家队" -> "National team";
+            case "足球" -> "Football";
+            default -> detail;
+        };
+    }
+
+    String displayState() {
+        return switch(state) {
+            case "进行中" -> "Live";
+            case "未开始" -> "Scheduled";
+            case "已结束" -> "Final";
+            case "已取消" -> "Cancelled";
+            case "延期 / 暂停" -> "Postponed";
+            case "状态待确认" -> "Status TBD";
+            case "时间待定" -> "Time TBD";
+            default -> state;
+        };
+    }
+
+    String displayResult() {
+        return switch(result) {
+            case "胜" -> "W";
+            case "负" -> "L";
+            case "平" -> "D";
+            default -> result;
+        };
     }
 }

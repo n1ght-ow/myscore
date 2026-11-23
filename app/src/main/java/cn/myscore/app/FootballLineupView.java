@@ -61,7 +61,7 @@ final class FootballLineupView {
             TextView name = this.ui.text(names[i], 12, on ? this.ui.text : this.ui.muted, on);
             name.setPadding(this.ui.dp(8.0f), 0, 0, 0);
             choice.addView((View)name, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-            choice.setContentDescription((CharSequence)(names[i] + (on ? "，已选中" : "，查看阵容")));
+            choice.setContentDescription((CharSequence)EnglishDisplay.text(names[i] + (on ? ", selected" : ", view lineup")));
             choice.setSelected(on);
             choice.setFocusable(true);
             choice.setOnClickListener(v -> changed.accept(id));
@@ -77,8 +77,8 @@ final class FootballLineupView {
         String formation = this.detail.facts.stream().filter(f -> f.label().equals(team + " 阵型")).map(MatchDetail.Fact::value).findFirst().orElse("");
         MatchDetail.Table starters = this.find(teamId, "首发");
         LinearLayout title = this.ui.row();
-        title.addView((View)this.ui.text("首发阵容", 16, this.ui.text, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        title.addView((View)this.ui.text(formation.isBlank() ? "阵型未提供" : formation, 16, this.ui.text, true));
+        title.addView((View)this.ui.text("Starting lineup", 16, this.ui.text, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+        title.addView((View)this.ui.text(formation.isBlank() ? "Formation not available" : formation, 16, this.ui.text, true));
 
         List lines = starters == null ? List.of() : FootballLayout.lines(starters, formation);
         LinearLayout pitchHost = this.ui.column(), benchHost = this.ui.column();
@@ -87,7 +87,7 @@ final class FootballLineupView {
         this.ui.gap(pitchHost, 12);
         this.body.addView(this.ui.columns(pitchHost, benchHost, 360, 24), new LinearLayout.LayoutParams(-1, -2));
         if (lines.isEmpty()) {
-            pitchHost.addView((View)this.ui.text("完整首发站位尚未提供", 13, this.ui.muted, false));
+            pitchHost.addView((View)this.ui.text("Full starting positions are not available", 13, this.ui.muted, false));
             if (starters != null) {
                 this.list(starters, pitchHost);
             }
@@ -167,20 +167,20 @@ final class FootballLineupView {
             }
             pitchHost.addView((View)pitch, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(pitchHost, 8);
-            pitchHost.addView((View)this.ui.text(font >= 1.5f ? "按首发阵型分行 · 点球员查看详情" : "首发阵型示意，非平均站位 · 点球员查看详情", 11, this.ui.muted, false));
+            pitchHost.addView((View)this.ui.text(font >= 1.5f ? "Lines follow the starting formation · Tap a player for details" : "Starting shape is a guide, not average positions · Tap a player for details", 11, this.ui.muted, false));
         }
         this.ui.gap(pitchHost, 12);
         this.legend(pitchHost);
-        TextView benchHeading=this.ui.text("替补",16,this.ui.text,true);benchHeading.setMinimumHeight(this.ui.dp(48));benchHeading.setGravity(android.view.Gravity.CENTER_VERTICAL);benchHeading.setTag("football-bench-heading");benchHost.addView(benchHeading);this.ui.gap(benchHost,12);
+        TextView benchHeading=this.ui.text("Bench",16,this.ui.text,true);benchHeading.setMinimumHeight(this.ui.dp(48));benchHeading.setGravity(android.view.Gravity.CENTER_VERTICAL);benchHeading.setTag("football-bench-heading");benchHost.addView(benchHeading);this.ui.gap(benchHost,12);
         MatchDetail.Table bench = this.find(teamId, "替补");
         if (bench == null) {
-            benchHost.addView((View)this.ui.text("替补名单尚未提供", 13, this.ui.muted, false));
+            benchHost.addView((View)this.ui.text("Bench list is not available", 13, this.ui.muted, false));
         } else {
             this.list(bench, benchHost);
         }
         MatchDetail.Table injuries = this.find(teamId, "伤停");
         if (injuries != null) {
-            this.headingInto(benchHost, "受伤与停赛");
+            this.headingInto(benchHost, "Injuries and suspensions");
             this.list(injuries, benchHost);
         }
 
@@ -257,7 +257,7 @@ final class FootballLineupView {
         Wrap line = new Wrap(!pairing);
         line.setGap(this.ui.dp(6.0f), this.ui.dp(3.0f));
         if (pairing && entry.person() != null && !(position = DetailParsers.label(entry.person().position())).isBlank() && !position.equals("替补")) {
-            line.addView((View)this.ui.text(position, 10, this.ui.muted, false));
+            line.addView((View)this.ui.text(EnglishDisplay.text(position), 10, this.ui.muted, false));
         }
         int goals = (int)DetailRows.number(FootballLayout.value(entry, "进球"));
         int yellow = (int)DetailRows.number(FootballLayout.value(entry, "黄牌"));
@@ -278,7 +278,7 @@ final class FootballLineupView {
             line.addView(this.mark(off ? "out" : "in", this.minute(entry), false));
         }
         if (pairing && (off || in) && !(swap = this.replacement(entry)).isBlank()) {
-            line.addView((View)this.ui.text(swap, 10, this.ui.muted, false));
+            line.addView((View)this.ui.text(EnglishDisplay.text(swap), 10, this.ui.muted, false));
         }
         if (line.getChildCount() == 0) {
             return null;
@@ -321,7 +321,7 @@ final class FootballLineupView {
         legend.setTag((Object)"football-event-legend");
         Wrap wrap = new Wrap(true);
         wrap.setGap(this.ui.dp(12.0f), this.ui.dp(4.0f));
-        for (String[] item : new String[][]{{"goal", "进球"}, {"yellow", "黄牌"}, {"red", "红牌"}, {"out", "换下"}, {"in", "换上"}}) {
+        for (String[] item : new String[][]{{"goal", "Goal"}, {"yellow", "Yellow card"}, {"red", "Red card"}, {"out", "Subbed off"}, {"in", "Subbed on"}}) {
             LinearLayout pair = this.ui.row();
             pair.addView(this.mark(item[0], "", false), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
             TextView label = this.ui.text(item[1], 11, this.ui.muted, false);
@@ -358,21 +358,31 @@ final class FootballLineupView {
         view.setMinimumHeight(this.ui.dp(48.0f));
         view.setFocusable(true);
         this.ui.clickable(view, 0, 8);
-        String who = entry.person() == null ? DetailRows.cell(entry.values(), 0) : (entry.person().jersey().isBlank() ? "" : "球衣号 " + entry.person().jersey() + "，") + entry.person().name() + "，" + DetailParsers.label(entry.person().position());
-        String events = FootballMetrics.events(entry);
-        view.setContentDescription((CharSequence)(who + (events.isBlank() ? "" : "，" + events)));
+        String who = entry.person() == null ? EnglishDisplay.text(DetailRows.cell(entry.values(), 0)) : (entry.person().jersey().isBlank() ? "" : "Jersey " + entry.person().jersey() + ", ") + entry.person().name() + ", " + EnglishDisplay.text(DetailParsers.label(entry.person().position()));
+        String events = EnglishDisplay.text(FootballMetrics.events(entry).replace("进球", "Goals").replace("助攻", "Assists").replace("乌龙球", "Own goals").replace("黄牌", "Yellow cards").replace("红牌", "Red cards"));
+        view.setContentDescription((CharSequence)EnglishDisplay.text(who + (events.isBlank() ? "" : ", " + events)));
         view.setOnClickListener(v -> {
             StringBuilder text = new StringBuilder();
             if (entry.person() != null && !entry.person().jersey().isBlank()) {
-                text.append("球衣号  ").append(entry.person().jersey()).append('\n');
+                text.append("Jersey  ").append(entry.person().jersey()).append('\n');
             }
             for (int i = 1; i < entry.table().columns.size(); ++i) {
                 String key = entry.table().columns.get(i);
                 if (key.equals("站位")) continue;
-                text.append(key).append("  ").append(DetailParsers.label(DetailRows.cell(entry.values(), i))).append('\n');
+                text.append(column(key)).append("  ").append(EnglishDisplay.text(DetailParsers.label(DetailRows.cell(entry.values(), i)))).append('\n');
             }
             Sheet.message((Activity)this.ui.c, entry.person() == null ? DetailRows.cell(entry.values(), 0) : entry.person().name(), text.toString());
         });
+    }
+
+    private static String column(String key) {
+        return switch (key) {
+            case "进球" -> "Goals";
+            case "助攻" -> "Assists";
+            case "抢断" -> "Tackles";
+            case "传球" -> "Passes";
+            default -> EnglishDisplay.text(key);
+        };
     }
 
     private int blend(int from, int to, float ratio) {

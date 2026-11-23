@@ -14,9 +14,12 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import org.json.JSONObject;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -25,6 +28,7 @@ import java.util.concurrent.Executors;
  * results; a failed refresh keeps the last real schedule and states its timestamp.
  */
 public final class TeamActivity extends Activity {
+    private static final DateTimeFormatter FETCHED=DateTimeFormatter.ofPattern("MMM d, HH:mm",Locale.ENGLISH).withZone(Match.ZONE);
     private Ui ui;
     private Team team;
     private TeamRepository repository;
@@ -107,10 +111,10 @@ public final class TeamActivity extends Activity {
         if(pad){buildPad();return;}
         LinearLayout appbar=ui.row();
         appbar.setPadding(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(2));
-        appbar.addView(iconButton("back","返回",this::finish));
+        appbar.addView(iconButton("back","Back",this::finish));
         TextView title=ui.text(pageName(),16,ui.text,true);title.setGravity(Gravity.CENTER);
         appbar.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        appbar.addView(iconButton("refresh","刷新"+pageName(),()->load(true)));
+        appbar.addView(iconButton("refresh","Refresh schedule",()->load(true)));
         root.addView(appbar);
 
         LinearLayout card=ui.row();card.setBackgroundColor(ui.bg);
@@ -122,14 +126,13 @@ public final class TeamActivity extends Activity {
         LinearLayout names=ui.column();
         TextView name=ui.text(team.name,20,ui.text,true);name.setLetterSpacing(-0.02f);names.addView(name);
         ui.gap(names,4);
-        String competition=team.league.equals("cs2")?"CS2":team.competitionName();
-        names.addView(ui.text(competition+" · 北京时间",12,ui.muted,false));
+        names.addView(ui.text(competitionLabel(),12,ui.muted,false));
         LinearLayout.LayoutParams namesParams=new LinearLayout.LayoutParams(0,-2,1);
         namesParams.setMarginStart(ui.dp(14));card.addView(names,namesParams);
         LinearLayout.LayoutParams cardParams=new LinearLayout.LayoutParams(-1,-2);
         cardParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(4));root.addView(card,cardParams);
 
-        status=ui.text("正在读取"+pageName()+"…",11,ui.muted,false);status.setPadding(ui.dp(20),0,ui.dp(20),ui.dp(6));root.addView(status);
+        status=ui.text("",11,ui.muted,false);status.setPadding(ui.dp(4),ui.dp(12),ui.dp(4),ui.dp(4));status.setVisibility(View.GONE);
         error=ui.text("",13,ui.error,false);error.setLineSpacing(ui.dp(4),1);
         error.setBackground(ui.shape(ui.tonal,Ui.CONTROL_RADIUS));error.setPadding(ui.dp(14),ui.dp(12),ui.dp(14),ui.dp(12));
         LinearLayout.LayoutParams errorParams=new LinearLayout.LayoutParams(-1,-2);errorParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(10));
@@ -152,15 +155,16 @@ public final class TeamActivity extends Activity {
             public boolean isBusy(){return calendarBusy;}
             public void toggleSubscription(Match match){toggleCalendar(match);}
         });
+        list.addFooterView(status);
         adapter.attach(list);list.setAdapter(adapter);
         root.addView(list,new LinearLayout.LayoutParams(-1,0,1));
     }
 
     private void buildPad(){
         LinearLayout bar=ui.row();bar.setPadding(ui.dp(12),ui.dp(10),ui.dp(16),ui.dp(10));
-        bar.addView(iconButton("back","返回比赛列表",this::finish));
+        bar.addView(iconButton("back","Back to matches",this::finish));
         TextView title=ui.text(pageName(),17,ui.text,true);LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,-2,1);tp.setMarginStart(ui.dp(6));bar.addView(title,tp);
-        bar.addView(iconButton("refresh","刷新"+pageName(),()->load(true)));
+        bar.addView(iconButton("refresh","Refresh schedule",()->load(true)));
         root.addView(bar);root.addView(ui.divider());
 
         LinearLayout hero=ui.row();hero.setPadding(ui.dp(28),ui.dp(14),ui.dp(28),ui.dp(14));
@@ -169,29 +173,28 @@ public final class TeamActivity extends Activity {
         LinearLayout names=ui.column();LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(0,-2,1);np.setMarginStart(ui.dp(18));
         TextView name=ui.text(team.name,26,ui.text,true);name.setLetterSpacing(-0.03f);names.addView(name);
         ui.gap(names,4);
-        String competition=team.league.equals("cs2")?"CS2":team.competitionName();
-        names.addView(ui.text(competition+" · 北京时间",12,ui.muted,false));
+        names.addView(ui.text(competitionLabel(),12,ui.muted,false));
         ui.gap(names,6);
-        padStatus=ui.text("正在读取"+pageName()+"…",11,ui.muted,false);names.addView(padStatus);
+        padStatus=ui.text("Loading schedule…",11,ui.muted,false);names.addView(padStatus);
         padError=ui.text("",12,ui.error,false);padError.setLineSpacing(ui.dp(3),1);padError.setVisibility(View.GONE);ui.gap(names,6);names.addView(padError);
         hero.addView(names,np);
         LinearLayout stats=ui.row();
         stats.setBackground(ui.shape(ui.tonal,Ui.CARD_RADIUS));
         stats.setPadding(ui.dp(6),ui.dp(8),ui.dp(6),ui.dp(8));
-        padStatUpcoming=padStatCell(stats,"接下来");
+        padStatUpcoming=padStatCell(stats,"Upcoming");
         View rule1=new View(this);rule1.setBackgroundColor(ui.line);stats.addView(rule1,new LinearLayout.LayoutParams(ui.dp(1),ui.dp(28)));
-        padStatFinished=padStatCell(stats,"已结束");
+        padStatFinished=padStatCell(stats,"Results");
         View rule2=new View(this);rule2.setBackgroundColor(ui.line);stats.addView(rule2,new LinearLayout.LayoutParams(ui.dp(1),ui.dp(28)));
-        padStatTotal=padStatCell(stats,"总场次");
+        padStatTotal=padStatCell(stats,"Total");
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.setMarginStart(ui.dp(20));
         hero.addView(stats,sp);
         root.addView(hero);root.addView(ui.divider());
 
         LinearLayout columns=ui.row();
-        LinearLayout left=padColumn("接下来","进行中与即将开始的比赛",true);
+        LinearLayout left=padColumn("Upcoming","Live and starting soon",true);
         columns.addView(left,new LinearLayout.LayoutParams(0,-1,1));
         View rule=new View(this);rule.setBackgroundColor(ui.line);columns.addView(rule,new LinearLayout.LayoutParams(ui.dp(1),-1));
-        LinearLayout right=padColumn("已结束","按时间倒序，仅显示来源确认的赛果",false);
+        LinearLayout right=padColumn("Results","Newest first · source-confirmed scores only",false);
         columns.addView(right,new LinearLayout.LayoutParams(0,-1,1));
         root.addView(columns,new LinearLayout.LayoutParams(-1,0,1));
         padUpcomingList.setAdapter(padUpcomingAdapter);
@@ -243,17 +246,18 @@ public final class TeamActivity extends Activity {
             }
         }
         if(padStatus!=null){
-            if(result==null)padStatus.setText(busy?"正在读取球队赛程…":"尚未获取球队赛程");
+            if(result==null)padStatus.setText(busy?"Loading schedule…":"Schedule not loaded");
             else{
-                String fetched=result.fetched>0?format(result.fetched,"M月d日 HH:mm")+" 获取":"尚未成功获取";
-                padStatus.setText(result.source+" · 共 "+result.matches.size()+" 场 · "+fetched+(busy?" · 更新中":""));
+                String summary=result.source.isBlank()?fixtureCount(result.matches.size()):result.source+" · "+fixtureCount(result.matches.size());
+                String fetched=result.fetched>0?"Updated "+formatFetched(result.fetched):"Not updated yet";
+                padStatus.setText(summary+" · "+fetched+(busy?" · Refreshing":""));
                 padStatus.setTextColor(result.error.isEmpty()?ui.muted:ui.error);
             }
         }
         if(padError!=null){
             boolean failed=result!=null&&!result.error.isEmpty();
             padError.setVisibility(failed?View.VISIBLE:View.GONE);
-            if(failed)padError.setText((result.fetched>0?"球队赛程未更新 · ":"无法获取球队赛程 · ")+result.error+(result.fetched>0?"\n下方保留上次成功获取的赛程。":""));
+            if(failed)padError.setText((result.fetched>0?"Couldn't refresh · ":"Couldn't load schedule · ")+result.error+(result.fetched>0?"\nShowing the last saved schedule.":""));
         }
         List<TeamScheduleRow> upcoming=padRows(false),finished=padRows(true);
         if(padUpcomingAdapter!=null)padUpcomingAdapter.updateRows(upcoming);
@@ -263,8 +267,8 @@ public final class TeamActivity extends Activity {
             if(pendingPadFinished>=0&&padFinishedList!=null){int p=pendingPadFinished;pendingPadFinished=-1;padFinishedList.post(()->padFinishedList.setSelection(p));}
             int up=0,fin=0,other=0;
             for(Match m:result.matches){if(m.finalised())fin++;else if(m.live()||m.scheduled()||m.state.equals("delayed"))up++;else other++;}
-            if(padUpcomingCount!=null)padUpcomingCount.setText(up+" 场");
-            if(padFinishedCount!=null)padFinishedCount.setText(fin+" 场");
+            if(padUpcomingCount!=null)padUpcomingCount.setText(String.valueOf(up));
+            if(padFinishedCount!=null)padFinishedCount.setText(String.valueOf(fin));
             if(padStatUpcoming!=null)padStatUpcoming.setText(String.valueOf(up));
             if(padStatFinished!=null)padStatFinished.setText(String.valueOf(fin));
             if(padStatTotal!=null)padStatTotal.setText(String.valueOf(result.matches.size()));
@@ -276,20 +280,20 @@ public final class TeamActivity extends Activity {
     }
     private List<TeamScheduleRow> padRows(boolean finished){
         List<TeamScheduleRow> rows=new ArrayList<>();
-        if(result==null){rows.add(TeamScheduleRow.note(busy?"正在读取球队赛程":"尚未获取球队赛程",busy?"正在连接球队的数据来源。":"点右上角刷新重试。"));return rows;}
-        if(result.matches.isEmpty()){rows.add(TeamScheduleRow.note("该队暂未提供赛程",emptyMessage()));return rows;}
+        if(result==null){rows.add(TeamScheduleRow.note(busy?"Loading schedule":"Schedule not loaded",busy?"Connecting to the schedule source.":"Tap refresh at the top right to try again."));return rows;}
+        if(result.matches.isEmpty()){rows.add(TeamScheduleRow.note("No schedule available",emptyMessage()));return rows;}
         List<Match> live=new ArrayList<>(),upcoming=new ArrayList<>(),done=new ArrayList<>(),other=new ArrayList<>();
         for(Match m:result.matches){if(m.live())live.add(m);else if(m.scheduled()||m.state.equals("delayed"))upcoming.add(m);else if(m.finalised())done.add(m);else other.add(m);}
         Comparator<Match> byStart=Comparator.comparingLong((Match m)->m.start==0?Long.MAX_VALUE:m.start).thenComparing(m->m.id);
         live.sort(byStart);upcoming.sort(byStart);done.sort(byStart.reversed());other.sort(byStart);
         if(finished){
             for(Match m:done)rows.add(TeamScheduleRow.match(m,team));
-            if(rows.isEmpty())rows.add(TeamScheduleRow.note("没有已结束的比赛","来源尚未返回这支球队的赛果。"));
+            if(rows.isEmpty())rows.add(TeamScheduleRow.note("No results","The source hasn't returned any results for this team."));
         }else{
-            if(!live.isEmpty()){rows.add(TeamScheduleRow.section("进行中 · "+live.size()));for(Match m:live)rows.add(TeamScheduleRow.match(m,team));}
+            if(!live.isEmpty()){rows.add(TeamScheduleRow.section("Live · "+live.size()));for(Match m:live)rows.add(TeamScheduleRow.match(m,team));}
             for(Match m:upcoming)rows.add(TeamScheduleRow.match(m,team));
-            if(!other.isEmpty()){rows.add(TeamScheduleRow.section("其他状态 · "+other.size()));for(Match m:other)rows.add(TeamScheduleRow.match(m,team));}
-            if(rows.isEmpty())rows.add(TeamScheduleRow.note("没有接下来的比赛","来源尚未返回这支球队的后续赛程。"));
+            if(!other.isEmpty()){rows.add(TeamScheduleRow.section("Other · "+other.size()));for(Match m:other)rows.add(TeamScheduleRow.match(m,team));}
+            if(rows.isEmpty())rows.add(TeamScheduleRow.note("No upcoming matches","The source hasn't returned any future fixtures for this team."));
         }
         return rows;
     }
@@ -307,13 +311,13 @@ public final class TeamActivity extends Activity {
         if(calendarBusy)return;
         boolean remove=calendarSync.isSubscribed(match.id);
         if(!remove&&!(match.scheduled()&&match.timeConfirmed&&match.start>System.currentTimeMillis())) {
-            Sheet.message(this,"暂时不能订阅","这场比赛的开赛时间未确定、已开始或已结束。");return;
+            Sheet.message(this,"Can't subscribe yet","This match has no confirmed start time or has already started or finished.");return;
         }
         if(!CalendarSync.permitted(this)) {
             pendingSubscription=match;
             requestPermissions(new String[]{android.Manifest.permission.READ_CALENDAR,android.Manifest.permission.WRITE_CALENDAR},42);return;
         }
-        if(remove)Sheet.confirm(this,"取消订阅","从手机日历中移除「"+match.displayTitle()+"」及其提醒？","取消订阅",()->writeCalendar(match,true));
+        if(remove)Sheet.confirm(this,"Remove from calendar","Remove “"+match.displayTitle()+"” and its reminder from your calendar?","Remove",()->writeCalendar(match,true));
         else writeCalendar(match,false);
     }
     private void writeCalendar(Match match,boolean remove) {
@@ -326,19 +330,19 @@ public final class TeamActivity extends Activity {
                 else {
                     if(!calendarSync.hasCalendar(calendarSync.calendarId())) {
                         CalendarSync.CalendarChoice best=calendarSync.bestCalendar();
-                        if(best==null)throw new IllegalStateException("请先在系统日历中启用一个本地或小米日历。");
+                        if(best==null)throw new IllegalStateException("Enable a local or Xiaomi calendar in the system Calendar app first.");
                         calendarSync.chooseCalendar(best.id,best.name);
                     }
                     outcome=calendarSync.subscribe(match,System.currentTimeMillis());
                 }
-            } catch(RuntimeException e) {outcome=new CalendarSync.Result();outcome.failed=1;outcome.error=e.getMessage()==null?"日历写入失败":e.getMessage();}
+            } catch(RuntimeException e) {outcome=new CalendarSync.Result();outcome.failed=1;outcome.error=e.getMessage()==null?"Calendar write failed":e.getMessage();}
             CalendarSync.Result completed=outcome;
             handler.post(()-> {
                 calendarBusy=false;if(isDestroyed())return;
                 render();refreshSubscriptionViews();CalendarJob.schedule(this);
-                if(completed.failed>0)Sheet.message(this,remove?"未能取消订阅":"未能加入日历",completed.error);
+                if(completed.failed>0)Sheet.message(this,remove?"Couldn't remove from calendar":"Couldn't add to calendar",completed.error);
                 else {
-                    android.widget.Toast.makeText(this,remove?"已取消订阅":"已加入日历 · 提前 5 分钟提醒",android.widget.Toast.LENGTH_SHORT).show();
+                    android.widget.Toast.makeText(this,remove?"Removed from calendar":"Added to calendar · 5-minute reminder",android.widget.Toast.LENGTH_SHORT).show();
                     if(!remove)ResultNotify.requestIfNeeded(this);
                 }
             });
@@ -349,7 +353,7 @@ public final class TeamActivity extends Activity {
         if(code!=42)return;
         Match match=pendingSubscription;pendingSubscription=null;
         if(CalendarSync.permitted(this)){CalendarUpdates.start(this);CalendarCloudSync.opened(this);if(match!=null)toggleCalendar(match);}
-        else Sheet.message(this,"未开启日历权限","需要订阅时，请在系统应用权限中允许日历读写。");
+        else Sheet.message(this,"Calendar permission not enabled","Allow calendar read and write access when subscribing.");
     }
 
     private void load(boolean force) {
@@ -402,7 +406,7 @@ public final class TeamActivity extends Activity {
     }
 
     private String pageName() {
-        return team.league.equals("cs2")?"队伍赛程":"球队赛程";
+        return "Schedule";
     }
 
     private void refreshSubscriptionViews() {
@@ -414,28 +418,31 @@ public final class TeamActivity extends Activity {
     private void updateStatus() {
         if(status==null||error==null)return;
         if(result==null) {
-            status.setText(busy?"正在读取"+pageName()+"…":"尚未获取"+pageName());
+            status.setVisibility(View.GONE);
             error.setVisibility(View.GONE);
             return;
         }
-        String fetched=result.fetched>0?format(result.fetched,"M月d日 HH:mm")+" 获取":"尚未成功获取";
-        if(result.error.isEmpty())status.setText(result.source+" · 共 "+result.matches.size()+" 场 · "+fetched+(busy?" · 更新中":""));
-        else if(result.fetched>0)status.setText(result.source+" · 显示 "+format(result.fetched,"M月d日 HH:mm")+" 的记录");
-        else status.setText(pageName()+"暂不可用");
+        status.setVisibility(View.VISIBLE);
+        boolean saved=result.fetched>0;
+        String updated=saved?"Updated "+formatFetched(result.fetched):"Not updated yet";
+        String summary=result.source.isBlank()?fixtureCount(result.matches.size()):result.source+" · "+fixtureCount(result.matches.size());
+        if(result.error.isEmpty())status.setText(summary+" · "+updated+(busy?" · Refreshing":""));
+        else if(saved)status.setText("Saved schedule · "+formatFetched(result.fetched));
+        else status.setText("Schedule unavailable");
         boolean showError=!result.error.isEmpty()&&!result.matches.isEmpty();
         error.setVisibility(showError?View.VISIBLE:View.GONE);
-        if(showError)error.setText((result.fetched>0?pageName()+"未更新 · ":"无法获取"+pageName()+" · ")+result.error+(result.fetched>0?"\n下方保留上次成功获取的赛程。":""));
+        if(showError)error.setText((saved?"Couldn't refresh · ":"Couldn't load schedule · ")+result.error+(saved?"\nShowing the last saved schedule.":""));
     }
 
     private List<TeamScheduleRow> buildRows() {
         List<TeamScheduleRow> rows=new ArrayList<>();
         if(result==null) {
-            rows.add(TeamScheduleRow.note(busy?"正在读取"+pageName():"尚未获取"+pageName(),busy?"正在连接"+pageName()+"的数据来源。":"点右上角刷新重试。"));
+            rows.add(TeamScheduleRow.note(busy?"Loading schedule":"Schedule not loaded",busy?"Connecting to the schedule source.":"Tap refresh at the top right to try again."));
             return rows;
         }
         if(result.matches.isEmpty()) {
-            if(!result.error.isEmpty())rows.add(TeamScheduleRow.note("暂时无法获取赛程",result.error+"\n\n请检查网络后点右上角刷新重试。"));
-            else rows.add(TeamScheduleRow.note("该队暂未提供赛程",emptyMessage()));
+            if(!result.error.isEmpty())rows.add(TeamScheduleRow.note("Couldn't load schedule",result.error+"\n\nCheck your network, then tap refresh at the top right."));
+            else rows.add(TeamScheduleRow.note("No schedule available",emptyMessage()));
             return rows;
         }
         List<Match> live=new ArrayList<>(),upcoming=new ArrayList<>(),finished=new ArrayList<>(),other=new ArrayList<>();
@@ -448,17 +455,17 @@ public final class TeamActivity extends Activity {
         Comparator<Match> byStart=Comparator.comparingLong((Match m)->m.start==0?Long.MAX_VALUE:m.start).thenComparing(m->m.id);
         live.sort(byStart);upcoming.sort(byStart);finished.sort(byStart.reversed());other.sort(byStart);
         if(filter.equals("upcoming")) {
-            append(rows,"进行中",live);
-            append(rows,"接下来",upcoming);
+            append(rows,"Live",live);
+            append(rows,"Upcoming",upcoming);
         } else if(filter.equals("finished")) {
-            append(rows,"已结束",finished);
+            append(rows,"Results",finished);
         } else {
-            append(rows,"进行中",live);
-            append(rows,"接下来",upcoming);
-            append(rows,"已结束",finished);
-            append(rows,"其他状态",other);
+            append(rows,"Live",live);
+            append(rows,"Upcoming",upcoming);
+            append(rows,"Results",finished);
+            append(rows,"Other",other);
         }
-        rows.add(TeamScheduleRow.note("关于这些赛程",footnote()));
+        rows.add(TeamScheduleRow.note("Schedule notes",footnote()));
         return rows;
     }
     /** The two-chip switch appears only when both upcoming fixtures and results exist. */
@@ -477,14 +484,14 @@ public final class TeamActivity extends Activity {
             return;
         }
         filterScroll.setVisibility(View.VISIBLE);
-        option("全部","all",result.matches.size());
-        option("接下来","upcoming",upcoming);
-        option("已结束","finished",finished);
+        option("All","all",result.matches.size());
+        option("Upcoming","upcoming",upcoming);
+        option("Results","finished",finished);
     }
     private void option(String label,String value,int count) {
         boolean selected=filter.equals(value);
         TextView chip=ui.tab(label+" "+count,selected,()->{filter=value;list.setSelection(0);render();});
-        chip.setContentDescription(label+count+"场"+(selected?"，已选中":"，筛选球队赛程"));
+        chip.setContentDescription(label+" "+count+" "+(count==1?"fixture":"fixtures")+(selected?", selected":", filter schedule"));
         LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);
         params.setMarginEnd(ui.dp(8));filters.addView(chip,params);
     }
@@ -495,22 +502,33 @@ public final class TeamActivity extends Activity {
     }
     private String emptyMessage() {
         return switch(team.league) {
-            case "cs2" -> "5EPlay 暂未返回这支队伍的战队赛程。";
-            case NationalTeams.LEAGUE -> "ESPN 暂未返回这支国家队的赛程。";
-            default -> "来源暂未返回这支队伍本赛季的赛程。";
+            case "cs2" -> "5EPlay hasn't returned this team's schedule yet.";
+            case NationalTeams.LEAGUE -> "ESPN hasn't returned this national team's schedule yet.";
+            default -> "The source hasn't returned this team's schedule for the season yet.";
         };
     }
     private String footnote() {
         String coverage=switch(team.league) {
-            case "cs2" -> "5EPlay 战队赛程与一线赛程：最多显示 30 场近期已结束的比赛，以及接下来已发布的一线赛事。";
-            case NationalTeams.LEAGUE -> "ESPN 提供的近期比赛及已发布赛程。";
-            default -> "ESPN 本赛季球队赛程，合并已结束的比赛与接下来已发布的赛程。";
+            case "cs2" -> "Up to 30 recent completed matches plus published tier-one fixtures.";
+            case NationalTeams.LEAGUE -> "Recent matches and published fixtures.";
+            default -> "This season's schedule combines completed matches with published fixtures.";
         };
-        String note="比分为本队在前；点任意比赛查看完整详情。"+coverage;
-        if(result!=null&&result.stale())note+="\n当前未能更新，以上为 "+format(result.fetched,"M月d日 HH:mm")+" 获取的记录。";
-        return note;
+        return "Scores list this team first. Tap any match for full details. "+coverage;
     }
-    private static String format(long value,String pattern) {
-        return Formats.instant(value,pattern,"尚未提供");
+    private String competitionLabel() {
+        return switch(team.league) {
+            case "epl" -> "Premier League";
+            case "ucl" -> "Champions League";
+            case "efl" -> "Carabao Cup";
+            case "fa" -> "FA Cup";
+            case "national" -> "National team";
+            default -> team.competitionName();
+        };
+    }
+    private static String fixtureCount(int count) {
+        return count+" "+(count==1?"fixture":"fixtures");
+    }
+    private static String formatFetched(long value) {
+        return value>0?FETCHED.format(Instant.ofEpochMilli(value)):"Not yet";
     }
 }

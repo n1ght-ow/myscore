@@ -71,7 +71,7 @@ final class UpdateRepository {
             URL current=url;
             for(int redirects=0;redirects<=5;redirects++) {
                 if(!"https".equalsIgnoreCase(current.getProtocol())||!"github.com".equalsIgnoreCase(current.getHost()))
-                    throw new IOException("发布页跳转地址不可信");
+                    throw new IOException("Release page redirect target is not trusted");
                 HttpURLConnection con=Http.openDownload(current,attempt);
                 try {
                     con.setInstanceFollowRedirects(false);
@@ -82,7 +82,7 @@ final class UpdateRepository {
                     int code=con.getResponseCode();
                     if(code==301||code==302||code==303||code==307||code==308) {
                         String loc=con.getHeaderField("Location");
-                        if(loc==null||loc.isBlank())throw new IOException("发布页缺少跳转地址");
+                        if(loc==null||loc.isBlank())throw new IOException("Release page redirect is missing a location");
                         current=URI.create(current.toString()).resolve(loc.trim()).toURL();
                         Matcher m=TAG_PATH.matcher(current.getPath());
                         if(m.find()) {
@@ -101,7 +101,7 @@ final class UpdateRepository {
                 }
             }
         }
-        throw new IOException("无法读取最新发布版本");
+        throw new IOException("Could not read the latest release");
     }
     private String extractNotes(URL tagPage) {
         try {
@@ -124,7 +124,7 @@ final class UpdateRepository {
             URL current=new URL(apkUrl);
             try {
                 for(int redirects=0;redirects<=5;redirects++) {
-                    if(!UpdateTransfer.trustedHost(current))throw new IOException("更新安装包地址不可信");
+                    if(!UpdateTransfer.trustedHost(current))throw new IOException("Update package address is not trusted");
                     HttpURLConnection con=Http.openDownload(current,attempt);
                     try {
                         con.setInstanceFollowRedirects(false);
@@ -137,7 +137,7 @@ final class UpdateRepository {
                         int code=con.getResponseCode();
                         if(code==301||code==302||code==303||code==307||code==308) {
                             String loc=con.getHeaderField("Location");
-                            if(loc==null||loc.isBlank())throw new IOException("更新文件缺少跳转地址");
+                            if(loc==null||loc.isBlank())throw new IOException("Update file redirect is missing a location");
                             current=new URL(current,loc);
                             continue;
                         }
@@ -150,7 +150,7 @@ final class UpdateRepository {
                             long len=con.getContentLengthLong();
                             if(len>0)return len;
                         }
-                        throw new IOException("无法核实更新安装包大小（HTTP "+code+"）");
+                        throw new IOException("Could not verify the update package size (HTTP "+code+")");
                     } finally {
                         con.disconnect();
                     }
@@ -159,7 +159,7 @@ final class UpdateRepository {
                 last=e;
             }
         }
-        throw last!=null?last:new IOException("无法核实更新安装包大小");
+        throw last!=null?last:new IOException("Could not verify the update package size");
     }
     long downloadId(){return preferences.getLong("download_id",0);}
     UpdateRelease pending(){try{return UpdateRelease.restore(preferences.getString("release",""));}catch(Exception e){return null;}}
@@ -167,48 +167,48 @@ final class UpdateRepository {
         return new File(new File(context.getFilesDir(),"updates"),"MyScore-"+release.version+".apk");
     }
     long start(UpdateRelease release)throws Exception {
-        if(!release.newerThan(BuildConfig.VERSION_NAME))throw new IOException("当前已是最新版本");
+        if(!release.newerThan(BuildConfig.VERSION_NAME))throw new IOException("The current version is already up to date");
         synchronized(LOCK) {
         clear();File file=file(release);File directory=file.getParentFile();
-        if(!directory.isDirectory()&&!directory.mkdirs())throw new IOException("无法创建更新下载目录");
-        File[] old=directory.listFiles();if(old!=null)for(File entry:old)if(entry.isFile()&&entry.getName().matches("MyScore-[0-9]+\\.[0-9]+(?:\\.[0-9]+)?\\.apk(?:\\.[a-f0-9-]{36}\\.part)?")&&!entry.delete())throw new IOException("无法清理旧安装包，请稍后重试");
+        if(!directory.isDirectory()&&!directory.mkdirs())throw new IOException("Could not create the update download directory");
+        File[] old=directory.listFiles();if(old!=null)for(File entry:old)if(entry.isFile()&&entry.getName().matches("MyScore-[0-9]+\\.[0-9]+(?:\\.[0-9]+)?\\.apk(?:\\.[a-f0-9-]{36}\\.part)?")&&!entry.delete())throw new IOException("Could not clean up the old update package. Try again later");
         String token=java.util.UUID.randomUUID().toString();
-        if(!preferences.edit().putString("release",release.saved()).putLong("download_id",-1).putString("transfer_token",token).putInt("status",DownloadManager.STATUS_PENDING).putLong("bytes",0).putLong("updated",System.currentTimeMillis()).commit())throw new IOException("无法保存下载任务，请重试");
+        if(!preferences.edit().putString("release",release.saved()).putLong("download_id",-1).putString("transfer_token",token).putInt("status",DownloadManager.STATUS_PENDING).putLong("bytes",0).putLong("updated",System.currentTimeMillis()).commit())throw new IOException("Could not save the download task. Try again");
         try {context.startForegroundService(new Intent(context,UpdateService.class).putExtra("token",token));}
-        catch(RuntimeException e){preferences.edit().clear().commit();throw new IOException("无法启动下载，请返回更新页重新下载",e);}
+        catch(RuntimeException e){preferences.edit().clear().commit();throw new IOException("Could not start the download. Return to the update page and download again",e);}
         return -1;
         }
     }
     Progress progress()throws IOException {
         synchronized(LOCK) {
-            long id=downloadId();if(id==0)throw new IOException("下载任务已不存在，请重新下载");
-            if(id>0)throw new IOException("旧版系统下载任务已暂停，请点重新下载以使用修复后的下载方式");
+            long id=downloadId();if(id==0)throw new IOException("The download task no longer exists. Download again");
+            if(id>0)throw new IOException("The legacy system download was paused. Download again to use the fixed transfer method");
             int status=preferences.getInt("status",DownloadManager.STATUS_FAILED);
-            if(status==DownloadManager.STATUS_FAILED)throw new IOException(preferences.getString("error","下载已中断，请重新下载"));
-            UpdateRelease release=pending();if(release==null)throw new IOException("下载信息已失效，请重新检查更新");
-            if(status!=DownloadManager.STATUS_SUCCESSFUL&&!UpdateService.running(token())&&System.currentTimeMillis()-preferences.getLong("updated",0)>30000)throw new IOException("下载已中断，请重新下载");
+            if(status==DownloadManager.STATUS_FAILED)throw new IOException(preferences.getString("error","The download was interrupted. Download again"));
+            UpdateRelease release=pending();if(release==null)throw new IOException("Download information has expired. Check for updates again");
+            if(status!=DownloadManager.STATUS_SUCCESSFUL&&!UpdateService.running(token())&&System.currentTimeMillis()-preferences.getLong("updated",0)>30000)throw new IOException("The download was interrupted. Download again");
             return new Progress(status,preferences.getLong("bytes",0),release.size,0);
         }
     }
     Uri verify(UpdateRelease release)throws Exception {
         try{
-            if(progress().status!=DownloadManager.STATUS_SUCCESSFUL)throw new IOException("安装包尚未下载完成");
+            if(progress().status!=DownloadManager.STATUS_SUCCESSFUL)throw new IOException("The update package has not finished downloading");
             File file=file(release);release.verifyFile(file);
             PackageManager manager=context.getPackageManager();
             PackageInfo archive=manager.getPackageArchiveInfo(file.getAbsolutePath(),PackageManager.GET_SIGNING_CERTIFICATES);
             PackageInfo installed=manager.getPackageInfo(context.getPackageName(),PackageManager.GET_SIGNING_CERTIFICATES);
             validateArchive(archive,installed,release.version);
-            if(!preferences.edit().putString("verified",release.sha256).commit())throw new IOException("无法保存安装包校验状态，请重试");
+            if(!preferences.edit().putString("verified",release.sha256).commit())throw new IOException("Could not save the update package verification state. Try again");
             return new Uri.Builder().scheme("content").authority(context.getPackageName()+".updates").appendPath("apk").appendPath(release.version).build();
         }catch(Exception e){clear();throw e;}
     }
     static void validateArchive(PackageInfo archive,PackageInfo installed,String version)throws IOException {
-        if(archive==null||!installed.packageName.equals(archive.packageName)||!version.equals(archive.versionName))throw new IOException("安装包与 N1ghtScore 版本不匹配");
-        if(archive.getLongVersionCode()<=installed.getLongVersionCode())throw new IOException("此安装包不是更新版本");
-        if(archive.signingInfo==null||installed.signingInfo==null||!signers(archive.signingInfo.getApkContentsSigners()).equals(signers(installed.signingInfo.getApkContentsSigners())))throw new IOException("安装包签名不一致，已停止安装");
+        if(archive==null||!installed.packageName.equals(archive.packageName)||!version.equals(archive.versionName))throw new IOException("The update package does not match this N1ghtScore version");
+        if(archive.getLongVersionCode()<=installed.getLongVersionCode())throw new IOException("This package is not a newer version");
+        if(archive.signingInfo==null||installed.signingInfo==null||!signers(archive.signingInfo.getApkContentsSigners()).equals(signers(installed.signingInfo.getApkContentsSigners())))throw new IOException("Update package signature mismatch. Installation stopped");
     }
     private static Set<String> signers(Signature[] signatures)throws IOException {
-        if(signatures==null||signatures.length==0)throw new IOException("安装包缺少签名");
+        if(signatures==null||signatures.length==0)throw new IOException("The update package is missing a signature");
         Set<String> values=new HashSet<>();for(Signature signature:signatures)values.add(Arrays.toString(signature.toByteArray()));return values;
     }
     String token(){return preferences.getString("transfer_token","");}

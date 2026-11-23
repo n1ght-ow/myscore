@@ -16,11 +16,11 @@ public class ResultNotifyTest {
         epl.awayScore = "1";
         epl.state = "scheduled";
         Competition eplComp = Competition.find("epl");
-        assertEquals("英超 · Arsenal vs Chelsea", ResultNotify.calendarTitle(eplComp, epl));
+        assertEquals("Premier League · Arsenal vs Chelsea", ResultNotify.calendarTitle(eplComp, epl));
 
         epl.state = "final";
-        assertEquals("英超 · Arsenal 2 - 1 Chelsea", ResultNotify.calendarTitle(eplComp, epl));
-        assertEquals("英超 · 比赛已结束", ResultNotify.title(epl));
+        assertEquals("Premier League · Arsenal 2 - 1 Chelsea", ResultNotify.calendarTitle(eplComp, epl));
+        assertEquals("Premier League · Match finished", ResultNotify.title(epl));
         assertEquals("Arsenal 2 : 1 Chelsea", ResultNotify.body(epl));
 
         Match pens = Match.fromJson(epl.json());
@@ -43,11 +43,11 @@ public class ResultNotifyTest {
         cs2.awayScore = "1";
         cs2.state = "final";
         cs2.results.addAll(List.of("Mirage 13-9", "Nuke 10-13", "Dust2 13-7"));
-        assertEquals("IEM Cologne · 比赛已结束", ResultNotify.title(cs2));
-        assertEquals("Spirit 2 : 1 Vitality（Mirage 13-9 · Nuke 10-13 · Dust2 13-7）", ResultNotify.body(cs2));
+        assertEquals("IEM Cologne · Match finished", ResultNotify.title(cs2));
+        assertEquals("Spirit 2 : 1 Vitality (Mirage 13-9 · Nuke 10-13 · Dust2 13-7)", ResultNotify.body(cs2));
         cs2.tierOne = false;
         cs2.homeId = "csgo_tm_7020";
-        assertEquals("CS2 · Team Spirit · 比赛已结束", ResultNotify.title(cs2));
+        assertEquals("CS2 · Team Spirit · Match finished", ResultNotify.title(cs2));
 
         Match f1 = new Match();
         f1.id = "espn:f1:1:2";
@@ -56,7 +56,7 @@ public class ResultNotifyTest {
         f1.title = "拉斯维加斯大奖赛 · 正赛";
         f1.state = "final";
         f1.results.addAll(List.of("1 VER", "2 NOR", "3 LEC", "4 PIA"));
-        assertEquals("F1 · 比赛已结束", ResultNotify.title(f1));
+        assertEquals("F1 · Match finished", ResultNotify.title(f1));
         assertEquals("拉斯维加斯大奖赛 · 正赛 · 1 VER / 2 NOR / 3 LEC", ResultNotify.body(f1));
         assertEquals("F1 · 拉斯维加斯大奖赛 · 正赛 · 1 VER", ResultNotify.calendarTitle(Competition.find("f1"), f1));
     }

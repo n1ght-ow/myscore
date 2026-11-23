@@ -1,6 +1,6 @@
 # N1ghtScore 安卓个人版
 
-一个面向 Redmi K80 Pro 与 Xiaomi Pad 6S Pro 12.4 的原生 Android 比分与赛程应用。手机保持单列赛程册，平板使用独立比赛工作台：宽屏三栏，窄窗口保留完整赛程并点击进入详情。中文界面，北京时间，无广告，无登录，不依赖 Google 服务，不使用厂商推送 SDK。
+一个面向 Redmi K80 Pro 与 Xiaomi Pad 6S Pro 12.4 的原生 Android 比分与赛程应用。手机保持单列赛程册，平板使用独立比赛工作台：宽屏三栏，窄窗口保留完整赛程并点击进入详情。英文界面，北京时间，无广告，无登录，不依赖 Google 服务，不使用厂商推送 SDK。
 
 版本变更、下载与校验文件统一发布在 [GitHub Releases](https://github.com/n1ght-ow/myscore/releases)。本 README 只描述当前功能、使用方式与数据边界，不记录更新日志。
 
@@ -11,6 +11,12 @@
 - F1：按练习、排位、冲刺、正赛拆分场次；详情分「总览、车手、成绩」三栏，车手按车队分组，含车号，成绩含圈数、用时、积分与 Q1–Q3。
 - CS2：5EPlay 一线赛事（Major / S+ / S 级）加 Team Spirit 全部比赛；一线赛事卡片抬头显示赛事名，Spirit 的次级比赛显示 `CS2 · Team Spirit`；其他队伍的 A/B/C、资格赛和表演赛不显示。
 - 电竞展示系列赛比分及来源提供的小局信息；没有提供的地图赢家或回合比分不会推断。
+
+`Standings` 独立于比赛日期：英超显示积分榜，欧冠显示联赛阶段及晋级区；足总杯与卡拉宝杯按轮次查看对阵和赛果。NBA 按东西部，NFL 按 AFC / NFC 及各自分区，F1 分为车手和车队积分榜。足球、NBA 和 NFL 来自 ESPN；F1 来自 Jolpica F1。排名页可手动刷新，读取失败保留当前进程里上次成功的数据及获取时间。
+
+CS2 排名使用 [Valve 官方 VRS](https://github.com/ValveSoftware/counter-strike_regional_standings)，包含全球、欧洲、美洲和亚洲榜单，显示该期名次、积分和阵容，每页 30 支战队。榜单日期是 Valve 发布的数据日期，与应用获取时间分开标注；它不是实时比分排名，也不代表已确认 Major 邀请。
+
+在 `Scores → CS2 → Tournaments` 查看 5EPlay 发布的阶段与签表，或从单场的 `Tournament overview` 直达。瑞士轮先显示完整战绩路径，点节点查看该战绩的对阵或已确认结果；双败可切换胜者组和败者组，单败按轮次横排。缺少赛制图时显示已发布的对阵；不猜测签位或晋级结果。
 
 ## 直播入口
 

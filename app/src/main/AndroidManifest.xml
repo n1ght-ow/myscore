@@ -23,6 +23,8 @@
             </intent-filter>
         </activity>
         <activity android:name=".TeamActivity" android:exported="false" />
+        <activity android:name=".StandingsActivity" android:exported="false" />
+        <activity android:name=".Cs2EventActivity" android:exported="false" />
         <activity android:name=".DetailActivity" android:exported="false" />
         <activity android:name=".UpdateActivity" android:exported="false" android:launchMode="singleTop" />
         <service android:name=".CalendarJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true" />

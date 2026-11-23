@@ -211,10 +211,10 @@ final class Http {
     static String statusSummary() {
         boolean vpn = vpnActive;
         Proxy proxy = explicitProxy("site.api.espn.com");
-        if (vpn && physicalNetwork != null) return "当前网络：VPN 已开启 · 国内源物理直连分流 · 海外源多路自适应";
-        if (vpn) return "当前网络：VPN 已开启 · 代理/直连与自有节点多路自适应";
-        if (proxy != null) return "当前网络：系统代理已配置 · 国内源直连优先 · 海外源代理/直连自适应";
-        return "当前网络：直连模式 · 官方源优先 + 自有 HTTPS 节点自动兜底";
+        if (vpn && physicalNetwork != null) return "Network: VPN is on · Domestic sources use direct physical routing · Overseas sources use adaptive multipath";
+        if (vpn) return "Network: VPN is on · Proxy/direct and app HTTPS routes use adaptive fallback";
+        if (proxy != null) return "Network: System proxy configured · Domestic sources prefer direct · Overseas sources use adaptive proxy/direct routing";
+        return "Network: Direct mode · Official sources first + app HTTPS fallback";
     }
 
     static boolean domesticHost(String host) {
@@ -533,7 +533,7 @@ final class Http {
                 if (route.relay) {
                     JSONObject wrapper = new JSONObject(new String(raw, StandardCharsets.UTF_8));
                     if (!wrapper.has("data") || wrapper.isNull("data")) {
-                        throw new IOException(wrapper.optString("error", "数据服务未返回内容"));
+                        throw new IOException(wrapper.optString("error", "Data service returned no content"));
                     }
                     raw = wrapper.get("data").toString().getBytes(StandardCharsets.UTF_8);
                 }
@@ -557,7 +557,7 @@ final class Http {
                     if (route.relay) {
                         JSONObject wrapper = new JSONObject(new String(raw, StandardCharsets.UTF_8));
                         if (!wrapper.has("data") || wrapper.isNull("data")) {
-                            throw new IOException(wrapper.optString("error", "数据服务未返回内容"));
+                            throw new IOException(wrapper.optString("error", "Data service returned no content"));
                         }
                         raw = wrapper.get("data").toString().getBytes(StandardCharsets.UTF_8);
                     }
@@ -580,7 +580,7 @@ final class Http {
             }
         }
         if (primaryError != null) throw primaryError;
-        throw new IOException("连接失败");
+        throw new IOException("Connection failed");
     }
 
     static final class HttpStatusException extends IOException {
@@ -640,7 +640,7 @@ final class Http {
                 int code = connection.getResponseCode();
                 if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
                     String location = connection.getHeaderField("Location");
-                    if (location == null || location.isBlank()) throw new IOException("重定向缺少目标地址");
+                    if (location == null || location.isBlank()) throw new IOException("Redirect is missing a target address");
                     try (InputStream ignored = connection.getInputStream()) {} catch (IOException ignored) {}
                     url = URI.create(url.toString()).resolve(location.trim()).toURL();
                     if (code == 303 || ((code == 301 || code == 302) && "POST".equals(method))) {
@@ -651,7 +651,7 @@ final class Http {
                     continue;
                 }
                 if (code != 200) {
-                    String prefix = "image/*".equals(defaultAccept) ? "Image HTTP " : "来源返回 HTTP ";
+                    String prefix = "image/*".equals(defaultAccept) ? "Image HTTP " : "Source returned HTTP ";
                     throw new HttpStatusException(code, prefix);
                 }
                 InputStream rawStream = connection.getInputStream();
@@ -663,8 +663,8 @@ final class Http {
                     int n;
                     while ((n = in.read(buffer)) != -1) {
                         if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-                        if (System.nanoTime() > deadline) throw new SocketTimeoutException("来源响应超时");
-                        if (out.size() + n > maxBytes) throw new IOException("来源响应过大");
+                        if (System.nanoTime() > deadline) throw new SocketTimeoutException("Source response timed out");
+                        if (out.size() + n > maxBytes) throw new IOException("Source response exceeded the size limit");
                         out.write(buffer, 0, n);
                     }
                     byte[] result = out.toByteArray();
@@ -675,7 +675,7 @@ final class Http {
                 if (!complete || closeSocket) connection.disconnect();
             }
         }
-        throw new IOException("重定向次数过多");
+        throw new IOException("Too many redirects");
     }
 
     private static boolean hasHeader(Map<String, String> headers, String target) {

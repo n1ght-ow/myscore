@@ -17,12 +17,12 @@ public final class UpdateProvider extends ContentProvider {
     private File file(Uri uri)throws FileNotFoundException {
         UpdateRepository repository=new UpdateRepository(getContext());UpdateRelease release=repository.pending();
         try {
-            if(release==null||!uri.getAuthority().equals(getContext().getPackageName()+".updates")||!uri.getPathSegments().equals(java.util.List.of("apk",release.version))||!release.sha256.equals(repository.preferences.getString("verified",""))||repository.progress().status()!=DownloadManager.STATUS_SUCCESSFUL)throw new FileNotFoundException("更新文件尚未校验或地址无效");
-            File file=repository.file(release);if(!file.isFile())throw new FileNotFoundException("更新文件已不存在");return file;
+            if(release==null||!uri.getAuthority().equals(getContext().getPackageName()+".updates")||!uri.getPathSegments().equals(java.util.List.of("apk",release.version))||!release.sha256.equals(repository.preferences.getString("verified",""))||repository.progress().status()!=DownloadManager.STATUS_SUCCESSFUL)throw new FileNotFoundException("Update file is not verified or the address is invalid");
+            File file=repository.file(release);if(!file.isFile())throw new FileNotFoundException("Update file no longer exists");return file;
         } catch(java.io.IOException e){throw new FileNotFoundException(e.getMessage());}
     }
     @Override public String getType(Uri uri){return "application/vnd.android.package-archive";}
-    @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws FileNotFoundException {if(!"r".equals(mode))throw new FileNotFoundException("仅允许读取更新文件");return ParcelFileDescriptor.open(file(uri),ParcelFileDescriptor.MODE_READ_ONLY);}
+    @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws FileNotFoundException {if(!"r".equals(mode))throw new FileNotFoundException("Only read access to the update file is allowed");return ParcelFileDescriptor.open(file(uri),ParcelFileDescriptor.MODE_READ_ONLY);}
     @Override public Cursor query(Uri uri,String[] projection,String selection,String[] args,String order){
         try {
             File file=file(uri);String[] columns=projection==null?new String[]{OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE}:projection;

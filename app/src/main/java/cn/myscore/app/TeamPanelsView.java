@@ -42,15 +42,15 @@ final class TeamPanelsView {
         int players = this.countRows(this.teamTables(category, this.detail.match.homeId)) + this.countRows(this.teamTables(category, this.detail.match.awayId));
         anyInjuries = nba && !this.injuryTables(null).isEmpty();
         if (players == 0 && !anyInjuries) {
-            this.body.addView((View)this.ui.text("本场数据尚未提供", 18, this.ui.text, true));
+            this.body.addView((View)this.ui.text("Match data is not available", 18, this.ui.text, true));
             this.ui.gap(this.body, 10);
-            this.body.addView((View)this.ui.text("来源更新后会显示本场真实数据。", 13, this.ui.muted, false));
+            this.body.addView((View)this.ui.text("Source-backed match data will appear after the next update.", 13, this.ui.muted, false));
             return;
         }
-        String title = nba ? "球员数据" : (category.equals("全场") ? "选手总数据" : category + " 选手数据");
+        String title = nba ? "Player stats" : (category.equals("全场") ? "Overall player stats" : EnglishDisplay.text(category) + " player stats");
         this.body.addView((View)this.ui.text(title, 16, this.ui.text, true));
         this.ui.gap(this.body, 2);
-        TextView hint = this.ui.text(players > 0 ? "点数值列排序 · 点姓名查看详情" : "伤停名单按来源发布", 11, this.ui.muted, false);
+        TextView hint = this.ui.text(players > 0 ? "Tap a number column to sort · Tap a name for details" : "Injury report follows the source", 11, this.ui.muted, false);
         this.body.addView((View)hint);
         this.ui.gap(this.body, 8);
         List<HorizontalScrollView> scrollers = this.teams(category, nba, sort, descending, changed, scrollX, Map.of(), Map.of());
@@ -58,7 +58,7 @@ final class TeamPanelsView {
         hint.post(() -> {
             boolean scroll;
             scroll = !scrollers.isEmpty() && (((HorizontalScrollView)scrollers.get(0)).canScrollHorizontally(1) || ((HorizontalScrollView)scrollers.get(0)).canScrollHorizontally(-1));
-            hint.setText((CharSequence)(players > 0 ? "点数值列排序 · " + (scroll ? "横向滑动同步查看两队 · " : "") + "点姓名查看详情" : "伤停名单按来源发布"));
+            hint.setText((CharSequence)(players > 0 ? "Tap a number column to sort · " + (scroll ? "Swipe to compare both teams · " : "") + "Tap a name for details" : "Injury report follows the source"));
         });
     }
 
@@ -94,8 +94,8 @@ final class TeamPanelsView {
         TextView title = this.ui.text(name, 14, this.ui.text, true);
         title.setPadding(this.ui.dp(8.0f), 0, 0, 0);
         header.addView((View)title, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        header.addView((View)this.ui.text(rows.size() + " 人", 11, this.ui.muted, false));
-        header.setContentDescription((CharSequence)(name + "，" + rows.size() + " 人"));
+        header.addView((View)this.ui.text(players(rows.size()), 11, this.ui.muted, false));
+        header.setContentDescription((CharSequence)EnglishDisplay.text(name + ", " + players(rows.size())));
         section.addView((View)header);
         this.ui.gap(section, 6);
         if (score != null && !score.isEmpty()) {
@@ -107,9 +107,11 @@ final class TeamPanelsView {
             for (Map.Entry<String, String> cell : score.entrySet()) {
                 LinearLayout item = this.ui.column();
                 item.setGravity(1);
-                TextView label2 = this.ui.text(cell.getKey(), 11, this.ui.muted, false);
+                String labelText = EnglishDisplay.text(cell.getKey());
+                TextView label2 = this.ui.text(labelText, 11, this.ui.muted, false);
                 label2.setGravity(17);
-                TextView value = this.ui.text(cell.getValue(), 13, this.ui.text, true);
+                String valueText = EnglishDisplay.text(cell.getValue());
+                TextView value = this.ui.text(valueText, 13, this.ui.text, true);
                 value.setGravity(17);
                 if (cell.getKey().equals("总分")) {
                     value.setTag((Object)"team-map-score-total");
@@ -117,18 +119,18 @@ final class TeamPanelsView {
                 item.addView((View)label2);
                 item.addView((View)value);
                 band.addView((View)item, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-                description.append("，").append(cell.getKey()).append(' ').append(cell.getValue());
+                description.append(", ").append(labelText).append(' ').append(valueText);
             }
-            band.setContentDescription((CharSequence)description.toString());
+            band.setContentDescription((CharSequence)EnglishDisplay.text(description.toString()));
             section.addView((View)band);
             this.ui.gap(section, 6);
         }
         ArrayList<HorizontalScrollView> scrollers = new ArrayList<HorizontalScrollView>();
         if (rows.isEmpty()) {
-            section.addView((View)this.ui.text("来源未提供这支球队的数据。", 13, this.ui.muted, false));
+            section.addView((View)this.ui.text("The source did not provide data for this team.", 13, this.ui.muted, false));
         } else {
             View table = new DetailTableView(this.ui, this.nba(), false, !this.nba(), 0).build(tables.get((int)0).columns, rows, sort, descending, changed == null ? null : label -> changed.accept(new Sort((String)label, label.equals(sort) ? !descending : true)), null, scrollX);
-            table.setContentDescription((CharSequence)(name + (this.nba() ? " 球员数据" : " 选手数据")));
+            table.setContentDescription((CharSequence)EnglishDisplay.text(name + " player stats"));
             section.addView(table, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             HorizontalScrollView scroller = (HorizontalScrollView)table.findViewWithTag((Object)"detail-metrics-scroll");
             if (scroller != null) {
@@ -148,15 +150,15 @@ final class TeamPanelsView {
         LinearLayout caption = this.ui.row();
         caption.setTag((Object)"team-panel-injury-header");
         caption.setPadding(this.ui.dp(4.0f), 0, this.ui.dp(4.0f), 0);
-        caption.addView((View)this.ui.text(INJURY, 13, this.ui.text, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+        caption.addView((View)this.ui.text(EnglishDisplay.text(INJURY), 13, this.ui.text, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         if (!entries.isEmpty()) {
-            caption.addView((View)this.ui.text(entries.size() + " 人", 11, this.ui.muted, false));
+            caption.addView((View)this.ui.text(players(entries.size()), 11, this.ui.muted, false));
         }
-        caption.setContentDescription((CharSequence)("伤停，" + (entries.isEmpty() ? "来源未提供伤停名单" : entries.size() + " 人")));
+        caption.setContentDescription((CharSequence)("Injuries, " + (entries.isEmpty() ? "No injury report from the source" : players(entries.size()))));
         section.addView((View)caption);
         if (entries.isEmpty()) {
             this.ui.gap(section, 6);
-            section.addView((View)this.ui.text("来源未提供伤停名单", 12, this.ui.muted, false));
+            section.addView((View)this.ui.text("No injury report from the source", 12, this.ui.muted, false));
             return;
         }
         for (int i = 0; i < entries.size(); ++i) {
@@ -174,8 +176,10 @@ final class TeamPanelsView {
         int statusIndex = entry.table().columns.indexOf("状态");
         int noteIndex = entry.table().columns.indexOf("说明");
         String status = DetailParsers.label(DetailRows.cell(entry.values(), statusIndex < 0 ? 1 : statusIndex)).trim();
+        String statusText = EnglishDisplay.text(status);
         String rawNote = DetailRows.cell(entry.values(), noteIndex < 0 ? 2 : noteIndex);
         String note = rawNote.equals("—") ? "" : rawNote;
+        String noteText = EnglishDisplay.text(note);
         LinearLayout row = this.ui.row();
         row.setGravity(48);
         row.setTag((Object)"team-panel-injury");
@@ -183,13 +187,13 @@ final class TeamPanelsView {
         row.setPadding(this.ui.dp(4.0f), this.ui.dp(8.0f), this.ui.dp(4.0f), this.ui.dp(8.0f));
         LinearLayout words = this.ui.column();
         words.addView((View)this.ui.text(name, 13, this.ui.text, true));
-        if (!note.isBlank()) {
+        if (!noteText.isBlank()) {
             this.ui.gap(words, 3);
-            words.addView((View)this.ui.text(note, 12, this.ui.muted, false));
+            words.addView((View)this.ui.text(noteText, 12, this.ui.muted, false));
         }
         row.addView((View)words, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         if (!status.isBlank() && !status.equals("—")) {
-            TextView badge = this.ui.text(status, 11, this.ui.text, true);
+            TextView badge = this.ui.text(statusText, 11, this.ui.text, true);
             badge.setTag((Object)"team-panel-injury-status");
             badge.setGravity(17);
             badge.setPadding(this.ui.dp(6.0f), this.ui.dp(2.0f), this.ui.dp(6.0f), this.ui.dp(2.0f));
@@ -198,8 +202,8 @@ final class TeamPanelsView {
             params.setMarginStart(this.ui.dp(8.0f));
             row.addView((View)badge, (ViewGroup.LayoutParams)params);
         }
-        String description = name + "，" + status + (note.isBlank() ? "" : "，" + note);
-        row.setContentDescription((CharSequence)description);
+        String description = name + (!status.isBlank() && !status.equals("—") ? ", " + statusText : "") + (noteText.isBlank() ? "" : ", " + noteText);
+        row.setContentDescription((CharSequence)EnglishDisplay.text(description));
         row.setFocusable(true);
         this.ui.clickable((View)row, this.ui.bg, 0);
         String fullName = person == null || person.name().isBlank() ? name : person.name();
@@ -207,12 +211,12 @@ final class TeamPanelsView {
             if (!(this.ui.c instanceof Activity)) {
                 return;
             }
-            StringBuilder text = new StringBuilder("球队  ").append(team);
+            StringBuilder text = new StringBuilder("Team  ").append(team);
             if (!status.isBlank() && !status.equals("—")) {
-                text.append('\n').append("状态  ").append(status);
+                text.append('\n').append("Status  ").append(statusText);
             }
-            if (!note.isBlank()) {
-                text.append('\n').append("说明  ").append(note);
+            if (!noteText.isBlank()) {
+                text.append('\n').append("Note  ").append(noteText);
             }
             Sheet.message((Activity)this.ui.c, fullName, text.toString());
         });
@@ -351,6 +355,10 @@ final class TeamPanelsView {
                 moving[0] = false;
             });
         }
+    }
+
+    private static String players(int count) {
+        return count + " " + (count == 1 ? "player" : "players");
     }
 
     record Sort(String column, boolean descending) {

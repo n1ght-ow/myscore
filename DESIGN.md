@@ -24,6 +24,25 @@ Taste 抽取方向：True-black flat，seed **778335413**，没有重抽。采�
 
 ## 页面与组件
 
+### English UI and content priority
+
+- Scores, Standings and Settings are separate destinations. Within a screen, lead with its subject (day and fixtures, rank, match result, team, or version), then scope controls and actions; retrieval metadata and diagnostics support the content instead of heading it.
+- The app uses English for controls, accessibility labels, dates and statistical captions. Preserve source identities and old cache, subscription and calendar keys; translate at presentation when a stored key or provider vocabulary must stay stable. The scoreboard and calendar still use Asia/Shanghai.
+
+### CS2 Tournament overview
+
+- The Swiss diagram is a compact, interactive map of records. A record node selects the match ledger below; a terminal node selects confirmed advancing or eliminated teams. Rules, not unannounced pairings, determine record paths. Team names and the schedule do not occupy the diagram itself.
+- The event name is the page title. Stage and group pickers are subordinate, and source/time and format notes appear after the working content. A selected state uses shape/weight as well as text; green and red are reserved for advancement and exits, without tinted cards around each match.
+- Knockout rounds form a separate bracket with compact slots and only confirmed links; double elimination shows one bracket at a time, with the other one reachable directly. Unsupported formats retain the published schedule. Unassigned games never show placeholder scores or invented names.
+
+### 赛事排名
+
+- 「排名」与「比赛 / 设置」同行，平板导航轨采用同一个入口。打开后不跟随首页比赛日期：排名按来源当前赛季，赛事标签沿用同一条下划线轨道；不重复绘制已选赛事或分区的标题。
+- 英超与欧冠优先露出积分，球队与名次固定，横滑仅移动统计列。欧冠显示联赛阶段和来源提供的晋级区信息；足总杯与卡拉宝杯看轮次和对阵结果，不生成虚构的杯赛积分，也不根据单场胜负推算晋级。
+- NBA 按东西部；NFL 按 AFC / NFC 及各自分区；F1 按车手 / 车队。窄屏用分区标签，在实测阅读区足够宽时并排比较。数字列按同组内容统一测量，表头与数据右边缘对齐；长名称和系统大字号可换行，身份与数字行高度同步。
+- CS2 使用 Valve 官方 VRS，按全球 / 欧洲 / 美洲 / 亚洲切换。共用名次与积分列，战队名下显示该期来源阵容，不假设是实时名单；每页 30 支，显示榜单发布日期和应用获取时间。
+- 复用黑白赛程册的字级、表面与 48dp 操作区。冷绿用于积分和已确认的单场胜者，未发布数据使用破折号或明确说明。来源与获取时间只出现一次，刷新失败保留当前进程上次成功的数据。
+
 首页采用约 56dp 的品牌 / 刷新行，移除宣传式副标题；赛事使用可横滑的文字下划线标签；日期是单行文本入口，前后切换采用无底图标。正常字号时顶区约 160dp，并随滚动收起。底部「比赛 / 设置」通过文字明度和字重区分，不再使用两个大色块。比分卡采用赛事抬头 / 状态、两行对阵、固定比分轴和时间区；CS2 一线赛事抬头显示赛事名，Spirit 的次级比赛显示 `CS2 · Team Spirit`，抬头优先使用剩余宽度并自然换行，不省略。首页、F1 与球队赛程的比赛时间统一使用 16sp 半粗主文字色，来源 / 更新时间在下方使用 11sp 常规辅助色，不重复标注“北京时间”；实际时区仍为 Asia/Shanghai，未确认时间继续显示“时间待定”。时间区随系统字号增高并完整换行，保持日历按钮的 48dp 触摸区域。
 
 详情仅固定返回 / 赛事抬头 / 刷新与页面标签；比分牌、正文一起滚动，防止大字号或横屏时头部挤占数据区域。统计表保留固定身份列、可横滑和排序的数值列，选中列使用中性层级；双方对比为绿 / 灰。所有详情类型使用同一个容器、标题、按钮和弹层系统。

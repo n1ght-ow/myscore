@@ -95,6 +95,7 @@ implements ScoreAdapter.Host {
     private LinearLayout body;
     private LinearLayout nav;
     private LinearLayout headerView;
+    private View cs2EventsAction;
     private LinearLayout filterTabs;
     private LinearLayout dateSelectorView;
     private LocalDate headerDay;
@@ -472,7 +473,7 @@ implements ScoreAdapter.Host {
                 result = this.repository.cached(f, t, "全部");
                 for (Repository.Batch batch2 : result.batches) {
                     if (!batch2.error.isEmpty()) continue;
-                    batch2.error = "刷新意外中断，已保留上次数据";
+                    batch2.error = "Refresh was interrupted; the last data was kept";
                 }
             }
             Repository.Snapshot next = result;
@@ -817,6 +818,7 @@ implements ScoreAdapter.Host {
         if (this.headerView == null || this.isFinishing() || this.isDestroyed()) {
             return;
         }
+        this.updateCs2EventsAction();
         // Keep the tapped controls and horizontal scroll position across sport changes.
         for (int i = 0; i < this.filterTabs.getChildCount(); i++) {
             TextView item = (TextView)this.filterTabs.getChildAt(i);
@@ -824,7 +826,7 @@ implements ScoreAdapter.Host {
             boolean selected = group.equals(this.group);
             if (item.isSelected() != selected) {
                 this.ui.selectTab(item, selected);
-                item.setContentDescription(group + (selected ? "，已选中" : "，筛选赛事"));
+                item.setContentDescription(EnglishDisplay.sport(group) + (selected ? ", selected" : ", filter sport"));
             }
         }
         if (!this.from().equals(this.headerDay)) {
@@ -919,9 +921,14 @@ implements ScoreAdapter.Host {
         this.headerView.setBackgroundColor(this.ui.bg);
         this.header(this.headerView);
         if (scores) {
-            this.filters(this.headerView);
             this.dateSelectorView = this.dateSelector();
             this.headerView.addView(this.dateSelectorView);
+            this.filters(this.headerView);
+            View events = this.cs2EventsAction();
+            events.setPadding(this.ui.dp(16.0f), 0, this.ui.dp(16.0f), this.ui.dp(4.0f));
+            this.cs2EventsAction = events;
+            this.headerView.addView(events);
+            this.updateCs2EventsAction();
         }
         this.headerView.addView(this.ui.divider());
         this.stage.addView((View)this.headerView, (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(-1, -2, 48));
@@ -1073,7 +1080,7 @@ implements ScoreAdapter.Host {
         ArrayList<ScoreRow> rows = new ArrayList<ScoreRow>();
         if (all.isEmpty()) {
             if (this.busy || this.selectionLoading) {
-                rows.add(ScoreRow.loading("正在读取赛程…"));
+                rows.add(ScoreRow.loading("Loading schedule…"));
                 return rows;
             }
             if (this.snapshot.failed()) {
@@ -1082,13 +1089,13 @@ implements ScoreAdapter.Host {
                     if (batch.error.isEmpty()) continue;
                     ++failures;
                 }
-                rows.add(ScoreRow.failure(failures + " 个赛事来源未更新 · 查看连接状态"));
+                rows.add(ScoreRow.failure(failureSummary(failures)));
             }
             rows.add(this.snapshot.failed()
-                ? ScoreRow.empty("赛程暂时无法获取", "连接失败，暂时无法确认比赛安排。", "重新获取")
-                : ScoreRow.empty(this.group.equals("全部") ? "这一天暂无赛程" : this.group + " 暂无赛程",
-                    Formats.MONTH_DAY_WEEK.format(this.from()) + "，暂无已确认的比赛。\n" + (this.group.equals("全部") ? "换个日期，看看其他比赛。" : "可以查看其他赛事，或切换日期。"),
-                    this.group.equals("全部") ? "选择日期" : "查看全部赛事"));
+                ? ScoreRow.empty("Schedule unavailable", "Couldn't connect, so matches can't be confirmed yet.", "Try again")
+                : ScoreRow.empty(this.group.equals("全部") ? "No matches on this day" : "No " + EnglishDisplay.sport(this.group) + " matches on this day",
+                    EnglishDisplay.text(Formats.MONTH_DAY_WEEK.format(this.from())) + " — no confirmed matches.\n" + (this.group.equals("全部") ? "Try another date to see what's on." : "Try another sport or date."),
+                    this.group.equals("全部") ? "Choose date" : "All sports"));
             return rows;
         }
         if (this.snapshot.failed()) {
@@ -1097,7 +1104,7 @@ implements ScoreAdapter.Host {
                 if (batch.error.isEmpty()) continue;
                 ++failures;
             }
-            rows.add(ScoreRow.failure(failures + " 个赛事来源未更新 · 查看连接状态"));
+            rows.add(ScoreRow.failure(failureSummary(failures)));
         }
         for (String stage : stages = new String[]{"live", "scheduled", "delayed", "unknown", "final", "cancelled"}) {
             ArrayList<Match> stageMatches = new ArrayList<Match>();
@@ -1106,7 +1113,7 @@ implements ScoreAdapter.Host {
                 stageMatches.add(m);
             }
             if (stageMatches.isEmpty()) continue;
-            rows.add(ScoreRow.section(Rules.stateLabel(stage) + " · " + stageMatches.size()));
+            rows.add(ScoreRow.section(EnglishDisplay.text(Rules.stateLabel(stage)) + " · " + stageMatches.size()));
             for (Match m : stageMatches) {
                 rows.add(ScoreRow.match(m));
             }
@@ -1136,17 +1143,30 @@ implements ScoreAdapter.Host {
             mp.setMarginEnd(this.ui.dp(8.0f));
             header.addView((View)mark, (ViewGroup.LayoutParams)mp);
         }
-        TextView heading = this.ui.text(this.tab == 0 ? "N1ghtScore" : "设置", 21, this.ui.text, true);
+        TextView heading = this.ui.text(this.tab == 0 ? "Scores" : "Settings", 21, this.ui.text, true);
         heading.setLetterSpacing(-0.02f);
         header.addView((View)heading, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         if (this.tab == 0) {
-            header.addView((View)this.headerAction("refresh", "刷新比赛", () -> this.load(true)));
-        } else {
-            TextView version = this.ui.text(BuildConfig.VERSION_NAME, 12, this.ui.muted, false);
-            version.setPadding(this.ui.dp(8.0f), 0, this.ui.dp(8.0f), 0);
-            header.addView((View)version);
+            header.addView((View)this.headerAction("refresh", "Refresh matches", () -> this.load(true)));
         }
         parent.addView((View)header);
+    }
+
+    private View cs2EventsAction() {
+        TextView action = this.ui.textButton("Tournaments", () -> this.startActivity(new Intent(this, Cs2EventActivity.class)
+            .putExtra("day", this.from().toString())));
+        action.setPaddingRelative(0, this.ui.dp(8), 0, this.ui.dp(8));
+        LinearLayout row = this.ui.row();
+        row.addView((View)action);
+        return row;
+    }
+
+    private void updateCs2EventsAction() {
+        if (this.cs2EventsAction == null) return;
+        int visibility = this.tab == 0 && this.group.equals("CS2") ? View.VISIBLE : View.GONE;
+        if (this.cs2EventsAction.getVisibility() == visibility) return;
+        this.cs2EventsAction.setVisibility(visibility);
+        if (!this.pad && this.headerView != null) this.headerView.post(this::syncHeaderHeight);
     }
 
     private FrameLayout headerAction(String kind, String description, Runnable click) {
@@ -1168,8 +1188,9 @@ implements ScoreAdapter.Host {
         this.filterTabs = tabs;
         tabs.setPadding(this.ui.dp(4.0f), 0, this.ui.dp(4.0f), 0);
         for (String g : GROUPS) {
-            TextView item = this.ui.tab(g, g.equals(this.group), () -> this.select(this.tab, g, this.dayOffset));
-            item.setContentDescription((CharSequence)(g + (g.equals(this.group) ? "，已选中" : "，筛选赛事")));
+            String label = EnglishDisplay.sport(g);
+            TextView item = this.ui.tab(label, g.equals(this.group), () -> this.select(this.tab, g, this.dayOffset));
+            item.setContentDescription((CharSequence)(label + (g.equals(this.group) ? ", selected" : ", filter sport")));
             tabs.addView((View)item, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
         }
         horizontal.addView((View)tabs);
@@ -1186,7 +1207,6 @@ implements ScoreAdapter.Host {
                 horizontal.scrollTo(Math.max(0, selected.getLeft() - this.ui.dp(20.0f)), 0);
             }
         });
-        parent.addView(this.ui.divider());
     }
 
     private LinearLayout dateSelector() {
@@ -1196,8 +1216,10 @@ implements ScoreAdapter.Host {
         LinearLayout bar = this.ui.row();
         bar.setPadding(this.ui.dp(16.0f), 0, this.ui.dp(8.0f), 0);
         boolean large = this.getResources().getConfiguration().fontScale >= 1.5f;
-        String date = Formats.date(selected, selected.getYear() == today.getYear() ? Formats.MONTH_DAY : Formats.YEAR_MONTH_DAY, "");
-        String caption = large ? date + "\n" + (selected.equals(today) ? "今天 · " : "") + Formats.WEEKDAY.format(selected) : (selected.equals(today) ? "今天  ·  " : "") + date + " " + Formats.WEEKDAY.format(selected);
+        String date = EnglishDisplay.text(Formats.date(selected, selected.getYear() == today.getYear() ? Formats.MONTH_DAY : Formats.YEAR_MONTH_DAY, "")).toString();
+        String week = EnglishDisplay.text(Formats.WEEKDAY.format(selected)).toString();
+        boolean current = selected.equals(today);
+        String caption = large ? date + "\n" + (current ? "Today · " : "") + week : (current ? "Today  ·  " : "") + date + " " + week;
         LinearLayout picker = new LinearLayout((Context)this) {
             @Override protected void onMeasure(int widthSpec, int heightSpec) {
                 if (View.MeasureSpec.getMode(widthSpec) != View.MeasureSpec.UNSPECIFIED) {
@@ -1213,7 +1235,7 @@ implements ScoreAdapter.Host {
         picker.setPadding(0, this.ui.dp(6.0f), this.ui.dp(10.0f), this.ui.dp(6.0f));
         this.ui.clickable((View)picker, 0, 10);
         picker.setFocusable(true);
-        picker.setContentDescription((CharSequence)("选择日期，当前" + Formats.MONTH_DAY_FULL_WEEK.format(selected)));
+        picker.setContentDescription((CharSequence)("Choose date. Current " + EnglishDisplay.text(Formats.MONTH_DAY_FULL_WEEK.format(selected))));
         picker.setOnClickListener(v -> Sheet.date(this, this.from(), this::selectDay));
         TextView label = this.ui.text(caption, 13, this.ui.text, true);
         label.setGravity(16);
@@ -1223,20 +1245,20 @@ implements ScoreAdapter.Host {
         picker.addView((View)new Ui.Icon((Context)this, "chevron-down", this.ui.muted), (ViewGroup.LayoutParams)iconParams);
         bar.addView((View)picker, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         if (!selected.equals(today)) {
-            TextView reset = this.ui.text("今天", 12, this.ui.text, true);
+            TextView reset = this.ui.text("Today", 12, this.ui.text, true);
             reset.setGravity(17);
             reset.setMinHeight(this.ui.dp(48.0f));
             reset.setPadding(this.ui.dp(8.0f), 0, this.ui.dp(8.0f), 0);
             this.ui.clickable((View)reset, 0, 0);
             reset.setFocusable(true);
-            reset.setContentDescription((CharSequence)"回到今天");
+            reset.setContentDescription((CharSequence)"Go to today");
             reset.setOnClickListener(v -> this.selectDay(today));
             bar.addView((View)reset, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
         }
-        FrameLayout prev = this.headerAction("chevron", "前一天", () -> this.selectDay(selected.minusDays(1L)));
+        FrameLayout prev = this.headerAction("chevron", "Previous day", () -> this.selectDay(selected.minusDays(1L)));
         prev.getChildAt(0).setRotation(180.0f);
         bar.addView((View)prev);
-        bar.addView((View)this.headerAction("chevron", "后一天", () -> this.selectDay(selected.plusDays(1L))));
+        bar.addView((View)this.headerAction("chevron", "Next day", () -> this.selectDay(selected.plusDays(1L))));
         return bar;
     }
 
@@ -1269,7 +1291,7 @@ implements ScoreAdapter.Host {
     public void openTeam(Match match, boolean home) {
         Team team = Team.of(match, home);
         if (team == null) {
-            this.message("球队赛程暂不可用", "来源尚未提供这支球队的标识，稍后刷新后再试。");
+            this.message("Team schedule unavailable", "The source has not provided an ID for this team. Refresh and try again later.");
             return;
         }
         this.startActivity(new Intent((Context)this, TeamActivity.class).putExtra("team", team.json().toString()));
@@ -1298,30 +1320,38 @@ implements ScoreAdapter.Host {
     }
 
     private void settings() {
-        this.section("单场订阅");
+        this.section("Calendar & alerts");
         LinearLayout calendar = this.ui.column();
         calendar.setBackground((Drawable)this.ui.panel());
-        this.settingRow(calendar, "calendar-target", "接收日历", this.calendarTargetDetail(), this::calendarChoice);
-        this.settingRow(calendar, "subscriptions", "已订阅的比赛", this.subscriptionsDetail(), this::subscribedList);
+        this.settingRow(calendar, "calendar-target", "Reminder calendar", this.calendarTargetDetail(), this::calendarChoice);
+        this.settingRow(calendar, "subscriptions", "Subscribed matches", this.subscriptionsDetail(), this::subscribedList);
         long checked = this.prefs.getLong("calendar_checked", 0L);
-        this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期、取消与完场赛果通知", () -> this.syncSubscriptions(true));
-        this.settingRow(calendar, "calendar-open", "打开系统日历", "查看日程与提醒", this::openCalendar);
-        this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), this::manageCloudSync);
+        this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "Checking…" : "Check subscriptions", checked > 0L ? "Last checked " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "Sync postponements, cancellations, and final results", () -> this.syncSubscriptions(true));
+        this.settingRow(calendar, "calendar-open", "Open system calendar", "View events and reminders", this::openCalendar);
+        this.settingRow(calendar, "calendar-cloud", "Calendar cloud sync", EnglishDisplay.text(CalendarCloudSync.status(this)), this::manageCloudSync);
         this.body.addView((View)calendar);
-        this.section("偏好与帮助");
-        LinearLayout options = this.ui.column();
-        options.setBackground((Drawable)this.ui.panel());
-        this.settingRow(options, "appearance", "外观", this.themeName(), this::themeChoice);
-        this.settingRow(options, "app-update", "检查更新", "当前版本 " + BuildConfig.VERSION_NAME, () -> this.startActivity(new Intent((Context)this, UpdateActivity.class)));
-        this.settingRow(options, "sources", "数据来源与连接", this.snapshot.failed() ? "部分来源未更新" : "查看来源状态", this::sourceStatus);
-        this.settingRow(options, "help", "使用帮助", "日历提醒与数据说明", this::help);
-        this.body.addView((View)options);
-        this.ui.gap(this.body, 16);
-        TextView hint = this.ui.text("N1ghtScore · " + BuildConfig.VERSION_NAME + "\n在比赛卡上点日历图标，订阅单场比赛。", 12, this.ui.muted, false);
-        hint.setLineSpacing((float)this.ui.dp(6.0f), 1.0f);
-        hint.setGravity(17);
-        hint.setPadding(this.ui.dp(4.0f), 0, this.ui.dp(4.0f), 0);
-        this.body.addView((View)hint);
+
+        this.section("Appearance");
+        LinearLayout appearance = this.ui.column();
+        appearance.setBackground((Drawable)this.ui.panel());
+        this.settingRow(appearance, "appearance", "Theme", this.themeName(), this::themeChoice);
+        this.body.addView((View)appearance);
+
+        this.section("Updates & about");
+        LinearLayout updates = this.ui.column();
+        updates.setBackground((Drawable)this.ui.panel());
+        this.settingRow(updates, "app-update", "Check for updates", "Current version " + BuildConfig.VERSION_NAME, () -> this.startActivity(new Intent((Context)this, UpdateActivity.class)));
+        this.settingRow(updates, "help", "Help", "Calendar reminders and data notes", this::help);
+        TextView about = this.ui.text("Native Android · No ads · No sign-in · Beijing time", 12, this.ui.muted, false);
+        about.setPadding(this.ui.dp(14.0f), this.ui.dp(12.0f), this.ui.dp(14.0f), this.ui.dp(14.0f));
+        updates.addView((View)about);
+        this.body.addView((View)updates);
+
+        this.section("Sources & diagnostics");
+        LinearLayout diagnostics = this.ui.column();
+        diagnostics.setBackground((Drawable)this.ui.panel());
+        this.settingRow(diagnostics, "sources", "Data sources & connection", this.snapshot.failed() ? "Some sources need attention" : "View source status", this::sourceStatus);
+        this.body.addView((View)diagnostics);
     }
 
     private void section(String title) {
@@ -1369,27 +1399,27 @@ implements ScoreAdapter.Host {
             this.startActivity(new Intent("android.intent.action.VIEW", Uri.parse((String)("content://com.android.calendar/time/" + System.currentTimeMillis()))));
         }
         catch (RuntimeException e) {
-            this.message("没有找到日历应用", "请先安装或启用系统日历。");
+            this.message("Calendar app not found", "Install or enable the system calendar, then try again.");
         }
     }
 
     private void help() {
-        this.message("使用帮助", "在比赛卡上点日历加号订阅，点勾选可取消。开赛前 5 分钟由系统日历提醒；已订阅比赛结束后由系统任务自动核对并推送最终赛果通知（无需应用常驻后台；小米 / 澎湃 OS 请开启应用日历读写、应用通知、自启动及系统日历通知权限）。\n\n跨设备同步：手机与平板登录同一小米账户并开启日历权限后，单场订阅与取消约 45 秒–3 分钟通过小米日历自动互通，无需安装或启动 Shizuku。更换接收日历只影响新订阅，已有事件保留在原日历。\n\n网络采用多路自适应：国内源优先物理网卡直连分流，海外源自动在代理 / 直连与自有 HTTPS 节点间择优切换，切换网络或代理后自动恢复。\n\n体育由 ESPN 提供；足球页按日期浏览赛程（含国家队），点队标进入对应球队赛程。CS2 来自 5EPlay：一线赛事（Major / S+ / S 级）与 Team Spirit 全部比赛，一线赛事卡片显示赛事名，Spirit 的次级比赛显示 CS2 · Team Spirit。只有进行中或临近开赛的比赛会自动检查；已结束的比赛只读取一次，全部结束后不再自动联网，点右上角可手动刷新。失败时延长重试间隔，连接失败保留真实缓存，缺失数据不补零。");
+        this.message("Help", "Tap the calendar icon on a match card to subscribe; tap the check to unsubscribe. The system calendar reminds you 5 minutes before kickoff. After a subscribed match ends, an app task checks and posts the final result (the app does not need to stay open; on Xiaomi / HyperOS allow calendar access, notifications, autostart, and calendar notifications).\n\nDevice sync: after signing in to the same Xiaomi account with calendar access on phone and tablet, subscriptions and cancellations usually sync through Xiaomi Calendar in about 45 seconds to 3 minutes. Shizuku is not required. Changing the reminder calendar only affects new subscriptions; existing events stay in their original calendar.\n\nNetwork: domestic sources prefer a direct physical-interface path; overseas sources choose among proxy, direct, and the app's HTTPS relay, recovering after network or proxy changes.\n\nSports data comes from ESPN. Browse football by date (including national teams) and tap a crest for that team's schedule. CS2 comes from 5EPlay: top-tier events (Major / S+ / S) and all Team Spirit matches. Completed matches and details are read once and stop polling; use Refresh to check manually. Failed refreshes back off and keep the last real cache. Missing values are never replaced with zero.");
     }
 
     private String calendarName() {
         String name = this.calendarSync.calendarName();
-        return name == null || name.isBlank() ? "选择手机日历" : name;
+        return name == null || name.isBlank() ? "Choose phone calendar" : name;
     }
 
     private String calendarTargetDetail() {
-        return CalendarSync.permitted((Context)this) ? this.calendarName() : "未开启日历权限 · 点此授权";
+        return CalendarSync.permitted((Context)this) ? this.calendarName() : "Calendar access off · Tap to allow";
     }
 
     private String subscriptionsDetail() {
         return CalendarSync.permitted((Context)this)
-            ? this.calendarSync.linkedEvents() + " 场 · 提前 5 分钟提醒"
-            : "开启日历权限后自动识别手机与平板订阅";
+            ? matchCount(this.calendarSync.linkedEvents()) + " · 5 min reminder"
+            : "Allow calendar access to find subscriptions on this phone";
     }
 
     private void requestCalendarPermission(boolean chooseAfter) {
@@ -1451,7 +1481,7 @@ implements ScoreAdapter.Host {
                     return;
                 }
                 if (result.isEmpty()) {
-                    Sheet.message(this, "没有可写入的日历", "请先在系统日历中启用一个本地日历或可写账户，再回来选择。");
+                    Sheet.message(this, "No writable calendar", "Enable a local calendar or writable account in the system calendar, then come back and choose it.");
                     return;
                 }
                 ArrayList<Sheet.Item> items = new ArrayList<Sheet.Item>();
@@ -1461,9 +1491,9 @@ implements ScoreAdapter.Host {
                     if (choice.id == this.calendarSync.calendarId()) {
                         selected = i;
                     }
-                    items.add(new Sheet.Item(choice.name, choice.local ? "本机日历" : "可写账户", choice.id == this.calendarSync.calendarId()));
+                    items.add(new Sheet.Item(choice.name, choice.local ? "On this device" : "Writable account", choice.id == this.calendarSync.calendarId()));
                 }
-                Sheet.choose(this, "选择接收比赛的日历", "订阅的比赛会写入这个日历，并提前 5 分钟提醒。", items, selected, index -> {
+                Sheet.choose(this, "Choose reminder calendar", "Subscribed matches are written here with a 5-minute reminder.", items, selected, index -> {
                     CalendarSync.CalendarChoice choice = (CalendarSync.CalendarChoice)result.get(index);
                     this.calendarSync.chooseCalendar(choice.id, choice.name);
                     CalendarJob.schedule((Context)this);
@@ -1479,15 +1509,15 @@ implements ScoreAdapter.Host {
             return;
         }
         if (this.calendarBusy) {
-            Toast.makeText((Context)this, (CharSequence)"正在处理日历…", (int)0).show();
+            Toast.makeText((Context)this, (CharSequence)"Updating calendar…", (int)0).show();
             return;
         }
         if (this.subscribed.contains(m.id)) {
-            Sheet.confirm(this, "取消订阅", "从手机日历中移除「" + m.displayTitle() + "」及其提醒？", "取消订阅", () -> this.unsubscribeAsync(m));
+            Sheet.confirm(this, "Unsubscribe", "Remove \"" + EnglishDisplay.text(m.displayTitle()) + "\" and its reminders from the phone calendar?", "Unsubscribe", () -> this.unsubscribeAsync(m));
             return;
         }
         if (!m.scheduled() || !m.timeConfirmed || m.start <= System.currentTimeMillis()) {
-            Sheet.message(this, "暂时不能订阅", "这场比赛的开赛时间未确定、已开始或已结束。");
+            Sheet.message(this, "Can't subscribe yet", "This match has no confirmed start time, has started, or has finished.");
             return;
         }
         this.pendingSubscription = m;
@@ -1506,7 +1536,7 @@ implements ScoreAdapter.Host {
         CalendarSync.CalendarChoice best = this.calendarSync.bestCalendar();
         if (best == null) {
             if (complain) {
-                Sheet.message(this, "没有可写入的日历", "请先在系统日历中启用一个本地或小米日历。");
+                Sheet.message(this, "No writable calendar", "Enable a local or Xiaomi calendar in the system calendar first.");
             }
             return false;
         }
@@ -1533,7 +1563,7 @@ implements ScoreAdapter.Host {
             catch (RuntimeException e) {
                 result = new CalendarSync.Result();
                 result.failed = 1;
-                result.error = "日历写入失败";
+                result.error = "Could not write to calendar";
             }
             CalendarSync.Result finalResult = result;
             this.handler.post(() -> {
@@ -1545,10 +1575,10 @@ implements ScoreAdapter.Host {
                 this.render(true);
                 CalendarJob.schedule((Context)this);
                 if (finalResult.inserted + finalResult.updated > 0) {
-                    Toast.makeText((Context)this, (CharSequence)"已加入日历 · 提前 5 分钟提醒", (int)0).show();
+                    Toast.makeText((Context)this, (CharSequence)"Added to calendar · 5 min reminder", (int)0).show();
                     ResultNotify.requestIfNeeded(this);
                 } else {
-                    Sheet.message(this, "未能加入日历", finalResult.error.isEmpty() ? "请检查日历权限和目标日历。" : finalResult.error);
+                    Sheet.message(this, "Couldn't add to calendar", finalResult.error.isEmpty() ? "Check calendar access and the selected calendar." : EnglishDisplay.text(finalResult.error));
                 }
             });
         });
@@ -1557,7 +1587,7 @@ implements ScoreAdapter.Host {
     private static CalendarSync.Result noCalendarResult() {
         CalendarSync.Result result = new CalendarSync.Result();
         result.failed = 1;
-        result.error = "请先在系统日历中启用一个本地或小米日历。";
+        result.error = "Enable a local or Xiaomi calendar in the system calendar first.";
         return result;
     }
 
@@ -1574,7 +1604,7 @@ implements ScoreAdapter.Host {
             catch (RuntimeException e) {
                 result = new CalendarSync.Result();
                 result.failed = 1;
-                result.error = "日历读取失败";
+                result.error = "Could not read calendar";
             }
             CalendarSync.Result finalResult = result;
             this.handler.post(() -> {
@@ -1586,9 +1616,9 @@ implements ScoreAdapter.Host {
                 this.render(true);
                 CalendarJob.schedule((Context)this);
                 if (finalResult.failed > 0) {
-                    Sheet.message(this, "未能取消订阅", finalResult.error.isEmpty() ? "请检查日历权限后重试。" : finalResult.error);
+                    Sheet.message(this, "Couldn't unsubscribe", finalResult.error.isEmpty() ? "Check calendar access and try again." : EnglishDisplay.text(finalResult.error));
                 } else {
-                    Toast.makeText((Context)this, (CharSequence)"已取消订阅", (int)0).show();
+                    Toast.makeText((Context)this, (CharSequence)"Unsubscribed", (int)0).show();
                 }
             });
         });
@@ -1601,16 +1631,16 @@ implements ScoreAdapter.Host {
         }
         List<Match> list = this.calendarSync.subscriptions();
         if (list.isEmpty()) {
-            Sheet.message(this, "还没有订阅", "在比赛卡上点“订阅”，把单场比赛加入手机日历。");
+            Sheet.message(this, "No subscriptions", "Tap Subscribe on a match card to add a single match to the phone calendar.");
             return;
         }
         ArrayList<Sheet.Item> items = new ArrayList<Sheet.Item>();
         for (Match m : list) {
-            items.add(new Sheet.Item(m.displayTitle(), MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · " + MatchLabel.of(m), false));
+            items.add(new Sheet.Item(EnglishDisplay.text(m.displayTitle()).toString(), MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · " + EnglishDisplay.text(MatchLabel.of(m)), false));
         }
-        Sheet.choose(this, "已订阅的比赛", "点选一场可取消订阅。赛前由系统日历提醒，完场自动推送赛果。", items, -1, index -> {
+        Sheet.choose(this, "Subscribed matches", "Choose a match to unsubscribe. The system calendar reminds you before kickoff and posts the final result.", items, -1, index -> {
             Match m = (Match)list.get(index);
-            Sheet.confirm(this, "取消订阅", "移除「" + m.displayTitle() + "」的日历事件和提醒？", "取消订阅", () -> this.unsubscribeAsync(m));
+            Sheet.confirm(this, "Unsubscribe", "Remove the calendar event and reminders for \"" + EnglishDisplay.text(m.displayTitle()) + "\"?", "Unsubscribe", () -> this.unsubscribeAsync(m));
         });
     }
 
@@ -1629,7 +1659,7 @@ implements ScoreAdapter.Host {
         }
         if (!this.calendarSync.hasSubscriptions()) {
             if (feedback) {
-                Sheet.message(this, "还没有订阅", "在比赛卡上点“订阅”，把单场比赛加入手机日历。");
+                Sheet.message(this, "No subscriptions", "Tap Subscribe on a match card to add a single match to the phone calendar.");
             }
             return;
         }
@@ -1644,7 +1674,7 @@ implements ScoreAdapter.Host {
                 text = result.message();
             }
             catch (RuntimeException e) {
-                text = "检查失败，请检查网络和日历权限后重试。";
+                text = "Check failed. Check your network and calendar access, then try again.";
             }
             String finalText = text;
             this.handler.post(() -> {
@@ -1656,7 +1686,7 @@ implements ScoreAdapter.Host {
                     this.refreshSubscribed();
                     this.render(true);
                     if (feedback) {
-                        Sheet.message(this, "订阅检查结果", finalText + "\n请在系统日历确认提醒已显示。");
+                        Sheet.message(this, "Subscription check", finalText + "\nConfirm that reminders appear in the system calendar.");
                     }
                 }
             });
@@ -1670,15 +1700,15 @@ implements ScoreAdapter.Host {
 
     private String themeName() {
         return switch (this.prefs.getString("theme", "dark")) {
-            case "dark" -> "深色";
-            case "light" -> "浅色";
-            default -> "跟随系统";
+            case "dark" -> "Dark";
+            case "light" -> "Light";
+            default -> "System";
         };
     }
 
     private void themeChoice() {
         String[] values = new String[]{"dark", "light", "system"};
-        String[] labels = new String[]{"深色", "浅色", "跟随系统"};
+        String[] labels = new String[]{"Dark", "Light", "System"};
         String current = this.prefs.getString("theme", "dark");
         int selected = 0;
         for (int i = 0; i < values.length; ++i) {
@@ -1687,9 +1717,9 @@ implements ScoreAdapter.Host {
         }
         ArrayList<Sheet.Item> items = new ArrayList<Sheet.Item>();
         for (int i = 0; i < labels.length; ++i) {
-            items.add(new Sheet.Item(labels[i], i == selected ? "当前使用" : "", i == selected));
+            items.add(new Sheet.Item(labels[i], i == selected ? "Current" : "", i == selected));
         }
-        Sheet.choose(this, "外观", "跟随系统会随手机的浅色 / 深色模式切换。", items, selected, index -> {
+        Sheet.choose(this, "Appearance", "System follows the phone's light or dark setting.", items, selected, index -> {
             this.prefs.edit().putString("theme", values[index]).apply();
             this.recreate();
         });
@@ -1707,7 +1737,7 @@ implements ScoreAdapter.Host {
             this.renderedSettings = "";
             this.render(true);
             if (code == 42) {
-                Sheet.message(this, "未开启日历权限", "开启日历权限后，才能订阅比赛并自动同步手机与平板的小米日历赛程。请在系统应用权限中允许日历读写。");
+                Sheet.message(this, "Calendar access is off", "Allow calendar access to subscribe to matches and sync fixtures through Xiaomi Calendar. Enable calendar read and write in system app permissions.");
             }
             return;
         }
@@ -1745,48 +1775,66 @@ implements ScoreAdapter.Host {
         if (this.pad) {
             source = this.padSourceSnapshot();
             if (source == null) {
-                Sheet.message(this, "正在读取来源状态", "来源状态稍后就会读取完成，请再点一次。");
+                Sheet.message(this, "Loading source status", "Source status will be ready shortly. Tap again in a moment.");
                 return;
             }
         }
         StringBuilder content = new StringBuilder();
-        content.append(Http.statusSummary()).append("\n\n");
+        content.append(EnglishDisplay.text(Http.statusSummary())).append("\n\n");
         for (Repository.Batch b : this.orderedSourceBatches(source)) {
-            content.append(b.competition.name).append("\n").append(b.fetched > 0L ? "上次成功 " + MainActivity.formatInstant(b.fetched, "M月d日 HH:mm:ss") + " · " + b.matches.size() + " 场" : "尚未成功获取");
+            content.append(EnglishDisplay.text(b.competition.name)).append("\n").append(b.fetched > 0L ? "Last success " + MainActivity.formatInstant(b.fetched, "M月d日 HH:mm:ss") + " · " + matchCount(b.matches.size()) : "No successful fetch yet");
             if (!b.error.isEmpty()) {
-                content.append("\n").append(b.error);
+                content.append("\n").append(EnglishDisplay.text(b.error));
             }
             content.append("\n\n");
         }
-        content.append("来源：ESPN、5EPlay。数据可能延迟；连接失败时保留最近一次成功记录。已结束的比赛和详情只读取一次，不再自动更新；可点刷新手动核对。");
-        Sheet.message(this, "数据来源与连接", content.toString());
+        content.append("Sources: ESPN and 5EPlay. Data may be delayed. When a connection fails, the last successful data is kept. Completed matches and details are read once and stop updating automatically; use Refresh to check manually.");
+        Sheet.message(this, "Data sources & connection", content.toString());
     }
 
     private void navigation() {
         this.nav = this.ui.row();
         this.nav.setBackgroundColor(this.ui.bg);
         this.nav.setPadding(this.ui.dp(16.0f), this.ui.dp(2.0f), this.ui.dp(16.0f), this.ui.dp(2.0f));
-        String[] labels = new String[]{"比赛", "设置"};
-        String[] icons = new String[]{"matches", "preferences"};
-        for (int i = 0; i < 2; ++i) {
+        String[] labels = new String[]{"Scores", "Standings", "Settings"};
+        String[] icons = new String[]{"matches", "standings", "preferences"};
+        boolean stacked = this.getResources().getConfiguration().fontScale >= 1.3f;
+        for (int i = 0; i < labels.length; ++i) {
             int index = i;
-            boolean selected = this.tab == i;
+            boolean selected = i != 1 && this.tab == (i == 0 ? 0 : 1);
             LinearLayout item = this.ui.row();
+            if (stacked) item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(17);
             item.setMinimumHeight(this.ui.dp(50.0f));
             this.ui.clickable((View)item, 0, 24);
             item.setFocusable(true);
             item.setSelected(selected);
-            item.setContentDescription((CharSequence)(labels[i] + (selected ? "，已选中" : "")));
-            item.addView((View)new Ui.Icon((Context)this, icons[i], selected ? this.ui.text : this.ui.muted), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(20.0f), this.ui.dp(20.0f)));
+            item.setContentDescription((CharSequence)(labels[i] + (selected ? ", selected" : "")));
+            View icon = new Ui.Icon((Context)this, icons[i], selected ? this.ui.text : this.ui.muted);
             TextView label = this.ui.text(labels[i], 13, selected ? this.ui.text : this.ui.muted, selected);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            lp.setMarginStart(this.ui.dp(8.0f));
-            item.addView((View)label, (ViewGroup.LayoutParams)lp);
-            item.setOnClickListener(v -> this.select(index, this.group, this.dayOffset));
+            if (stacked) {
+                item.setPadding(0, this.ui.dp(4.0f), 0, this.ui.dp(2.0f));
+                item.addView(icon, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(20.0f), this.ui.dp(20.0f)));
+                label.setGravity(17);
+                label.setMaxLines(2);
+                item.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
+            } else {
+                item.addView(icon, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(20.0f), this.ui.dp(20.0f)));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+                lp.setMarginStart(this.ui.dp(8.0f));
+                item.addView((View)label, (ViewGroup.LayoutParams)lp);
+            }
+            item.setOnClickListener(v -> {
+                if (index == 1) this.openStandings();
+                else this.select(index == 0 ? 0 : 1, this.group, this.dayOffset);
+            });
             this.nav.addView((View)item, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         }
         this.root.addView((View)this.nav);
+    }
+
+    private void openStandings() {
+        this.startActivity(new Intent(this, StandingsActivity.class).putExtra("group", this.group));
     }
 
     private void message(String title, String text) {
@@ -1796,7 +1844,22 @@ implements ScoreAdapter.Host {
     }
 
     private static String formatInstant(long millis, String pattern) {
-        return Formats.instant(millis, pattern, "未获取");
+        return EnglishDisplay.text(Formats.instant(millis, pattern, "Not fetched")).toString();
+    }
+
+    private static String failureSummary(int failures) {
+        return failures + (failures == 1 ? " source needs attention" : " sources need attention") + " · View connection status";
+    }
+
+    private static String matchCount(int count) {
+        return count + (count == 1 ? " match" : " matches");
+    }
+
+    private static String watchDescription(WatchLinks.Link link) {
+        if (link == null) return "";
+        String note = EnglishDisplay.text(link.note);
+        return EnglishDisplay.watchTitle(link) + ". " + EnglishDisplay.text(link.kind.label)
+            + (note.isBlank() ? "" : " · " + note) + ". Opens in " + EnglishDisplay.text(link.provider) + ".";
     }
 
     private void buildPadScreen() {
@@ -1891,11 +1954,13 @@ implements ScoreAdapter.Host {
         brand.addView((View)word, (ViewGroup.LayoutParams)wordParams);
         rail.addView((View)brand);
         this.ui.gap(rail, 24);
-        rail.addView(this.padRailItem("matches", "比赛", this.tab == 0, () -> this.select(0, this.group, this.dayOffset)), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
+        rail.addView(this.padRailItem("matches", "Scores", this.tab == 0, () -> this.select(0, this.group, this.dayOffset)), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
         this.ui.gap(rail, 3);
-        rail.addView(this.padRailItem("preferences", "设置", this.tab == 1, () -> this.select(1, this.group, this.dayOffset)), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
+        rail.addView(this.padRailItem("standings", "Standings", false, this::openStandings), new LinearLayout.LayoutParams(-1, -2));
+        this.ui.gap(rail, 3);
+        rail.addView(this.padRailItem("preferences", "Settings", this.tab == 1, () -> this.select(1, this.group, this.dayOffset)), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
         this.ui.gap(rail, 24);
-        TextView caption = this.ui.text(this.tab == 0 ? "赛事筛选" : "跳到赛事", 9, this.ui.muted, true);
+        TextView caption = this.ui.text(this.tab == 0 ? "Sports" : "Jump to sport", 9, this.ui.muted, true);
         caption.setLetterSpacing(0.12f);
         caption.setPadding(this.ui.dp(8.0f), 0, 0, this.ui.dp(7.0f));
         rail.addView((View)caption);
@@ -1912,7 +1977,8 @@ implements ScoreAdapter.Host {
             bar.setBackground(this.ui.shape(this.ui.primary, 2));
             bar.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
             item.addView(bar, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(2.0f), this.ui.dp(16.0f)));
-            TextView label = this.ui.text(g, 12, selected ? this.ui.text : this.ui.muted, selected);
+            String labelText = EnglishDisplay.sport(g);
+            TextView label = this.ui.text(labelText, 12, selected ? this.ui.text : this.ui.muted, selected);
             LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
             labelParams.setMarginStart(this.ui.dp(8.0f));
             item.addView((View)label, (ViewGroup.LayoutParams)labelParams);
@@ -1927,8 +1993,8 @@ implements ScoreAdapter.Host {
             count.setGravity(Gravity.END);
             this.railCounts.put(g, count);
             item.addView((View)count, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
-            String state = this.tab == 0 ? (selected ? "，已选中" : "，筛选赛事") : "，跳转到赛程";
-            item.setContentDescription((CharSequence)(g + state));
+            String state = this.tab == 0 ? (selected ? ", selected" : ", filter sport") : ", show scores for this sport";
+            item.setContentDescription((CharSequence)(labelText + state));
             this.railFilters.put(g, item);
             this.railLabels.put(g, label);
             this.railBars.put(g, bar);
@@ -1944,7 +2010,7 @@ implements ScoreAdapter.Host {
         day.setPadding(this.ui.dp(4.0f), 0, 0, 0);
         this.padRailDay = day;
         rail.addView((View)day);
-        TextView zone = this.ui.text(Formats.WEEKDAY.format(this.from()) + " · 北京时间", 9, this.ui.muted, false);
+        TextView zone = this.ui.text(EnglishDisplay.text(Formats.WEEKDAY.format(this.from())) + " · Beijing time", 9, this.ui.muted, false);
         zone.setPadding(this.ui.dp(4.0f), 0, 0, 0);
         this.padRailWeek = zone;
         rail.addView((View)zone);
@@ -1965,13 +2031,12 @@ implements ScoreAdapter.Host {
         item.setSelected(selected);
         Ui.Icon glyph = new Ui.Icon((Context)this, icon, selected ? this.ui.text : this.ui.muted);
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(this.ui.dp(19.0f), this.ui.dp(19.0f));
-        iconParams.setMarginStart(this.ui.dp(8.0f));
         item.addView((View)glyph, (ViewGroup.LayoutParams)iconParams);
         TextView text = this.ui.text(label, 13, selected ? this.ui.text : this.ui.muted, selected);
         LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(-2, -2);
         textParams.setMarginStart(this.ui.dp(9.0f));
         item.addView((View)text, (ViewGroup.LayoutParams)textParams);
-        item.setContentDescription((CharSequence)(label + (selected ? "，已选中" : "")));
+        item.setContentDescription((CharSequence)(label + (selected ? ", selected" : "")));
         item.setOnClickListener(v -> action.run());
         return item;
     }
@@ -1997,12 +2062,14 @@ implements ScoreAdapter.Host {
         LinearLayout header = this.ui.column();
         header.setPadding(this.ui.dp(18.0f), this.ui.dp(14.0f), this.ui.dp(12.0f), this.ui.dp(4.0f));
         LinearLayout titleRow = this.ui.row();
-        TextView title = this.ui.text("赛程", 22, this.ui.text, true);
+        TextView title = this.ui.text("Scores", 22, this.ui.text, true);
         title.setLetterSpacing(-0.03f);
         titleRow.addView((View)title, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        titleRow.addView((View)this.padIconAction("refresh", "刷新比赛", () -> this.load(true)));
+        titleRow.addView((View)this.padIconAction("refresh", "Refresh matches", () -> this.load(true)));
         header.addView((View)titleRow);
         this.ui.gap(header, 6);
+        boolean largeDate = this.getResources().getConfiguration().fontScale >= 1.3f;
+        LinearLayout dateBlock = this.ui.column();
         LinearLayout dateRow = this.ui.row();
         this.padDayNumber = this.ui.text(String.valueOf(this.from().getDayOfMonth()), 30, this.ui.text, true);
         this.padDayNumber.setLetterSpacing(-0.05f);
@@ -2015,22 +2082,35 @@ implements ScoreAdapter.Host {
         dateWords.addView((View)this.padDayMeta);
         this.ui.gap(dateWords, 3);
         dateRow.addView((View)dateWords, (ViewGroup.LayoutParams)wp);
+        LinearLayout controls = this.ui.row();
         if (this.dayOffset != 0) {
-            TextView today = this.ui.chip("今天", false, () -> this.selectDay(Match.today(System.currentTimeMillis())));
+            TextView today = this.ui.chip("Today", false, () -> this.selectDay(Match.today(System.currentTimeMillis())));
             today.setTextSize(11.0f);
             today.setMinHeight(this.ui.dp(38.0f));
             today.setPadding(this.ui.dp(10.0f), 0, this.ui.dp(10.0f), 0);
-            dateRow.addView((View)today);
+            controls.addView((View)today);
         }
-        FrameLayout prev = this.padIconAction("chevron", "前一天", () -> this.selectDay(this.from().minusDays(1L)));
+        FrameLayout prev = this.padIconAction("chevron", "Previous day", () -> this.selectDay(this.from().minusDays(1L)));
         prev.getChildAt(0).setRotation(180.0f);
-        dateRow.addView((View)prev);
-        dateRow.addView((View)this.padIconAction("chevron", "后一天", () -> this.selectDay(this.from().plusDays(1L))));
-        dateRow.addView((View)this.padIconAction("calendar", "选择日期", () -> Sheet.date(this, this.from(), this::selectDay)));
-        header.addView((View)dateRow);
+        controls.addView((View)prev);
+        controls.addView((View)this.padIconAction("chevron", "Next day", () -> this.selectDay(this.from().plusDays(1L))));
+        controls.addView((View)this.padIconAction("calendar", "Choose date", () -> Sheet.date(this, this.from(), this::selectDay)));
+        dateBlock.addView((View)dateRow);
+        if (largeDate) {
+            controls.setPadding(0, this.ui.dp(4.0f), 0, 0);
+            dateBlock.addView((View)controls);
+        } else {
+            dateRow.addView((View)controls, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
+        }
+        header.addView((View)dateBlock);
         this.ui.gap(header, 4);
         this.padListStatus = this.ui.text("", 11, this.ui.muted, false);
         header.addView((View)this.padListStatus);
+        View events = this.cs2EventsAction();
+        events.setPadding(0, 0, 0, this.ui.dp(4.0f));
+        this.cs2EventsAction = events;
+        header.addView(events);
+        this.updateCs2EventsAction();
         listPanel.addView((View)header);
         this.padList = new ScoreList((Context)this);
         this.padList.setPadding(this.ui.dp(16.0f), this.ui.dp(4.0f), this.ui.dp(16.0f), this.ui.dp(24.0f));
@@ -2102,7 +2182,7 @@ implements ScoreAdapter.Host {
     }
 
     private int padRailWidth() {
-        return Math.round(128 * Math.min(1.5f, Math.max(1f, getResources().getConfiguration().fontScale)));
+        return Math.round(144 * Math.min(1.5f, Math.max(1f, getResources().getConfiguration().fontScale)));
     }
 
     private FrameLayout padIconAction(String kind, String description, Runnable click) {
@@ -2229,7 +2309,7 @@ implements ScoreAdapter.Host {
                 next = this.detailRepository.fetch(match, force);
             }
             catch (Exception e) {
-                failure = e.getMessage() == null ? "网络连接失败" : e.getMessage();
+                failure = e.getMessage() == null ? "Network connection failed" : e.getMessage();
             }
             MatchDetail result = next;
             String problem = failure;
@@ -2351,17 +2431,17 @@ implements ScoreAdapter.Host {
     }
 
     private String padF1Meta(Match m) {
-        return m.status + " · " + (m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") : "时间待定");
+        return EnglishDisplay.text(m.status) + " · " + (m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") : "Time TBD");
     }
     private String padNarrowMeta(Match m) {
-        return m.status + " · " + (m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · 北京时间" : "时间待定");
+        return EnglishDisplay.text(m.status) + " · " + (m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · Beijing time" : "Time TBD");
     }
     private String padUpdatedText(Match m) {
-        return m.updated > 0L ? "更新于 " + MainActivity.formatInstant(m.updated, "HH:mm") : "等待更新";
+        return m.updated > 0L ? "Updated " + MainActivity.formatInstant(m.updated, "HH:mm") : "Waiting for update";
     }
     private String padFetchedText(Match m, MatchDetail d) {
-        return "获取于 " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm")
-            + (m.updated > 0L ? "\n来源发布 " + MainActivity.formatInstant(m.updated, "M月d日 HH:mm") : "");
+        return "Fetched " + MainActivity.formatInstant(d.fetched, "M月d日 HH:mm")
+            + (m.updated > 0L ? "\nSource published " + MainActivity.formatInstant(m.updated, "M月d日 HH:mm") : "");
     }
     /**
      * Live clocks update every poll but do not change the reading pane's structure. Keep those
@@ -2379,9 +2459,10 @@ implements ScoreAdapter.Host {
         }
     }
     private void setPadFocusText(String tag, String value) {
+        String shown = EnglishDisplay.text(value).toString();
         View view = this.padFocusHost.findViewWithTag(tag);
-        if (view instanceof TextView && !value.contentEquals(((TextView)view).getText())) {
-            ((TextView)view).setText(value);
+        if (view instanceof TextView && !shown.contentEquals(((TextView)view).getText())) {
+            ((TextView)view).setText(shown);
         }
     }
 
@@ -2394,12 +2475,12 @@ implements ScoreAdapter.Host {
             empty.addView((View)new Ui.Icon((Context)this, "mark", this.ui.line), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(72.0f), this.ui.dp(72.0f)));
             this.ui.gap(empty, 28);
             boolean loading = this.busy || this.selectionLoading;
-            TextView title = this.ui.text(loading ? "正在读取赛程" : this.snapshot.failed() ? "赛程暂未完整获取" : "选择一场比赛", 30, this.ui.text, true);
+            TextView title = this.ui.text(loading ? "Loading scores" : this.snapshot.failed() ? "Schedule incomplete" : "Choose a match", 30, this.ui.text, true);
             title.setLetterSpacing(-0.03f);
             title.setGravity(17);
             empty.addView((View)title);
             this.ui.gap(empty, 10);
-            TextView copy = this.ui.text(loading ? "正在读取所选日期与赛事，请稍候。" : this.snapshot.failed() ? "部分来源暂时无法连接，请刷新重试或查看来源状态。" : this.snapshot.matches().isEmpty() ? (this.group.equals("全部") ? "这个日期还没有已确认的比赛。" : "当前赛事在这个日期还没有已确认的比赛，切回「全部」或换个赛事。") : "从左侧赛程选择一场比赛，在这里查看比分、数据与进程。", 14, this.ui.muted, false);
+            TextView copy = this.ui.text(loading ? "Loading matches for the selected date and sport." : this.snapshot.failed() ? "Some sources can't be reached. Refresh or check source status." : this.snapshot.matches().isEmpty() ? (this.group.equals("全部") ? "No confirmed matches on this date yet." : "No confirmed " + EnglishDisplay.sport(this.group) + " matches on this date. Switch back to All or choose another sport.") : "Choose a match from the list to see its score, data, and timeline.", 14, this.ui.muted, false);
             copy.setGravity(17);
             copy.setLineSpacing((float)this.ui.dp(4.0f), 1.0f);
             empty.addView((View)copy);
@@ -2407,7 +2488,7 @@ implements ScoreAdapter.Host {
             return;
         }
         LinearLayout eyebrow = this.ui.row();
-        TextView kicker = this.ui.text(MatchLabel.of(m), 11, this.ui.muted, true);
+        TextView kicker = this.ui.text(EnglishDisplay.text(MatchLabel.of(m)), 11, this.ui.muted, true);
         kicker.setLetterSpacing(0.06f);
         eyebrow.addView((View)kicker, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         TextView updated = this.ui.text(padUpdatedText(m), 11, this.ui.muted, false);
@@ -2420,14 +2501,14 @@ implements ScoreAdapter.Host {
         if (this.padDetail == null) {
             LinearLayout loading = this.padSurface();
             LinearLayout line = this.ui.row();
-            line.addView((View)this.ui.text(this.padError.isEmpty() ? "正在读取比赛数据…" : "比赛数据暂不可用", 15, this.padError.isEmpty() ? this.ui.text : this.ui.error, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            line.addView((View)this.ui.text(this.padError.isEmpty() ? "Loading match data…" : "Match data unavailable", 15, this.padError.isEmpty() ? this.ui.text : this.ui.error, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             if (!this.padError.isEmpty()) {
-                line.addView((View)this.ui.button("重试", false, () -> this.loadPadDetail(m, true)));
+                line.addView((View)this.ui.button("Try again", false, () -> this.loadPadDetail(m, true)));
             }
             loading.addView((View)line);
             if (!this.padError.isEmpty()) {
                 this.ui.gap(loading, 6);
-                loading.addView((View)this.ui.text(this.padError, 12, this.ui.muted, false));
+                loading.addView((View)this.ui.text(EnglishDisplay.text(this.padError), 12, this.ui.muted, false));
             }
             host.addView((View)loading);
             return;
@@ -2435,12 +2516,12 @@ implements ScoreAdapter.Host {
         MatchDetail d = this.padDetail;
         if (!this.padError.isEmpty()) {
             LinearLayout warning = this.padSurface();
-            warning.addView((View)this.ui.text("暂未更新 · " + this.padError + "\n显示上次获取的数据", 12, this.ui.error, false));
+            warning.addView((View)this.ui.text("Not updated · " + EnglishDisplay.text(this.padError) + "\nShowing the last fetched data", 12, this.ui.error, false));
             host.addView((View)warning);
             this.ui.gap(host, 16);
         }
         if (!d.warning.isBlank()) {
-            TextView note = this.ui.text(d.warning, 12, this.ui.muted, false);
+            TextView note = this.ui.text(EnglishDisplay.text(d.warning), 12, this.ui.muted, false);
             note.setLineSpacing((float)this.ui.dp(3.0f), 1.0f);
             host.addView((View)note);
             this.ui.gap(host, 16);
@@ -2461,7 +2542,7 @@ implements ScoreAdapter.Host {
             card.setPadding(this.ui.dp(20.0f), this.ui.dp(18.0f), this.ui.dp(20.0f), this.ui.dp(16.0f));
         }
         if (m.group.equals("F1")) {
-            TextView title = this.ui.text(m.displayTitle(), 32, this.ui.text, true);
+            TextView title = this.ui.text(EnglishDisplay.text(m.displayTitle()), 32, this.ui.text, true);
             title.setLetterSpacing(-0.03f);
             card.addView((View)title);
             this.ui.gap(card, 8);
@@ -2487,14 +2568,17 @@ implements ScoreAdapter.Host {
             center.setGravity(17);
             Ui.ScoreText score = this.ui.score(m.displayScore(true), m.displayScore(false), m.hasScore(), 46);
             score.setResultColors(this.ui.scoreColor(m, true), this.ui.scoreColor(m, false));
+            score.setContentDescription(m.hasScore()
+                ? "Score: " + EnglishDisplay.text(m.home) + " " + m.displayScore(true) + ", " + EnglishDisplay.text(m.away) + " " + m.displayScore(false)
+                : "The source has not provided a score");
             center.addView((View)score, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(center, 10);
-            TextView state = this.ui.text(m.status, 14, m.live() ? this.ui.primary : this.ui.muted, true);
+            TextView state = this.ui.text(EnglishDisplay.text(m.status), 14, m.live() ? this.ui.primary : this.ui.muted, true);
             state.setTag("pad-focus-status");
             state.setGravity(17);
             center.addView((View)state);
             this.ui.gap(center, 4);
-            TextView when = this.ui.text(m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · 北京时间" : "时间待定", 11, this.ui.muted, false);
+            TextView when = this.ui.text(m.timeConfirmed ? MainActivity.formatInstant(m.start, "M月d日 HH:mm") + " · Beijing time" : "Time TBD", 11, this.ui.muted, false);
             when.setGravity(17);
             center.addView((View)when);
             row.addView((View)center, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(188.0f), -2));
@@ -2506,13 +2590,14 @@ implements ScoreAdapter.Host {
             this.ui.gap(card, 14);
             Ui.WatchRow row = this.ui.watchRow();
             row.bind(watch, m.live(), () -> this.openWatch(m));
+            row.setContentDescription(watchDescription(watch));
             card.addView((View)row);
             this.ui.gap(card, 10);
         } else {
             this.ui.gap(card, 14);
         }
         LinearLayout actions = this.ui.row();
-        TextView open = this.ui.button("比赛详情", true, () -> this.matchDetail(m));
+        TextView open = this.ui.button("Match details", true, () -> this.matchDetail(m));
         open.setPadding(this.ui.dp(22.0f), this.ui.dp(11.0f), this.ui.dp(22.0f), this.ui.dp(11.0f));
         actions.addView((View)open, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
         boolean isSubscribed = this.subscribed.contains(m.id);
@@ -2520,16 +2605,16 @@ implements ScoreAdapter.Host {
         if (canSubscribe) {
             View gap = new View((Context)this);
             actions.addView(gap, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(8.0f), 1));
-            FrameLayout subscribe = this.padIconAction(isSubscribed ? "calendar-check" : "calendar-add", isSubscribed ? "取消比赛提醒" : "订阅比赛提醒", () -> this.toggleSubscription(m));
+            FrameLayout subscribe = this.padIconAction(isSubscribed ? "calendar-check" : "calendar-add", isSubscribed ? "Remove match reminder" : "Add match reminder", () -> this.toggleSubscription(m));
             this.ui.clickable((View)subscribe, this.ui.tonal, 24);
             subscribe.setSelected(isSubscribed);
-            subscribe.setTooltipText(isSubscribed ? "取消提醒" : "订阅提醒");
+            subscribe.setTooltipText(isSubscribed ? "Remove reminder" : "Add reminder");
             ((Ui.Icon)subscribe.getChildAt(0)).set(isSubscribed ? "calendar-check" : "calendar-add", isSubscribed ? this.ui.primary : this.ui.muted);
             actions.addView(subscribe, new LinearLayout.LayoutParams(this.ui.dp(48), this.ui.dp(48)));
         }
         View gap2 = new View((Context)this);
         actions.addView(gap2, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(8.0f), 1));
-        FrameLayout refresh = this.padIconAction("refresh", "刷新比赛数据", () -> this.loadPadDetail(m, true));
+        FrameLayout refresh = this.padIconAction("refresh", "Refresh match data", () -> this.loadPadDetail(m, true));
         this.ui.clickable((View)refresh, this.ui.tonal, 24);
         actions.addView(refresh, new LinearLayout.LayoutParams(this.ui.dp(48), this.ui.dp(48)));
         card.addView((View)actions);
@@ -2547,10 +2632,10 @@ implements ScoreAdapter.Host {
         boolean available = id != null && !id.isBlank();
         slot.setFocusable(available);
         slot.setClickable(available);
-        slot.setContentDescription(available ? "查看 " + name + " 的赛程" : null);
+        slot.setContentDescription(available ? "View " + EnglishDisplay.text(name) + " schedule" : null);
         slot.setOnClickListener(available ? v -> this.openTeam(m, home) : null);
         row.addView((View)slot, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(52.0f), this.ui.dp(52.0f)));
-        TextView label = this.ui.text(name, 16, this.ui.text, true);
+        TextView label = this.ui.text(EnglishDisplay.text(name), 16, this.ui.text, true);
         label.setLetterSpacing(-0.02f);
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         labelParams.setMarginStart(this.ui.dp(8.0f));
@@ -2560,7 +2645,7 @@ implements ScoreAdapter.Host {
         score.setGravity(Gravity.CENTER);
         score.setIncludeFontPadding(false);
         row.addView((View)score);
-        row.setContentDescription((CharSequence)(name + (m.hasScore() ? "，比分 " + m.displayScore(home) : "，比分尚未提供")));
+        row.setContentDescription((CharSequence)(EnglishDisplay.text(name) + (m.hasScore() ? ", score " + m.displayScore(home) : ", score not provided")));
         return row;
     }
 
@@ -2575,11 +2660,11 @@ implements ScoreAdapter.Host {
         boolean available = id != null && !id.isBlank();
         slot.setFocusable(available);
         slot.setClickable(available);
-        slot.setContentDescription(available ? "查看 " + name + " 的赛程" : null);
+        slot.setContentDescription(available ? "View " + EnglishDisplay.text(name) + " schedule" : null);
         slot.setOnClickListener(available ? v -> this.openTeam(m, home) : null);
         side.addView((View)slot, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(68.0f), this.ui.dp(68.0f)));
         this.ui.gap(side, 8);
-        TextView label = this.ui.text(name, 17, this.ui.text, true);
+        TextView label = this.ui.text(EnglishDisplay.text(name), 17, this.ui.text, true);
         label.setGravity(17);
         label.setLetterSpacing(-0.02f);
         side.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
@@ -2589,11 +2674,11 @@ implements ScoreAdapter.Host {
     private void padDetailColumns(LinearLayout left, LinearLayout right, MatchDetail d, Match m) {
         LinearLayout card;
         if (!d.stats.isEmpty()) {
-            this.padFocusHeading(left, "数据速览");
+            this.padFocusHeading(left, "Match stats");
             card = this.padSurface();
             LinearLayout names = this.ui.row();
-            TextView home = this.ui.text(m.home, 11, this.ui.text, true);
-            TextView away = this.ui.text(m.away, 11, this.ui.text, true);
+            TextView home = this.ui.text(EnglishDisplay.text(m.home), 11, this.ui.text, true);
+            TextView away = this.ui.text(EnglishDisplay.text(m.away), 11, this.ui.text, true);
             away.setGravity(0x800005);
             names.addView((View)home, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             names.addView((View)away, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -2610,7 +2695,7 @@ implements ScoreAdapter.Host {
             this.ui.gap(left, 24);
         }
         if (!d.facts.isEmpty()) {
-            this.padFocusHeading(left, "比赛信息");
+            this.padFocusHeading(left, "Match info");
             card = this.padSurface();
             LinkedHashMap<String, List> facts = new LinkedHashMap<String, List>();
             for (MatchDetail.Fact f : d.facts) {
@@ -2618,7 +2703,7 @@ implements ScoreAdapter.Host {
                 if (label.equals("阵容资料版本")) continue;
                 String value = DetailParsers.plain(f.value());
                 if (value.isBlank()) continue;
-                facts.computeIfAbsent(label.isBlank() ? "信息" : label, k -> new ArrayList()).add(value);
+                facts.computeIfAbsent(EnglishDisplay.text(label.isBlank() ? "Info" : label), k -> new ArrayList()).add(EnglishDisplay.text(value));
             }
             int index = 0;
             for (Map.Entry fact : facts.entrySet()) {
@@ -2636,13 +2721,13 @@ implements ScoreAdapter.Host {
                 card.addView((View)row);
             }
             if (index == 0) {
-                card.addView((View)this.ui.text("来源尚未提供更多比赛信息", 12, this.ui.muted, false));
+                card.addView((View)this.ui.text("The source has not provided more match information", 12, this.ui.muted, false));
             }
             left.addView((View)card);
             this.ui.gap(left, 24);
         }
         if (!d.events.isEmpty()) {
-            this.padFocusHeading(right, "最新进程");
+            this.padFocusHeading(right, "Latest plays");
             card = this.padSurface();
             for (int i = 0; i < Math.min(5, d.events.size()); ++i) {
                 if (i > 0) {
@@ -2653,20 +2738,20 @@ implements ScoreAdapter.Host {
             right.addView((View)card);
             this.ui.gap(right, 24);
         }
-        this.padFocusHeading(right, "数据来源");
+        this.padFocusHeading(right, "Source");
         LinearLayout source = this.ui.column();
-        source.addView((View)this.ui.text(d.source, 13, this.ui.text, true));
+        source.addView((View)this.ui.text(EnglishDisplay.text(d.source), 13, this.ui.text, true));
         this.ui.gap(source, 4);
         source.addView((View)this.ui.text(padFetchedText(m, d), 11, this.ui.muted, false));
         right.addView((View)source);
         if (!m.url.isBlank()) {
             this.ui.gap(right, 10);
-            right.addView((View)this.ui.textButton("打开来源页面", () -> {
+            right.addView((View)this.ui.textButton("Open source page", () -> {
                 try {
                     this.startActivity(new Intent("android.intent.action.VIEW", Uri.parse((String)m.url)));
                 }
                 catch (RuntimeException e) {
-                    this.message("无法打开来源", "手机没有可用的浏览器。");
+                    this.message("Couldn't open source", "No browser is available on this device.");
                 }
             }), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
         }
@@ -2680,9 +2765,9 @@ implements ScoreAdapter.Host {
     private void padFocusStat(LinearLayout card, MatchDetail.Stat stat) {
         LinearLayout row = this.ui.row();
         row.setPadding(0, this.ui.dp(8.0f), 0, this.ui.dp(6.0f));
-        TextView home = this.ui.text(stat.home(), 14, this.ui.primary, true);
-        TextView label = this.ui.text(stat.label(), 11, this.ui.muted, false);
-        TextView away = this.ui.text(stat.away(), 14, this.ui.secondary, true);
+        TextView home = this.ui.text(EnglishDisplay.text(stat.home()), 14, this.ui.primary, true);
+        TextView label = this.ui.text(EnglishDisplay.text(stat.label()), 11, this.ui.muted, false);
+        TextView away = this.ui.text(EnglishDisplay.text(stat.away()), 14, this.ui.secondary, true);
         label.setGravity(17);
         away.setGravity(0x800005);
         row.addView((View)home, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -2709,11 +2794,11 @@ implements ScoreAdapter.Host {
         LinearLayout row = this.ui.row();
         row.setGravity(48);
         row.setPadding(0, this.ui.dp(8.0f), 0, this.ui.dp(8.0f));
-        TextView clock = this.ui.text(e.time(), 11, this.ui.muted, true);
+        TextView clock = this.ui.text(EnglishDisplay.text(e.time()), 11, this.ui.muted, true);
         row.addView((View)clock, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(48.0f), -2));
         LinearLayout words = this.ui.column();
-        String title = DetailParsers.plain(e.title());
-        String text = DetailParsers.plain(e.text());
+        String title = EnglishDisplay.text(DetailParsers.plain(e.title()));
+        String text = EnglishDisplay.text(DetailParsers.plain(e.text()));
         if (!title.isBlank()) {
             words.addView((View)this.ui.text(title, 12, this.ui.text, true));
             if (!text.isBlank()) {
@@ -2753,24 +2838,25 @@ implements ScoreAdapter.Host {
         for (Repository.Batch b : this.snapshot.batches) {
             latest = Math.max(latest, b.fetched);
         }
-        updated = latest > 0L ? "更新于 " + MainActivity.formatInstant(latest, "HH:mm") : "正在读取";
+        updated = latest > 0L ? "Updated " + MainActivity.formatInstant(latest, "HH:mm") : "Loading";
         if (this.padListStatus != null) {
-            String text = all.size() + " 场比赛 · " + (this.group.equals("全部") ? "全部赛事" : this.group) + " · " + updated;
+            this.updateCs2EventsAction();
+            String text = matchCount(all.size()) + " · " + (this.group.equals("全部") ? "All sports" : EnglishDisplay.sport(this.group)) + " · " + updated;
             this.padListStatus.setText((CharSequence)text);
             boolean failed = this.snapshot.failed();
             this.padListStatus.setTextColor(failed ? this.ui.error : this.ui.muted);
         }
         if (this.padDayNumber != null) {
             this.padDayNumber.setText((CharSequence)String.valueOf(this.from().getDayOfMonth()));
-            String month = Formats.YEAR_MONTH.format(this.from());
-            String week = Formats.WEEKDAY.format(this.from());
-            this.padDayMeta.setText((CharSequence)(month + " · " + week + (this.dayOffset == 0 ? " · 今天" : "")));
+            String month = EnglishDisplay.text(Formats.YEAR_MONTH.format(this.from()));
+            String week = EnglishDisplay.text(Formats.WEEKDAY.format(this.from()));
+            this.padDayMeta.setText((CharSequence)(month + " · " + week + (this.dayOffset == 0 ? " · Today" : "")));
         }
         if (this.padRailDay != null) {
             this.padRailDay.setText((CharSequence)Formats.MONTH_DAY_DOT.format(this.from()));
         }
         if (this.padRailWeek != null) {
-            this.padRailWeek.setText((CharSequence)(Formats.WEEKDAY.format(this.from()) + " · 北京时间"));
+            this.padRailWeek.setText((CharSequence)(EnglishDisplay.text(Formats.WEEKDAY.format(this.from())) + " · Beijing time"));
         }
         for (String g : GROUPS) {
             int c;
@@ -2778,7 +2864,7 @@ implements ScoreAdapter.Host {
             View filter = this.railFilters.get(g);
             if (filter != null) {
                 filter.setSelected(selected);
-                filter.setContentDescription(g + (this.tab == 0 ? selected ? "，已选中" : "，筛选赛事" : "，跳转到赛程"));
+                filter.setContentDescription(EnglishDisplay.sport(g) + (this.tab == 0 ? selected ? ", selected" : ", filter sport" : ", show scores for this sport"));
                 this.railBars.get(g).setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
                 TextView label = this.railLabels.get(g);
                 label.setTextColor(selected ? this.ui.text : this.ui.muted);
@@ -2857,37 +2943,37 @@ implements ScoreAdapter.Host {
         scroll.addView((View)host);
         shell.addView((View)scroll, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -1, 1.0f));
         LinearLayout titleRow = this.ui.row();
-        TextView title = this.ui.text("设置", 28, this.ui.text, true);
+        TextView title = this.ui.text("Settings", 28, this.ui.text, true);
         title.setLetterSpacing(-0.04f);
         titleRow.addView((View)title, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
 
         host.addView((View)titleRow);
         this.ui.gap(host, 6);
-        host.addView((View)this.ui.text("管理日历订阅、外观与数据来源", 13, this.ui.muted, false));
+        host.addView((View)this.ui.text("Manage calendar alerts, appearance, updates, and sources", 13, this.ui.muted, false));
         this.ui.gap(host, 18);
         long checked = this.prefs.getLong("calendar_checked", 0L);
         LinearLayout left = this.ui.column(), right = this.ui.column();
         host.addView(this.ui.columns(left, right, 360, 24), new LinearLayout.LayoutParams(-1, -2));
-        this.padSettingsHeading(left, "单场订阅");
+        this.padSettingsHeading(left, "Calendar & alerts");
         LinearLayout calendar = this.ui.column();
         calendar.setBackground((Drawable)this.ui.panel());
-        this.settingRow(calendar, "calendar-target", "接收日历", this.calendarTargetDetail(), this::calendarChoice);
-        this.settingRow(calendar, "subscriptions", "已订阅的比赛", this.subscriptionsDetail(), this::subscribedList);
-        this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "正在检查…" : "检查已订阅比赛", checked > 0L ? "上次检查 " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "同步改期、取消与完场赛果通知", () -> this.syncSubscriptions(true));
-        this.settingRow(calendar, "calendar-open", "打开系统日历", "查看日程与提醒", this::openCalendar);
-        this.settingRow(calendar, "calendar-cloud", "日历云同步", CalendarCloudSync.status(this), this::manageCloudSync);
+        this.settingRow(calendar, "calendar-target", "Reminder calendar", this.calendarTargetDetail(), this::calendarChoice);
+        this.settingRow(calendar, "subscriptions", "Subscribed matches", this.subscriptionsDetail(), this::subscribedList);
+        this.settingRow(calendar, "sync-subscriptions", this.calendarBusy ? "Checking…" : "Check subscriptions", checked > 0L ? "Last checked " + MainActivity.formatInstant(checked, "M月d日 HH:mm") : "Sync postponements, cancellations, and final results", () -> this.syncSubscriptions(true));
+        this.settingRow(calendar, "calendar-open", "Open system calendar", "View events and reminders", this::openCalendar);
+        this.settingRow(calendar, "calendar-cloud", "Calendar cloud sync", EnglishDisplay.text(CalendarCloudSync.status(this)), this::manageCloudSync);
         left.addView((View)calendar);
         this.ui.gap(left, 18);
-        this.padSettingsHeading(left, "外观");
+        this.padSettingsHeading(left, "Appearance");
         LinearLayout appearance = this.ui.column();
         appearance.setBackground((Drawable)this.ui.panel());
         appearance.setPadding(this.ui.dp(16.0f), this.ui.dp(16.0f), this.ui.dp(16.0f), this.ui.dp(16.0f));
-        appearance.addView((View)this.ui.text("跟随系统会随平板浅色 / 深色模式切换。", 12, this.ui.muted, false));
+        appearance.addView((View)this.ui.text("System follows the tablet's light or dark setting.", 12, this.ui.muted, false));
         this.ui.gap(appearance, 12);
         String theme = this.prefs.getString("theme", "dark");
         LinearLayout themeRow = this.ui.row();
         String[] values = new String[]{"dark", "light", "system"};
-        String[] labels = new String[]{"深色", "浅色", "跟随系统"};
+        String[] labels = new String[]{"Dark", "Light", "System"};
         for (int i = 0; i < values.length; ++i) {
             String value = values[i];
             boolean on = value.equals(theme);
@@ -2904,19 +2990,26 @@ implements ScoreAdapter.Host {
         appearance.addView((View)themeRow);
         left.addView((View)appearance);
         this.ui.gap(left, 18);
-        this.padSettingsHeading(left, "偏好与帮助");
-        LinearLayout options = this.ui.column();
-        options.setBackground((Drawable)this.ui.panel());
-        this.settingRow(options, "app-update", "检查更新", "当前版本 " + BuildConfig.VERSION_NAME, () -> this.startActivity(new Intent((Context)this, UpdateActivity.class)));
-
-        this.settingRow(options, "help", "使用帮助", "日历提醒与数据说明", this::help);
-        left.addView((View)options);
-        this.padSettingsHeading(right, "数据来源");
+        this.padSettingsHeading(left, "Updates & about");
+        LinearLayout updates = this.ui.column();
+        updates.setBackground((Drawable)this.ui.panel());
+        this.settingRow(updates, "app-update", "Check for updates", "Current version " + BuildConfig.VERSION_NAME, () -> this.startActivity(new Intent((Context)this, UpdateActivity.class)));
+        this.settingRow(updates, "help", "Help", "Calendar reminders and data notes", this::help);
+        View aboutRule = this.ui.divider();
+        LinearLayout.LayoutParams aboutRuleParams = new LinearLayout.LayoutParams(-1, this.ui.dp(1.0f));
+        aboutRuleParams.setMarginStart(this.ui.dp(14.0f));
+        aboutRuleParams.setMarginEnd(this.ui.dp(14.0f));
+        updates.addView(aboutRule, (ViewGroup.LayoutParams)aboutRuleParams);
+        TextView about = this.ui.text("Native Android · No ads · No sign-in · Beijing time\nSchedule and scores use public sources. Failed refreshes keep the last confirmed data.", 11, this.ui.muted, false);
+        about.setPadding(this.ui.dp(14.0f), this.ui.dp(12.0f), this.ui.dp(14.0f), this.ui.dp(14.0f));
+        updates.addView((View)about);
+        left.addView((View)updates);
+        this.padSettingsHeading(right, "Sources & diagnostics");
         LinearLayout sources = this.ui.column();
         sources.setBackground((Drawable)this.ui.panel());
         List<Repository.Batch> orderedSources = this.orderedSourceBatches(sourceSnapshot);
         if (sourceSnapshot == null || orderedSources.isEmpty()) {
-            sources.addView((View)this.padEmptySetting(sourceSnapshot == null ? "正在读取来源状态…" : "尚未读取来源"));
+            sources.addView((View)this.padEmptySetting(sourceSnapshot == null ? "Loading source status…" : "No sources loaded"));
         } else {
             for (int i = 0; i < orderedSources.size(); ++i) {
                 Repository.Batch b = orderedSources.get(i);
@@ -2925,11 +3018,11 @@ implements ScoreAdapter.Host {
                 View dot = new View((Context)this);
                 dot.setBackground((Drawable)this.ui.shape(b.error.isEmpty() ? this.ui.primary : this.ui.error, 4));
                 row.addView(dot, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(6.0f), this.ui.dp(6.0f)));
-                TextView name = this.ui.text(b.competition.name, 13, this.ui.text, true);
+                TextView name = this.ui.text(EnglishDisplay.text(b.competition.name), 13, this.ui.text, true);
                 LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, -2, 1.0f);
                 np.setMarginStart(this.ui.dp(10.0f));
                 row.addView((View)name, (ViewGroup.LayoutParams)np);
-                String state = b.error.isEmpty() ? (b.fetched > 0L ? MainActivity.formatInstant(b.fetched, "HH:mm") + " · " + b.matches.size() + " 场" : "尚未获取") : b.error;
+                String state = b.error.isEmpty() ? (b.fetched > 0L ? MainActivity.formatInstant(b.fetched, "HH:mm") + " · " + matchCount(b.matches.size()) : "Not fetched yet") : EnglishDisplay.text(b.error);
                 TextView value = this.ui.text(state, 11, b.error.isEmpty() ? this.ui.muted : this.ui.error, false);
                 value.setGravity(0x800005);
                 row.addView(value, new LinearLayout.LayoutParams(0, -2, 1));
@@ -2943,16 +3036,6 @@ implements ScoreAdapter.Host {
             }
         }
         right.addView((View)sources);
-        this.ui.gap(right, 18);
-        this.padSettingsHeading(right, "关于");
-        LinearLayout about = this.padSurface();
-        about.setPadding(this.ui.dp(16.0f), this.ui.dp(14.0f), this.ui.dp(16.0f), this.ui.dp(14.0f));
-        about.addView((View)new Ui.Icon((Context)this, "mark", this.ui.text), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(26.0f), this.ui.dp(26.0f)));
-        this.ui.gap(about, 10);
-        about.addView((View)this.ui.text("N1ghtScore " + BuildConfig.VERSION_NAME, 18, this.ui.text, true));
-        this.ui.gap(about, 6);
-        about.addView((View)this.ui.text("原生 Android · 无广告 · 无登录 · 北京时间\n赛程与比分来自公开来源，失败时保留真实缓存。", 11, this.ui.muted, false));
-        right.addView((View)about);
     }
 
     private List<Repository.Batch> orderedSourceBatches(Repository.Snapshot source) {

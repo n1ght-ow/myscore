@@ -117,7 +117,7 @@ public class TeamScheduleTest {
         Match m=new Match();m.id="m";m.league="epl";m.group="足球";m.home="Arsenal";m.away="Everton";m.homeId="359";m.awayId="368";
         m.state="scheduled";m.status="未开始";m.timeConfirmed=true;m.start=1_793_165_200_000L;
         TeamScheduleRow row=TeamScheduleRow.match(m,team("epl","359","Arsenal"));
-        assertEquals("",row.score);assertEquals("",row.result);assertEquals("未开始",row.state);assertTrue(row.home);
+        assertEquals("",row.score);assertEquals("",row.result);assertEquals("Upcoming",row.state);assertTrue(row.home);
     }
     @Test public void unknownStartTimeIsNotFabricated()throws Exception{
         Match m=new Match();m.id="m";m.league="epl";m.group="足球";m.home="Arsenal";m.away="Everton";m.homeId="359";m.awayId="368";m.state="scheduled";

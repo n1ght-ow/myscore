@@ -17,7 +17,7 @@ import java.util.List;
 final class TeamRepository {
     private static final Object LOCK=new Object();
     private static final java.util.concurrent.atomic.AtomicLong WRITES=new java.util.concurrent.atomic.AtomicLong();
-    // Older CS2 team caches predate the tier-one "接下来" enrichment; read them once, then refresh.
+    // Older CS2 team caches predate the tier-one upcoming-match enrichment; read them once, then refresh.
     private static final int CS2_TEAM_SCHEMA=1;
     static final class Result {
         final List<Match> matches=new ArrayList<>();
@@ -76,10 +76,10 @@ final class TeamRepository {
         return age>=0&&age<RefreshPolicy.teamCacheTtl(result.matches,now);
     }
     static String friendly(Exception e) {
-        if(e instanceof InterruptedException)return "请求已取消";
-        if(e instanceof java.net.SocketTimeoutException)return "连接超时";
+        if(e instanceof InterruptedException)return "Request cancelled";
+        if(e instanceof java.net.SocketTimeoutException)return "Connection timed out";
         String message=e.getMessage();
-        return message==null||message.isBlank()?"连接失败":message;
+        return message==null||message.isBlank()?"Connection failed":message;
     }
     private String key(Team team){return team.league+":"+team.id;}
     private static int cacheSchema(Team team) {

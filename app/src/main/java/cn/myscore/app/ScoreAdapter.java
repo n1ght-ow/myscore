@@ -69,7 +69,7 @@ final class ScoreAdapter extends BaseAdapter {
             case ScoreRow.SECTION: {
                 TextView text=(TextView)convertView;
                 if(text==null){text=ui.text("",13,ui.text,true);text.setPadding(ui.dp(4),ui.dp(14),0,ui.dp(6));}
-                text.setText(row.text);text.setTextColor(row.text.startsWith("进行中")?ui.primary:ui.text);return text;
+                text.setText(row.text);text.setTextColor(row.text.startsWith("Live")?ui.primary:ui.text);return text;
             }
             case ScoreRow.FAILURE: {
                 LinearLayout box=(LinearLayout)convertView;
@@ -105,10 +105,15 @@ final class ScoreAdapter extends BaseAdapter {
 
     private TextView teamScore(String text){return ui.fixtureScore(text,22,ui.text);}
     private String provenance(Match m){
-        return (m.source.isBlank()?"":m.source+" · ")+Formats.updated(m.updated);
+        String source=EnglishDisplay.text(m.source);
+        String updated=m.updated>0L?"Updated "+Formats.instant(m.updated,"HH:mm",""):"Update time unknown";
+        return (source.isBlank()?"":source+" · ")+updated;
     }
-    private String stateText(Match m){return Rules.stateLabel(m.state);}
-    private void text(TextView view,String value){if(!value.contentEquals(view.getText()))view.setText(value);}
+    private String stateText(Match m){return EnglishDisplay.text(Rules.stateLabel(m.state));}
+    private void text(TextView view,String value){
+        String shown=EnglishDisplay.text(value);
+        if(!shown.contentEquals(view.getText()))view.setText(shown);
+    }
     private void state(TextView label,Match m){
         label.setVisibility(View.VISIBLE);text(label,m.live()&&!m.status.isBlank()?m.status:stateText(m));
         label.setTextColor(m.live()?ui.primary:m.cancelled()?ui.error:ui.muted);
@@ -119,7 +124,8 @@ final class ScoreAdapter extends BaseAdapter {
         sub.setVisibility(canSubscribe?View.VISIBLE:View.GONE);
         icon.set(isSubscribed?"calendar-check":"calendar-add",isSubscribed?ui.primary:ui.muted);
         sub.setSelected(isSubscribed);sub.setAlpha(isSubscribed?1f:Ui.ACTION_ICON_ALPHA);
-        sub.setContentDescription(isSubscribed?"取消订阅 "+m.displayTitle()+"，提前 5 分钟提醒":canSubscribe?"订阅 "+m.displayTitle()+"，提前 5 分钟提醒":m.displayTitle()+" 已开始或已结束，暂不可订阅");
+        String match=EnglishDisplay.text(m.displayTitle());
+        sub.setContentDescription(isSubscribed?"Unsubscribe from "+match+"; 5-minute reminder":canSubscribe?"Subscribe to "+match+"; 5-minute reminder":match+" has started or finished and cannot be subscribed to.");
         sub.setOnClickListener(v->host.toggleSubscription(m));
     }
     /** A 48dp crest target inside the card; an unknown team id leaves the tap to the card. */
@@ -132,8 +138,14 @@ final class ScoreAdapter extends BaseAdapter {
     private void teamSlot(FrameLayout slot,String id,String name,boolean home,Match m) {
         boolean available=id!=null&&!id.isBlank();
         slot.setClickable(available);slot.setFocusable(available);
-        slot.setContentDescription(available?"查看 "+name+" 的赛程":null);
+        slot.setContentDescription(available?"View "+EnglishDisplay.text(name)+" schedule":null);
         slot.setOnClickListener(available?v->host.openTeam(m,home):null);
+    }
+    private static String watchDescription(WatchLinks.Link link){
+        if(link==null)return "";
+        String note=EnglishDisplay.text(link.note);
+        return EnglishDisplay.text(link.title)+". "+EnglishDisplay.text(link.kind.label)
+            +(note.isBlank()?"":" · "+note)+". Opens in "+EnglishDisplay.text(link.provider)+".";
     }
 
     private final class MatchHolder {
@@ -197,7 +209,7 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams subParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));subParams.setMarginStart(ui.dp(8));footRow.addView(sub,subParams);
             footRow.addView(watch,watchParams);
             card.addView(footRow);
-            stale=ui.text("上次记录为进行中，当前状态待刷新",12,ui.error,false);
+            stale=ui.text("Last seen live; status needs refresh",12,ui.error,false);
             stale.setPadding(0,ui.dp(6),0,0);stale.setVisibility(View.GONE);card.addView(stale);
             root.addView(card);
         }
@@ -211,7 +223,7 @@ final class ScoreAdapter extends BaseAdapter {
             text(homeScore,m.displayScore(true));
             text(awayScore,m.displayScore(false));
             homeScore.setTextColor(ui.scoreColor(m,true));awayScore.setTextColor(ui.scoreColor(m,false));
-            foot.bind(m.timeConfirmed?m.time():"时间待定",provenance(m));
+            foot.bind(m.timeConfirmed?m.time():"Time TBD",provenance(m));
             boolean staleNow=m.live()&&System.currentTimeMillis()-m.updated>120_000;
             stale.setVisibility(staleNow?View.VISIBLE:View.GONE);
             Logos.bind(homeCrest,m.homeLogo,m.home);
@@ -220,6 +232,7 @@ final class ScoreAdapter extends BaseAdapter {
             teamSlot(awaySlot,m.awayId,m.away,false,m);
             WatchLinks.Link link=host.watchLink(m);
             watch.bind(link,m.live(),()->host.openWatch(m));
+            watch.setContentDescription(watchDescription(link));
             int scoreWidth=ui.scoreColumnWidth(22,m);
             homeScore.setMinWidth(scoreWidth);awayScore.setMinWidth(scoreWidth);
             ui.alignFixtureActions(sub,watch,scoreWidth);
@@ -256,7 +269,7 @@ final class ScoreAdapter extends BaseAdapter {
             ui.clickable(sub,Color.TRANSPARENT,24);sub.setFocusable(true);
             LinearLayout.LayoutParams subParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));subParams.setMarginStart(ui.dp(8));footRow.addView(sub,subParams);
             card.addView(footRow);
-            stale=ui.text("上次记录为进行中，当前状态待刷新",12,ui.error,false);
+            stale=ui.text("Last seen live; status needs refresh",12,ui.error,false);
             stale.setPadding(0,ui.dp(6),0,0);stale.setVisibility(View.GONE);card.addView(stale);
             root.addView(card);
         }
@@ -268,7 +281,7 @@ final class ScoreAdapter extends BaseAdapter {
             text(title,m.displayTitle());
             text(first,m.results.size()>0?m.results.get(0):"");first.setVisibility(m.results.size()>0?View.VISIBLE:View.GONE);
             text(second,m.results.size()>1?m.results.get(1):"");second.setVisibility(m.results.size()>1?View.VISIBLE:View.GONE);
-            foot.bind(m.timeConfirmed?m.time():"时间待定",provenance(m));
+            foot.bind(m.timeConfirmed?m.time():"Time TBD",provenance(m));
             boolean staleNow=m.live()&&System.currentTimeMillis()-m.updated>120_000;
             stale.setVisibility(staleNow?View.VISIBLE:View.GONE);
             subscription(subIcon,m,sub);

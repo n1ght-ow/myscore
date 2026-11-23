@@ -16,29 +16,29 @@ public final class MatchResolver implements CalendarSync.Resolver {
     @Override public void beginSync(){shared.clear();}
     @Override public Match resolve(Match previous) throws Exception {
         Competition c=Competition.find(previous.league);
-        if(c==null)throw new Exception("无法识别已导入赛事");
+        if(c==null)throw new Exception("Could not identify the imported competition");
         List<Match> candidates;long now=System.currentTimeMillis();
         if(previous.id.startsWith("espn:")) {
             String[] parts=previous.id.split(":");
-            if(parts.length!=4 || !parts[2].matches("[0-9]+") || !parts[3].matches("[0-9]+"))throw new Exception("已导入赛事标识无效");
+            if(parts.length!=4 || !parts[2].matches("[0-9]+") || !parts[3].matches("[0-9]+"))throw new Exception("The imported match identifier is invalid");
             if(c.id.equals("f1")) {
                 int year=previous.day()==null?Match.today(now).getYear():previous.day().getYear();String key="f1:"+year;
                 if(!shared.containsKey(key))shared.put(key,Parsers.espn(new JSONObject(source.get("https://site.api.espn.com/apis/site/v2/sports/racing/f1/scoreboard?dates="+year+"&limit=1000")),c,now));
                 candidates=shared.get(key);
             } else {
                 JSONObject root=new JSONObject(source.get("https://site.api.espn.com/apis/site/v2/sports/"+c.path+"/summary?event="+parts[2]));
-                JSONObject header=root.optJSONObject("header");if(header==null)throw new Exception("已导入比赛详情未返回身份");
+                JSONObject header=root.optJSONObject("header");if(header==null)throw new Exception("The imported match detail did not return an identity");
                 candidates=Parsers.espn(new JSONObject().put("events",new JSONArray().put(header)),c,now);
             }
         } else if(previous.id.startsWith("five:cs2:")) {
-            String id=previous.id.substring("five:cs2:".length());if(!id.matches("csgo_mc_[0-9]+"))throw new Exception("CS2 比赛标识无效");
+            String id=previous.id.substring("five:cs2:".length());if(!id.matches("csgo_mc_[0-9]+"))throw new Exception("The CS2 match identifier is invalid");
             JSONObject root=new JSONObject(source.get(DomesticEsports.FIVE+"matches/"+id+"/data"));
             JSONObject data=root.optJSONObject("data"),match=data==null?null:data.optJSONObject("match");
-            if(!root.optBoolean("success")||match==null)throw new Exception("CS2 已导入比赛详情暂不可用");
+            if(!root.optBoolean("success")||match==null)throw new Exception("The imported CS2 match detail is temporarily unavailable");
             candidates=java.util.Collections.singletonList(DomesticEsports.fiveMatch(match,now,true));
-        } else throw new Exception("来源暂不支持身份复核");
+        } else throw new Exception("This source does not currently support identity verification");
         for(Match m:candidates)if(m.id.equals(previous.id)){if(m.url.isEmpty())m.url=previous.url;return m;}
         // Missing never means cancelled.
-        throw new Exception("来源尚未确认已导入比赛的新状态");
+        throw new Exception("The source has not confirmed a new state for the imported match");
     }
 }

@@ -161,7 +161,7 @@ public class HttpTransportTest {
                 );
                 fail("Redirect loop must fail");
             } catch (IOException expected) {
-                assertTrue(expected.getMessage().contains("重定向"));
+                assertTrue(expected.getMessage().contains("Too many redirects"));
             }
 
             try {

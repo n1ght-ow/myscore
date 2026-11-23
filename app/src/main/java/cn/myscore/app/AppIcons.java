@@ -77,6 +77,12 @@ final class AppIcons {
                 p.moveTo(17.5f,5.5f);p.cubicTo(20.5f,5.5f,20.5f,10.2f,17.0f,10.8f);
                 p.moveTo(12f,14.5f);p.lineTo(12f,19.5f);p.moveTo(8.5f,19.5f);p.lineTo(15.5f,19.5f);
             }
+            case "standings" -> {
+                p.moveTo(3.5f,19.5f);p.lineTo(3.5f,12f);p.lineTo(9f,12f);
+                p.moveTo(9f,19.5f);p.lineTo(9f,5f);p.lineTo(15f,5f);p.lineTo(15f,19.5f);
+                p.moveTo(15f,9f);p.lineTo(20.5f,9f);p.lineTo(20.5f,19.5f);
+                p.moveTo(3.5f,19.5f);p.lineTo(20.5f,19.5f);
+            }
             case "preferences" -> {
                 p.moveTo(4f,8.5f);p.lineTo(7.8f,8.5f);p.addCircle(10.2f,8.5f,2.3f,Path.Direction.CW);p.moveTo(12.6f,8.5f);p.lineTo(20f,8.5f);
                 p.moveTo(4f,15.5f);p.lineTo(11.4f,15.5f);p.addCircle(13.8f,15.5f,2.3f,Path.Direction.CW);p.moveTo(16.2f,15.5f);p.lineTo(20f,15.5f);

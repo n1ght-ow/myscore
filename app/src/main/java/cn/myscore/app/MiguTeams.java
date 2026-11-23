@@ -14,6 +14,7 @@ import java.util.Map;
  */
 final class MiguTeams {
     private static final Map<String, String> BY_ENGLISH = new HashMap<>();
+    private static final Map<String, String> ENGLISH_NAMES = new HashMap<>();
 
     static {
         // Premier League 2026-27.
@@ -82,6 +83,10 @@ final class MiguTeams {
 
     private MiguTeams() {}
 
+    static String english(String team) {
+        return ENGLISH_NAMES.get(team);
+    }
+
     static String chinese(String team) {
         return team == null ? null : BY_ENGLISH.get(normalize(team));
     }
@@ -130,6 +135,7 @@ final class MiguTeams {
     }
 
     private static void put(String chinese, String... english) {
+        ENGLISH_NAMES.put(chinese, english[0]);
         for (String name : english) BY_ENGLISH.put(normalize(name), chinese);
     }
 }

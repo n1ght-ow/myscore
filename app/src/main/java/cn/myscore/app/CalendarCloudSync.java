@@ -110,12 +110,12 @@ final class CalendarCloudSync {
         int pendingUpload,
         int pendingDelete
     ) {
-        if(!permitted)return "未开启日历权限 · 点此开启跨设备同步";
-        if(!hasCalendar)return "未找到可写日历 · 请在系统日历启用账户";
-        if(localOnly)return hasXiaomiOption?"当前为本机日历 · 点此切换至小米日历":"本机日历 · 登录小米账户后可跨设备同步";
-        if(pendingUpload+pendingDelete>0)return "小米云同步中 · 约 1–3 分钟送达其他设备";
-        if(subscribed>0)return "小米日历自动同步 · "+subscribed+" 场订阅已上云";
-        return "小米日历自动同步 · 手机与平板自动互通";
+        if(!permitted)return "Calendar permission is off · Tap to enable cross-device sync";
+        if(!hasCalendar)return "No writable calendar found · Enable an account in system Calendar";
+        if(localOnly)return hasXiaomiOption?"Using this device's calendar · Tap to switch to Xiaomi Calendar":"This device's calendar · Sign in to a Xiaomi account for cross-device sync";
+        if(pendingUpload+pendingDelete>0)return "Syncing via Xiaomi Cloud · Usually reaches other devices in 1–3 minutes";
+        if(subscribed>0)return "Xiaomi Calendar syncs automatically · "+subscribed+(subscribed==1?" subscription uploaded":" subscriptions uploaded");
+        return "Xiaomi Calendar syncs automatically · Phone and tablet stay in sync";
     }
 
     static void changed(Context context,long calendar) {
@@ -149,9 +149,9 @@ final class CalendarCloudSync {
                 if(snap.localOnly&&snap.hasXiaomiOption&&snap.xiaomiCalendarId>=0) {
                     Sheet.confirm(
                         activity,
-                        "切换至小米日历",
-                        "当前接收日历为「"+snap.calendarName+"」（仅保存在本机，不会上传云端）。\n\n切换为「"+snap.xiaomiCalendarName+"」后，手机与平板登录同一小米账户即可自动同步比赛订阅，无需 Shizuku。",
-                        "切换至小米日历",
+                        "Switch to Xiaomi Calendar",
+                        "The current calendar is \""+snap.calendarName+"\" (stored only on this device and not uploaded).\n\nAfter switching to \""+snap.xiaomiCalendarName+"\", phones and tablets signed in to the same Xiaomi account will sync match subscriptions automatically. No Shizuku required.",
+                        "Switch to Xiaomi Calendar",
                         ()->{
                             sync.chooseCalendar(snap.xiaomiCalendarId,snap.xiaomiCalendarName);
                             opened(activity);
@@ -161,20 +161,21 @@ final class CalendarCloudSync {
                     return;
                 }
                 StringBuilder body=new StringBuilder();
-                body.append("当前接收日历：").append(snap.calendarName.isBlank()?"未选择":snap.calendarName).append('\n');
+                body.append("Current calendar: ").append(snap.calendarName.isBlank()?"Not selected":snap.calendarName).append('\n');
                 if(snap.localOnly) {
-                    body.append("同步状态：当前为本机日历，仅在本设备生效。在系统日历登录小米账户后即可跨设备同步。\n\n");
+                    body.append("Sync status: the current calendar is local to this device. Sign in to a Xiaomi account in system Calendar to enable cross-device sync.\n\n");
                 } else if(snap.pendingUpload+snap.pendingDelete>0) {
-                    body.append("同步状态：本机共 ").append(snap.subscribed).append(" 场订阅，其中 ")
-                        .append(snap.pendingUpload+snap.pendingDelete).append(" 项改动正等待系统日历上云。\n\n");
+                    body.append("Sync status: ").append(snap.subscribed).append(snap.subscribed==1?" subscription is":" subscriptions are")
+                        .append(" stored on this device, with ").append(snap.pendingUpload+snap.pendingDelete).append(" changes waiting for system Calendar upload.\n\n");
                 } else {
-                    body.append("同步状态：本机已识别 ").append(snap.subscribed).append(" 场有效订阅，云端状态已对齐。\n\n");
+                    body.append("Sync status: ").append(snap.subscribed).append(snap.subscribed==1?" active subscription":" active subscriptions")
+                        .append(" found on this device; the cloud state is aligned.\n\n");
                 }
-                body.append("跨设备同步时间与规则（无需 Shizuku）：\n")
-                    .append("1. 订阅或取消后，系统日历通常在约 45 秒–3 分钟内自动上传至小米云，并通过系统推送在数秒内下发到同一小米账户的手机或平板；\n")
-                    .append("2. 另一台设备开启日历权限后，前台运行会自动点亮或取消订阅图标，后台则在打开应用时立即认领并安排完场赛果通知；\n")
-                    .append("3. 若想立即同步，可点上方「打开系统日历」下拉刷新一次小米日历。");
-                Sheet.message(activity,"日历云同步",body.toString());
+                body.append("Cross-device sync timing and rules (no Shizuku required):\n")
+                    .append("1. After subscribing or cancelling, system Calendar usually uploads to Xiaomi Cloud in about 45 seconds–3 minutes, then pushes to phones or tablets on the same Xiaomi account within seconds;\n")
+                    .append("2. After Calendar permission is enabled on another device, foreground use updates subscription icons automatically; in the background, the app adopts changes and schedules result notifications when it opens;\n")
+                    .append("3. To sync immediately, tap \"Open system Calendar\" above and pull to refresh Xiaomi Calendar.");
+                Sheet.message(activity,"Calendar cloud sync",body.toString());
             });
         });
     }
@@ -199,8 +200,9 @@ final class CalendarCloudSync {
             if(selectedId<0)sync.chooseCalendar(selected.id,selected.name);
         } else if(selected==null&&selectedId>=0&&!sync.calendarName().isBlank()) {
             String remembered=sync.calendarName();
-            boolean xiaomi=remembered.contains("小米");
-            boolean local=!xiaomi&&remembered.contains("本机");
+            String lower=remembered.toLowerCase(java.util.Locale.ROOT);
+            boolean xiaomi=remembered.contains("小米")||lower.contains("xiaomi");
+            boolean local=!xiaomi&&(remembered.contains("本机")||lower.contains("this device"));
             selected=new CalendarSync.CalendarChoice(selectedId,remembered,"",local,xiaomi);
             if(local)localCalendars.add(selectedId);
         }

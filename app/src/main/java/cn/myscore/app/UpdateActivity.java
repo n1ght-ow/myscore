@@ -49,8 +49,8 @@ public final class UpdateActivity extends Activity {
         root.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets b=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(b.left+ui.pageInset(),b.top,b.right+ui.pageInset(),b.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft()+ui.pageInset(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight()+ui.pageInset(),insets.getSystemWindowInsetBottom());return insets;});root.requestApplyInsets();
         LinearLayout header=ui.row();header.setMinimumHeight(ui.dp(48));header.setPadding(ui.dp(4),ui.dp(2),ui.dp(16),ui.dp(2));
         FrameLayout back=new FrameLayout(this);back.addView(new Ui.Icon(this,"back",ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
-        ui.clickable(back,android.graphics.Color.TRANSPARENT,Ui.CONTROL_RADIUS);back.setContentDescription("返回设置");back.setFocusable(true);back.setOnClickListener(v->finish());
-        header.addView(back,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));header.addView(ui.text("软件更新",17,ui.text,true));
+        ui.clickable(back,android.graphics.Color.TRANSPARENT,Ui.CONTROL_RADIUS);back.setContentDescription("Back to settings");back.setFocusable(true);back.setOnClickListener(v->finish());
+        header.addView(back,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));header.addView(ui.text("Update",17,ui.text,true));
         root.addView(header);root.addView(ui.divider());
         boolean isPad=Ui.isPad(this);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
@@ -62,7 +62,7 @@ public final class UpdateActivity extends Activity {
         LinearLayout product=ui.row();
         Ui.Icon mark=new Ui.Icon(this,"mark",ui.text);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(ui.dp(28),ui.dp(28));mp.setMarginEnd(ui.dp(10));product.addView(mark,mp);
         product.addView(ui.text("N1ghtScore",20,ui.text,true),new LinearLayout.LayoutParams(0,-2,1));
-        TextView version=ui.text("当前版本 "+BuildConfig.VERSION_NAME,12,ui.muted,false);
+        TextView version=ui.text("Version "+BuildConfig.VERSION_NAME,12,ui.muted,false);
         version.setBackground(ui.shape(ui.tonal,12));version.setPadding(ui.dp(10),ui.dp(4),ui.dp(10),ui.dp(4));
         LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(-2,-2);vp.setMarginStart(ui.dp(8));product.addView(version,vp);
         mainCard.addView(product);ui.gap(mainCard,14);mainCard.addView(ui.divider());ui.gap(mainCard,16);
@@ -78,8 +78,8 @@ public final class UpdateActivity extends Activity {
         LinearLayout.LayoutParams ptp=new LinearLayout.LayoutParams(-1,-2);ptp.bottomMargin=ui.dp(14);mainCard.addView(progressText,ptp);
 
         LinearLayout actions=isPad?ui.row():ui.column();
-        action=ui.button("检查更新",true,this::act);
-        cancel=ui.button("取消下载",false,this::cancelDownload);
+        action=ui.button("Check for updates",true,this::act);
+        cancel=ui.button("Cancel download",false,this::cancelDownload);
         if(isPad){
             action.setMinWidth(ui.dp(180));cancel.setMinWidth(ui.dp(140));
             actions.addView(action,new LinearLayout.LayoutParams(-2,-2));
@@ -97,18 +97,18 @@ public final class UpdateActivity extends Activity {
         LinearLayout.LayoutParams ncp=new LinearLayout.LayoutParams(-1,-2);ncp.bottomMargin=ui.dp(12);
         body.addView(notesCard,ncp);
 
-        TextView link=ui.button("打开发布页",false,()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(UpdateRelease.REPOSITORY+"/releases/latest")));}catch(android.content.ActivityNotFoundException e){Sheet.message(this,"无法打开发布页","手机没有可用的浏览器，请稍后重试应用内检查。");}});
+        TextView link=ui.button("Open release page",false,()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(UpdateRelease.REPOSITORY+"/releases/latest")));}catch(android.content.ActivityNotFoundException e){Sheet.message(this,"Couldn't open release page","No browser is available. Try the in-app update check again later.");}});
         if(isPad){link.setMinWidth(ui.dp(180));body.addView(link,new LinearLayout.LayoutParams(-2,-2));}
         else body.addView(link,new LinearLayout.LayoutParams(-1,-2));
-        ui.gap(body,12);body.addView(ui.text("覆盖安装保留设置与日历关联，无需卸载。",12,ui.muted,false));
+        ui.gap(body,12);body.addView(ui.text("Installing over the current app keeps settings and calendar links. No uninstall needed.",12,ui.muted,false));
     }
     private <T> void run(Callable<T> task,Consumer<T> complete){
         long ticket=++operation;working=true;
-        worker.submit(()->{try{T result=task.call();handler.post(()->{if(isDestroyed()||ticket!=operation)return;working=false;complete.accept(result);});}catch(Exception e){handler.post(()->{if(isDestroyed()||ticket!=operation)return;working=false;state=State.ERROR;error=e instanceof java.io.IOException&&e.getMessage()!=null?e.getMessage():"操作未完成，请检查网络和系统下载服务后重试";render();});}});
+        worker.submit(()->{try{T result=task.call();handler.post(()->{if(isDestroyed()||ticket!=operation)return;working=false;complete.accept(result);});}catch(Exception e){handler.post(()->{if(isDestroyed()||ticket!=operation)return;working=false;state=State.ERROR;error=e instanceof java.io.IOException&&e.getMessage()!=null?e.getMessage():"Action didn't finish. Check your network and system download service, then retry.";render();});}});
     }
     private void check(boolean restore){
         state=State.CHECKING;release=null;render();
-        run(()->{UpdateRelease pending=restore?repository.pending():null;if(pending!=null&&pending.newerThan(BuildConfig.VERSION_NAME)&&repository.downloadId()!=0)return pending;repository.clear();return repository.latest();},result->{release=result;try{state=result.newerThan(BuildConfig.VERSION_NAME)?repository.downloadId()!=0?State.DOWNLOADING:State.AVAILABLE:State.CURRENT;}catch(java.io.IOException e){state=State.ERROR;error="无法比较版本，请在发布页核对";}render();if(state==State.DOWNLOADING)poll();});
+        run(()->{UpdateRelease pending=restore?repository.pending():null;if(pending!=null&&pending.newerThan(BuildConfig.VERSION_NAME)&&repository.downloadId()!=0)return pending;repository.clear();return repository.latest();},result->{release=result;try{state=result.newerThan(BuildConfig.VERSION_NAME)?repository.downloadId()!=0?State.DOWNLOADING:State.AVAILABLE:State.CURRENT;}catch(java.io.IOException e){state=State.ERROR;error="Couldn't compare versions. Check the release page.";}render();if(state==State.DOWNLOADING)poll();});
     }
     private void act(){
         if(working||state==State.DOWNLOADING||state==State.VERIFYING)return;
@@ -128,23 +128,26 @@ public final class UpdateActivity extends Activity {
     }
     private void install(){
         if(!getPackageManager().canRequestPackageInstalls()){
-            Sheet.confirm(this,"允许安装更新","请在系统设置中允许 N1ghtScore 安装应用，返回后再点「安装更新」。","前往设置",()->{try{startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+getPackageName())));}catch(android.content.ActivityNotFoundException e){Sheet.message(this,"无法打开设置","请在手机系统设置中允许 N1ghtScore 安装应用。");}});return;
+            Sheet.confirm(this,"Allow app installs","Allow N1ghtScore to install apps in system settings, then return and tap “Install update”.","Open settings",()->{try{startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+getPackageName())));}catch(android.content.ActivityNotFoundException e){Sheet.message(this,"Couldn't open settings","Allow N1ghtScore to install apps in your device settings.");}});return;
         }
-        state=State.VERIFYING;render();run(()->repository.verify(release),uri->{state=State.READY;render();try{Intent install=new Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);install.setClipData(ClipData.newRawUri("N1ghtScore update",uri));startActivity(install);}catch(android.content.ActivityNotFoundException|SecurityException e){Sheet.message(this,"未能打开安装界面","请确认系统安装器可用，并允许 N1ghtScore 安装应用后重试。");}});
+        state=State.VERIFYING;render();run(()->repository.verify(release),uri->{state=State.READY;render();try{Intent install=new Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);install.setClipData(ClipData.newRawUri("N1ghtScore update",uri));startActivity(install);}catch(android.content.ActivityNotFoundException|SecurityException e){Sheet.message(this,"Couldn't open installer","Make sure the system installer is available and N1ghtScore is allowed to install apps, then retry.");}});
     }
     private void render(){
         if(headline==null)return;boolean busy=state==State.CHECKING||state==State.VERIFYING||state==State.DOWNLOADING;
-        progress.setVisibility(busy?View.VISIBLE:View.GONE);progress.setIndeterminate(state!=State.DOWNLOADING);progress.setProgress(percent);progressText.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);progressText.setText(waiting?"正在连接下载服务器…":"已下载 "+percent+"%");cancel.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);action.setEnabled(!busy);action.setAlpha(busy?0.5f:1f);
-        notes.setVisibility(release!=null&&state!=State.CURRENT&&!release.notes.isBlank()?View.VISIBLE:View.GONE);notes.setText(release==null?"":"更新内容\n\n"+release.summary());
+        progress.setVisibility(busy?View.VISIBLE:View.GONE);progress.setIndeterminate(state!=State.DOWNLOADING);progress.setProgress(percent);progressText.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);progressText.setText(waiting?"Connecting to the download server…":"Downloaded "+percent+"%");cancel.setVisibility(state==State.DOWNLOADING?View.VISIBLE:View.GONE);action.setEnabled(!busy);action.setAlpha(busy?0.5f:1f);
+        String summary=release==null?"":release.summary();
+        if(EnglishDisplay.hasHan(summary))summary="The original notes are on the release page.";
+        notes.setVisibility(state!=State.CURRENT&&!summary.isBlank()?View.VISIBLE:View.GONE);
+        notes.setText(summary.isBlank()?"":"What's new\n\n"+summary);
         if(notesCard!=null)notesCard.setVisibility(notes.getVisibility());
         switch(state){
-            case CHECKING->{headline.setText(release==null?"正在检查更新":"正在准备下载");description.setText("连接 N1ghtScore 发布渠道…");action.setText("请稍候");}
-            case CURRENT->{headline.setText("当前已是最新版本");description.setText("已发布的最新版本 "+release.version);action.setText("重新检查");}
-            case AVAILABLE->{headline.setText("发现新版本 "+release.version);description.setText(String.format(Locale.CHINA,"安装包 %.1f MB · 覆盖更新保留数据",release.size/1048576d));action.setText("下载更新");}
-            case DOWNLOADING->{headline.setText("正在下载 "+release.version);description.setText("可以离开此页面，N1ghtScore 会继续下载。");action.setText("下载中");}
-            case VERIFYING->{headline.setText("正在校验安装包");description.setText("核对文件完整性与应用签名…");action.setText("正在校验");}
-            case READY->{headline.setText("更新已准备好");description.setText("版本 "+release.version+" · 点安装更新，在系统界面确认覆盖安装。");action.setText("安装更新");}
-            case ERROR->{headline.setText("暂时无法更新");description.setText(error);action.setText(release==null?"重新检查":"重新下载");}
+            case CHECKING->{headline.setText(release==null?"Checking for updates":"Preparing download");description.setText("Connecting to N1ghtScore releases…");action.setText("Please wait");}
+            case CURRENT->{headline.setText("You're up to date");description.setText("No newer release is available.");action.setText("Check again");}
+            case AVAILABLE->{headline.setText("Version "+release.version+" is available");description.setText(String.format(Locale.US,"Download %.1f MB · Installing over the current app keeps data",release.size/1048576d));action.setText("Download update");}
+            case DOWNLOADING->{headline.setText("Downloading "+release.version);description.setText("You can leave this screen. N1ghtScore will keep downloading.");action.setText("Downloading");}
+            case VERIFYING->{headline.setText("Verifying update");description.setText("Checking file integrity and app signature…");action.setText("Verifying");}
+            case READY->{headline.setText("Update ready");description.setText("Version "+release.version+" · Tap Install update, then confirm the over-install in the system dialog.");action.setText("Install update");}
+            case ERROR->{headline.setText("Update unavailable right now");description.setText(error);action.setText(release==null?"Check again":"Download again");}
         }
     }
 }

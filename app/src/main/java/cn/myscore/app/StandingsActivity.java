@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -32,9 +31,6 @@ public final class StandingsActivity extends Activity {
     private static final List<String> LABELS = List.of(
         "Premier League", "Champions League", "FA Cup", "Carabao Cup", "NBA", "NFL", "F1", "CS2");
     private static final int CS2_PAGE_SIZE = 30;
-    private static final long FRESH_MS = 10 * 60_000L;
-    private static final Map<String, Snapshot> CACHE = new ConcurrentHashMap<>();
-    private record Snapshot(Standings data, long fetched) {}
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newFixedThreadPool(2);
@@ -47,7 +43,8 @@ public final class StandingsActivity extends Activity {
     private FrameLayout refresh;
     private ScrollView scroll;
     private String selected;
-    private Snapshot shown;
+    private StandingsStore store;
+    private StandingsStore.Snapshot shown;
     private Future<?> request;
     private int generation;
     private int restoredPosition;
@@ -59,6 +56,7 @@ public final class StandingsActivity extends Activity {
         super.onCreate(saved);
         ui = new Ui(this, dark);
         board = new StandingsBoard(ui);
+        store = new StandingsStore(getCacheDir());
         String initial = initialSport(getIntent().getStringExtra("group"));
         if (saved != null) {
             initial = saved.getString("sport", initial);
@@ -180,12 +178,13 @@ public final class StandingsActivity extends Activity {
         if (sport.equals(selected)) return;
         cancelRequest();
         selected = sport;
-        shown = CACHE.get(sport);
+        long now = System.currentTimeMillis();
+        shown = store.hot(sport, now);
         failed = false;
         for (Map.Entry<String, TextView> entry : sportTabs.entrySet()) ui.selectTab(entry.getValue(), entry.getKey().equals(sport));
         reveal(sportTabs.get(sport));
         shell.requestLayout();
-        if (shown == null || System.currentTimeMillis() - shown.fetched() >= FRESH_MS) load();
+        if (shown == null || !shown.fresh(now)) load(false);
         render(resetScroll);
     }
 
@@ -195,20 +194,37 @@ public final class StandingsActivity extends Activity {
         request = null;
     }
 
-    private void load() {
+    private void load() { load(true); }
+
+    private void load(boolean force) {
         if (request != null) return;
         failed = false;
         Competition sport = Competition.find(selected);
         int token = ++generation;
         request = worker.submit(() -> {
             try {
+                if (!force) {
+                    long now = System.currentTimeMillis();
+                    StandingsStore.Snapshot cached = store.read(sport.id, now);
+                    if (cached != null) {
+                        if (cached.fresh(now)) {
+                            main.post(() -> complete(token, cached));
+                            return;
+                        }
+                        main.post(() -> showCached(token, cached));
+                    }
+                }
+                if (Thread.currentThread().isInterrupted()) return;
                 Standings data = switch (sport.id) {
                     case "fa", "efl" -> CupStandings.load(sport);
                     case "f1" -> F1Standings.load();
                     case "cs2" -> Cs2Standings.load();
                     default -> LeagueStandings.load(sport);
                 };
-                main.post(() -> complete(token, new Snapshot(data, System.currentTimeMillis())));
+                if (Thread.currentThread().isInterrupted()) return;
+                StandingsStore.Snapshot latest = new StandingsStore.Snapshot(data, System.currentTimeMillis());
+                main.post(() -> complete(token, latest));
+                store.write(sport.id, latest);
             } catch (Exception error) {
                 main.post(() -> complete(token, null));
             }
@@ -216,14 +232,19 @@ public final class StandingsActivity extends Activity {
         updateInfo();
     }
 
-    private void complete(int token, Snapshot received) {
+    private void showCached(int token, StandingsStore.Snapshot cached) {
+        if (isDestroyed() || isFinishing() || token != generation || shown != null) return;
+        shown = cached;
+        render(false);
+    }
+
+    private void complete(int token, StandingsStore.Snapshot received) {
         if (isDestroyed() || isFinishing() || token != generation) return;
         request = null;
         failed = received == null;
         if (failed) { updateInfo(); return; }
         Standings previous = shown == null ? null : shown.data();
         shown = received;
-        CACHE.put(selected, received);
         if (received.data().equals(previous)) updateInfo();
         else render(false);
     }

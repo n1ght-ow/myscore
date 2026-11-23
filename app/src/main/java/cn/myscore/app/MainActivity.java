@@ -163,6 +163,11 @@ implements ScoreAdapter.Host {
     private Runnable prefetchTask;
     private String prefetchTaskKey;
     private Future<?> prefetchRequest;
+    private boolean partialRenderQueued;
+    private final Runnable renderPartial = () -> {
+        this.partialRenderQueued = false;
+        this.renderSoon.run();
+    };
     private final Runnable renderSoon = () -> {
         if (this.active && !this.isDestroyed()) {
             this.render(true);
@@ -279,7 +284,7 @@ implements ScoreAdapter.Host {
                     this.busy = false;
                     this.rememberAll("全部", initialDay, cached);
                     this.snapshot = subset(cached, this.group);
-                    this.render(true);
+                    if (this.tab != 0 || !this.snapshot.matches().isEmpty()) this.render(true);
                 }
                 this.load(false);
             });
@@ -382,6 +387,7 @@ implements ScoreAdapter.Host {
         this.closeNetworkWatch();
         this.handler.removeCallbacks(this.tick);
         this.handler.removeCallbacks(this.renderSoon);
+        this.cancelPartialRender();
         this.handler.removeCallbacks(this.settleLoad);
         this.cancelPrefetch();
         super.onPause();
@@ -464,8 +470,10 @@ implements ScoreAdapter.Host {
                     all.merge(batch);
                     this.rememberAll("全部", f, all);
                     this.snapshot = subset(all, this.group);
-                    this.handler.removeCallbacks(this.renderSoon);
-                    this.handler.postDelayed(this.renderSoon, 150L);
+                    if (!this.partialRenderQueued) {
+                        this.partialRenderQueued = true;
+                        this.handler.postDelayed(this.renderPartial, 32L);
+                    }
                 }));
             }
             catch (RuntimeException e) {
@@ -484,6 +492,7 @@ implements ScoreAdapter.Host {
                 this.busy = false;
                 Log.i((String)"MyScorePerf", (String)("all sources in " + (System.currentTimeMillis() - started) + "ms"));
                 this.handler.removeCallbacks(this.renderSoon);
+                this.cancelPartialRender();
                 this.rememberAll("全部", f, next);
                 this.snapshot = subset(next, this.group);
                 if (this.active) {
@@ -504,6 +513,11 @@ implements ScoreAdapter.Host {
         });
     }
 
+    private void cancelPartialRender() {
+        this.partialRenderQueued = false;
+        this.handler.removeCallbacks(this.renderPartial);
+    }
+
     private void select(int nextTab, String nextGroup, int offset) {
         this.select(nextTab, nextGroup, offset, false);
     }
@@ -517,6 +531,7 @@ implements ScoreAdapter.Host {
         }
         this.handler.removeCallbacks(this.tick);
         this.handler.removeCallbacks(this.renderSoon);
+        this.cancelPartialRender();
         this.handler.removeCallbacks(this.settleLoad);
         this.cancelPrefetch();
         boolean keepScoreRequest = !force && nextTab == 0 && this.tab == 0 && offset == this.dayOffset && this.busy && this.scoreRequest != null && !this.scoreRequest.isDone();

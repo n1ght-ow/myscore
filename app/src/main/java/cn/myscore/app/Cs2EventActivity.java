@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.LruCache;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
@@ -30,15 +31,19 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class Cs2EventActivity extends Activity {
+    private static final long GRAPH_FRESH_MS = 90_000;
+    private static final long CATALOG_FRESH_MS = 3 * 60_000;
+    private static final LruCache<String, Snapshot> CACHE = new LruCache<>(12);
+    private static final LruCache<LocalDate, Catalog> CATALOGS = new LruCache<>(4);
+    private static final LruCache<String, List<Cs2Tournament.Event>> EDITIONS = new LruCache<>(12);
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newFixedThreadPool(3);
-    private final Map<String, List<Cs2Tournament.Event>> editions = new LinkedHashMap<>();
-    private final Map<String, Snapshot> cache = new LinkedHashMap<>();
     private record Snapshot(List<Cs2Tournament.Stage> stages, long fetched) {}
+    private record Catalog(List<Cs2Tournament.Event> events, long fetched) {}
 
     private Ui ui;
     private ScrollView scroll;
-    private LinearLayout body, content;
+    private LinearLayout body, phases, content;
     private TextView eventPicker, source, eventDates;
     private View eventChevron, eventControl;
     private FrameLayout refresh;
@@ -69,8 +74,10 @@ public final class Cs2EventActivity extends Activity {
         }
         if (validId(id)) event = new Cs2Tournament.Event(id, name == null || name.isBlank() ? "CS2 tournament" : name, "");
         build();
-        loadCatalog();
-        if (event != null) loadGraph();
+        if (event != null) openGraph();
+        Catalog cached = CATALOGS.get(day);
+        if (cached != null && fresh(cached.fetched(), CATALOG_FRESH_MS)) useCatalog(cached.events());
+        else loadCatalog();
         render(false);
     }
 
@@ -131,6 +138,8 @@ public final class Cs2EventActivity extends Activity {
         eventDates = ui.text("", 12, ui.muted, false);
         body.addView(eventDates);
         ui.gap(body, 12);
+        phases = ui.column();
+        body.addView(phases, new LinearLayout.LayoutParams(-1, -2));
         content = ui.column();
         body.addView(content, new LinearLayout.LayoutParams(-1, -2));
         ui.gap(body, 20);
@@ -159,7 +168,9 @@ public final class Cs2EventActivity extends Activity {
         catalogFailed = false;
         catalogRequest = executor.submit(() -> {
             try {
-                List<Cs2Tournament.Event> found = Cs2Tournament.catalog(day);
+                List<Cs2Tournament.Event> found = Cs2Tournament.catalog(day, recent -> main.post(() -> {
+                    if (!isDestroyed() && !isFinishing()) useCatalog(recent);
+                }));
                 main.post(() -> finishCatalog(found));
             } catch (Exception error) {
                 main.post(() -> finishCatalog(null));
@@ -173,6 +184,11 @@ public final class Cs2EventActivity extends Activity {
         catalogRequest = null;
         catalogFailed = found == null;
         if (found == null) { header(); return; }
+        if (!found.isEmpty()) CATALOGS.put(day, new Catalog(List.copyOf(found), System.currentTimeMillis()));
+        useCatalog(found);
+    }
+
+    private void useCatalog(List<Cs2Tournament.Event> found) {
         catalog = found;
         if (event != null && catalog.stream().noneMatch(entry -> entry.id().equals(event.id()))) {
             List<Cs2Tournament.Event> withCurrent = new ArrayList<>(catalog);
@@ -195,11 +211,13 @@ public final class Cs2EventActivity extends Activity {
             if (same) selected = options.size();
             options.add(new Sheet.Item(EnglishDisplay.tournament(entry.name()), displayDates(entry.dates()), same));
         }
-        Sheet.choose(this, "Choose a tournament", "", options, selected, index -> selectEvent(catalog.get(index)));
+        List<Cs2Tournament.Event> choices = catalog;
+        Sheet.choose(this, "Choose a tournament", "", options, selected, index -> selectEvent(choices.get(index)));
     }
 
     private void selectEvent(Cs2Tournament.Event next) {
         if (event != null && event.id().equals(next.id())) return;
+        generation++;
         if (graphRequest != null) graphRequest.cancel(true);
         if (relationsRequest != null) relationsRequest.cancel(true);
         graphRequest = null;
@@ -210,10 +228,16 @@ public final class Cs2EventActivity extends Activity {
         groupIndex = 0;
         restoreY = 0;
         graphSelection = "";
-        displayed = cache.get(event.id());
-        relatives = editions.getOrDefault(edition(event.name()), List.of());
-        loadGraph();
+        openGraph();
         render(true);
+    }
+
+    private void openGraph() {
+        displayed = CACHE.get(event.id());
+        List<Cs2Tournament.Event> saved = EDITIONS.get(edition(event.name()));
+        relatives = saved == null ? List.of() : saved;
+        if (displayed == null || !fresh(displayed.fetched(), GRAPH_FRESH_MS)) loadGraph();
+        else if (saved == null) loadRelations(generation, event);
     }
 
     private void loadGraph() {
@@ -229,6 +253,11 @@ public final class Cs2EventActivity extends Activity {
                 main.post(() -> finishGraph(token, null));
             }
         });
+        loadRelations(token, selected);
+        header();
+    }
+
+    private void loadRelations(int token, Cs2Tournament.Event selected) {
         if (relationsRequest != null) relationsRequest.cancel(true);
         relationsRequest = executor.submit(() -> {
             try {
@@ -239,7 +268,6 @@ public final class Cs2EventActivity extends Activity {
                 main.post(() -> finishRelated(token, List.of()));
             }
         });
-        header();
     }
 
     private void finishGraph(int token, Snapshot result) {
@@ -249,7 +277,7 @@ public final class Cs2EventActivity extends Activity {
         if (result == null) { header(); return; }
         boolean changed = displayed == null || !displayed.stages().equals(result.stages());
         displayed = result;
-        cache.put(event.id(), result);
+        if (!result.stages().isEmpty()) CACHE.put(event.id(), result);
         if (changed) render(false); else header();
     }
 
@@ -265,8 +293,14 @@ public final class Cs2EventActivity extends Activity {
         for (Cs2Tournament.Event entry : next) if (entry.id().equals(event.id()) && !entry.dates().isBlank()) { event = entry; break; }
         if (next.equals(relatives)) return;
         relatives = next;
-        editions.put(edition(event.name()), next);
-        render(false);
+        EDITIONS.put(edition(event.name()), List.copyOf(next));
+        renderPhases();
+        header();
+    }
+
+    private static boolean fresh(long fetched, long lifetime) {
+        long age = System.currentTimeMillis() - fetched;
+        return age >= 0 && age < lifetime;
     }
 
     private boolean current(int token) { return token == generation && !isFinishing() && !isDestroyed(); }
@@ -318,8 +352,9 @@ public final class Cs2EventActivity extends Activity {
         String title = event == null ? "Choose a tournament" : relatives.size() > 1 ? edition(event.name()) : event.name();
         eventPicker.setText(EnglishDisplay.tournament(title));
         eventControl.setContentDescription(EnglishDisplay.tournament(title) + ", switch tournament");
-        eventControl.setEnabled(catalogRequest == null);
-        eventChevron.setAlpha(catalogRequest == null ? 1f : .45f);
+        boolean canChoose = catalogRequest == null || !catalog.isEmpty();
+        eventControl.setEnabled(canChoose);
+        eventChevron.setAlpha(canChoose ? 1f : .45f);
         String dates = event == null ? "" : displayDates(event.dates());
         eventDates.setText(dates);
         eventDates.setVisibility(dates.isBlank() ? View.GONE : View.VISIBLE);
@@ -341,17 +376,9 @@ public final class Cs2EventActivity extends Activity {
 
     private void render(boolean reset) {
         header();
+        renderPhases();
         int position = reset ? 0 : scroll.getScrollY();
         content.removeAllViews();
-        if (relatives.size() > 1) {
-            List<String> labels = new ArrayList<>();
-            int selected = 0;
-            for (Cs2Tournament.Event relative : relatives) {
-                if (relative.id().equals(event.id())) selected = labels.size();
-                labels.add(phaseTitle(relative.name()));
-            }
-            tabs(labels, selected, index -> selectEvent(relatives.get(index)));
-        }
         if (displayed == null) return;
         List<Cs2Tournament.Stage> stages = displayed.stages();
         if (stages.isEmpty()) { message("No bracket or matchups published yet."); return; }
@@ -386,12 +413,24 @@ public final class Cs2EventActivity extends Activity {
                 targets.add(new int[]{stage, group});
             }
         }
-        tabs(labels, selected, target -> {
+        tabs(content, labels, selected, target -> {
             stageIndex = targets.get(target)[0];
             groupIndex = targets.get(target)[1];
             graphSelection = "";
             render(true);
         });
+    }
+
+    private void renderPhases() {
+        phases.removeAllViews();
+        if (relatives.size() < 2) return;
+        List<String> labels = new ArrayList<>();
+        int selected = 0;
+        for (Cs2Tournament.Event relative : relatives) {
+            if (relative.id().equals(event.id())) selected = labels.size();
+            labels.add(phaseTitle(relative.name()));
+        }
+        tabs(phases, labels, selected, index -> selectEvent(relatives.get(index)));
     }
 
     private static String displayDates(String source) {
@@ -406,7 +445,7 @@ public final class Cs2EventActivity extends Activity {
         } catch (RuntimeException error) { return source; }
     }
 
-    private void tabs(List<String> labels, int current, IntConsumer selection) {
+    private void tabs(LinearLayout host, List<String> labels, int current, IntConsumer selection) {
         HorizontalScrollView bar = new HorizontalScrollView(this);
         bar.setHorizontalScrollBarEnabled(false);
         LinearLayout row = ui.row();
@@ -417,8 +456,8 @@ public final class Cs2EventActivity extends Activity {
             if (item == current) tab.post(() -> bar.scrollTo(Math.max(0, tab.getRight() - bar.getWidth()), 0));
         }
         bar.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
-        content.addView(bar, new LinearLayout.LayoutParams(-1, -2));
-        ui.gap(content, 8);
+        host.addView(bar, new LinearLayout.LayoutParams(-1, -2));
+        ui.gap(host, 8);
     }
 
     private void message(String label) { content.addView(ui.text(label, 12, ui.muted, false)); }

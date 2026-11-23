@@ -15,6 +15,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.function.Consumer;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -40,29 +45,63 @@ final class Cs2Tournament {
 
     private Cs2Tournament() {}
 
-    static List<Event> catalog(LocalDate around) throws Exception {
+    static List<Event> catalog(LocalDate around, Consumer<List<Event>> onRecent) throws Exception {
+        return catalog(around, Repository::get, onRecent);
+    }
+
+    static List<Event> catalog(LocalDate around, DomesticEsports.Source source, Consumer<List<Event>> onRecent) throws Exception {
         Map<String, Dated> events = new LinkedHashMap<>();
-        for (int page = 1; page <= 3; page++) {
-            if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-            try {
-                JSONObject root = new JSONObject(Repository.get(DomesticEsports.TIER_ONE + "&page=" + page));
-                JSONArray rows = array(response(root), "matches");
-                for (int index = 0; index < rows.length(); index++) {
-                    JSONObject event = obj(objAt(rows, index), "tt_info");
-                    String id = text(event, "id"), name = text(event, "disp_name");
-                    if (!id.matches(EVENT_ID) || name.isBlank() || events.containsKey(id)) continue;
-                    LocalDate start = date(text(event, "start_time"));
-                    LocalDate end = date(text(event, "end_time"));
-                    if (start == null) continue;
-                    if (end == null || end.isBefore(start)) end = start;
-                    events.put(id, new Dated(new Event(id, name, start.equals(end) ? start.toString() : start + " — " + end), start, end));
-                }
-                if (rows.length() < 100) break;
-            } catch (Exception error) {
-                if (events.isEmpty() || error instanceof InterruptedException || Thread.currentThread().isInterrupted()) throw error;
-                break;
+        ExecutorService readers = Executors.newFixedThreadPool(3);
+        List<Future<JSONArray>> pages = new ArrayList<>();
+        try {
+            for (int number = 1; number <= 3; number++) {
+                String url = DomesticEsports.TIER_ONE + "&page=" + number;
+                pages.add(readers.submit(() -> response(new JSONObject(source.get(url))).getJSONArray("matches")));
             }
+            for (int index = 0; index < pages.size(); index++) {
+                JSONArray rows;
+                try { rows = pages.get(index).get(); }
+                catch (ExecutionException error) {
+                    if (error.getCause() instanceof InterruptedException interrupted) throw interrupted;
+                    if (events.isEmpty()) {
+                        if (error.getCause() instanceof Exception failure) throw failure;
+                        throw error;
+                    }
+                    break;
+                }
+                collectEvents(rows, events);
+                if (rows.length() < 100) break;
+                if (index == 0) {
+                    List<Event> recent = nearEvents(events, around);
+                    if (!recent.isEmpty() && canOpenRecent(events, around)) onRecent.accept(recent);
+                }
+            }
+            return nearEvents(events, around);
+        } finally {
+            for (Future<JSONArray> page : pages) page.cancel(true);
+            readers.shutdownNow();
         }
+    }
+
+    private static void collectEvents(JSONArray rows, Map<String, Dated> events) {
+        for (int index = 0; index < rows.length(); index++) {
+            JSONObject event = obj(objAt(rows, index), "tt_info");
+            String id = text(event, "id"), name = text(event, "disp_name");
+            if (!id.matches(EVENT_ID) || name.isBlank() || events.containsKey(id)) continue;
+            LocalDate start = date(text(event, "start_time"));
+            LocalDate end = date(text(event, "end_time"));
+            if (start == null) continue;
+            if (end == null || end.isBefore(start)) end = start;
+            events.put(id, new Dated(new Event(id, name, start.equals(end) ? start.toString() : start + " — " + end), start, end));
+        }
+    }
+
+    private static boolean canOpenRecent(Map<String, Dated> events, LocalDate around) {
+        LocalDate oldest = events.values().stream().map(Dated::start).min(LocalDate::compareTo).orElse(around);
+        return around.isAfter(oldest);
+    }
+
+    private static List<Event> nearEvents(Map<String, Dated> events, LocalDate around) {
         List<Dated> ordered = new ArrayList<>(events.values());
         ordered.sort(Comparator.comparingLong((Dated entry) -> distance(entry, around)).thenComparing(Dated::start));
         List<Event> result = new ArrayList<>();

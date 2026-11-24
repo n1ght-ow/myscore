@@ -17,15 +17,17 @@ final class DetailTableView {
     DetailTableView(Ui ui,boolean nba,boolean showTeam,boolean narrow,int widthDp,boolean compactColumns){this.ui=ui;this.nba=nba;this.showTeam=showTeam;this.narrow=narrow;this.widthDp=widthDp;this.compactColumns=compactColumns;}
     View build(List<String> columns,List<DetailRows.Entry> entries,String sorted,boolean descending,Consumer<String> sort,java.util.function.IntConsumer savedScroll,int scrollX){
         float scale=Math.max(1,ui.c.getResources().getConfiguration().fontScale);
-        int rowMinimum=ui.dp(42*scale),headerMinimum=ui.dp((sort!=null?40:36)*scale);
-        int headerTint=(ui.tonal&0x00FFFFFF)|0x55000000;
+        int rowMinimum=ui.dp(44*scale),headerMinimum=ui.dp((sort!=null?42:38)*scale);
+        int headerTint=ui.tonal;
+        int sortTint=Ui.alpha(ui.primary,ui.dark?28:18);
+        int zebraTint=Ui.alpha(ui.tonal,ui.dark?85:70);
         String identity=columns.isEmpty()?"":columns.get(0);
         boolean football=football(columns);
         LinearLayout names=ui.column(),numbers=ui.column(),labels=ui.row();labels.setGravity(Gravity.TOP);
         labels.setBackgroundColor(headerTint);
         View nameHeader=header(columns.isEmpty()?"Player":EnglishDisplay.text(identity),false,false,null);
         ((LinearLayout)nameHeader).setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
-        nameHeader.setPadding(ui.dp(10),ui.dp(5),ui.dp(6),ui.dp(5));
+        nameHeader.setPadding(ui.dp(12),ui.dp(6),ui.dp(6),ui.dp(6));
         nameHeader.setBackgroundColor(headerTint);
         ((TextView)((LinearLayout)nameHeader).getChildAt(0)).setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
         names.addView(nameHeader,new LinearLayout.LayoutParams(-1,headerMinimum));
@@ -47,12 +49,16 @@ final class DetailTableView {
         int rank=0;
         for(DetailRows.Entry entry:entries){
             names.addView(ui.divider());numbers.addView(ui.divider());
-            View name=identity(entry,++rank);identities.add(name);names.addView(name,new LinearLayout.LayoutParams(-1,rowMinimum));
+            boolean even=(rank%2==1);
+            View name=identity(entry,++rank);
+            if(even)name.setBackgroundColor(zebraTint);
+            identities.add(name);names.addView(name,new LinearLayout.LayoutParams(-1,rowMinimum));
             LinearLayout line=ui.row();
+            if(even)line.setBackgroundColor(zebraTint);
             for(int i=1;i<columns.size();i++){
-                String value=DetailRows.cell(entry.values(),i),shownValue=EnglishDisplay.text(value);boolean selected=columns.get(i).equals(sorted);int color=shownValue.equals("—")?ui.muted:ui.text;
+                String value=DetailRows.cell(entry.values(),i),shownValue=EnglishDisplay.text(value);boolean selected=columns.get(i).equals(sorted);int color=shownValue.equals("—")?ui.muted:selected?ui.primary:ui.text;
                 if(identity.equals("地图")&&(i==1||i==2)&&DetailRows.cell(entry.values(),3).equals("已结束"))color=ui.scoreColor(value,DetailRows.cell(entry.values(),i==1?2:1),true);
-                TextView number=ui.text(shownValue,13,color,selected);if(selected)number.setBackgroundColor(ui.tonal);
+                TextView number=ui.text(shownValue,13,color,selected);if(selected)number.setBackgroundColor(sortTint);
                 number.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);number.setPadding(ui.dp(7),ui.dp(5),ui.dp(7),ui.dp(5));number.setContentDescription(column(columns.get(i),football)+" "+shownValue);
                 line.addView(number,new LinearLayout.LayoutParams(naturalWidths[i-1],rowMinimum));
             }
@@ -101,7 +107,7 @@ final class DetailTableView {
         return shell;
     }
     private int naturalHeight(View view,int width){view.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1,width),View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));return view.getMeasuredHeight();}
-    private View header(String label,boolean selected,boolean descending,Runnable action){LinearLayout box=ui.row();box.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);box.setPadding(ui.dp(7),ui.dp(5),ui.dp(7),ui.dp(5));int bg=selected?ui.tonal:Color.TRANSPARENT;box.setBackgroundColor(bg);TextView text=ui.text(label,11,selected?ui.text:ui.muted,true);text.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);box.addView(text,new LinearLayout.LayoutParams(-2,-2));if(selected){Ui.Icon arrow=new Ui.Icon(ui.c,"chevron",ui.text);arrow.setRotation(descending?90:-90);LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(ui.dp(9),ui.dp(9));ap.setMarginStart(ui.dp(2));box.addView(arrow,ap);}if(action!=null){ui.clickable(box,bg,0);box.setFocusable(true);box.setContentDescription(label+(selected?descending?", descending":", ascending":", tap to sort"));box.setOnClickListener(v->action.run());}return box;}
+    private View header(String label,boolean selected,boolean descending,Runnable action){LinearLayout box=ui.row();box.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);box.setPadding(ui.dp(7),ui.dp(6),ui.dp(7),ui.dp(6));int bg=selected?Ui.alpha(ui.primary,ui.dark?40:28):Color.TRANSPARENT;box.setBackgroundColor(bg);TextView text=ui.text(label,11,selected?ui.primary:ui.muted,true);text.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);box.addView(text,new LinearLayout.LayoutParams(-2,-2));if(selected){Ui.Icon arrow=new Ui.Icon(ui.c,"chevron",ui.primary);arrow.setRotation(descending?90:-90);LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(ui.dp(9),ui.dp(9));ap.setMarginStart(ui.dp(2));box.addView(arrow,ap);}if(action!=null){ui.clickable(box,bg,0);box.setFocusable(true);box.setContentDescription(label+(selected?descending?", descending":", ascending":", tap to sort"));box.setOnClickListener(v->action.run());}return box;}
     private View identity(DetailRows.Entry entry,int rank){
         LinearLayout row=ui.row();row.setPadding(ui.dp(10),ui.dp(5),ui.dp(6),ui.dp(5));MatchDetail.Person p=entry.person();
         boolean compact=entry.table().columns.get(0).equals("选手");
@@ -126,7 +132,7 @@ final class DetailTableView {
     }
     private View nbaCaption(MatchDetail.Person person,String metadata){
         String label=role(person);boolean starter=person.starter()&&!person.absent();
-        TextView badge=ui.text(label,11,starter?ui.onPrimary:ui.muted,true);badge.setTag("nba-player-role");badge.setPadding(ui.dp(5),ui.dp(1),ui.dp(5),ui.dp(1));badge.setBackground(ui.shape(starter?ui.primary:ui.tonal,4));
+        TextView badge=ui.text(label,10,starter?ui.primary:ui.muted,true);badge.setTag("nba-player-role");badge.setPadding(ui.dp(6),ui.dp(1.5f),ui.dp(6),ui.dp(1.5f));badge.setBackground(ui.shape(starter?ui.primarySoft:ui.tonal,6));
         TextView meta=ui.text(metadata,11,ui.muted,false);meta.setTag("nba-player-meta");
         LinearLayout caption=new LinearLayout(ui.c){
             @Override protected void onMeasure(int width,int height){

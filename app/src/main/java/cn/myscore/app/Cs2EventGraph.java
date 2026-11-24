@@ -119,7 +119,7 @@ final class Cs2EventGraph {
             }
         };
         map.setWillNotDraw(false);
-        map.setBackground(ui.shape(ui.surface, 16));
+        map.setBackground(ui.panel());
         for (int index = 0; index < columns.size(); index++) {
             Cs2Tournament.Lane column = columns.get(index);
             String round = index < 5 ? "Round " + (index + 1) : "Outcome";
@@ -173,11 +173,15 @@ final class Cs2EventGraph {
 
     private void styleNode(Node node, boolean selected) {
         int outcome = result(node.bucket().label());
-        int color = selected ? ui.onAction : outcome == 1 ? ui.primary : outcome == -1 ? ui.error : ui.text;
+        int fill = selected ? (outcome == 1 ? ui.primary : outcome == -1 ? ui.error : ui.action)
+            : (outcome == 1 ? ui.primarySoft : outcome == -1 ? ui.errorSoft : ui.tonal);
+        int color = selected ? (outcome == 1 ? ui.onPrimary : outcome == -1 ? Color.WHITE : ui.onAction)
+            : (outcome == 1 ? ui.primary : outcome == -1 ? ui.error : ui.text);
+        int stroke = selected ? fill : (outcome == 1 ? Ui.alpha(ui.primary, 90) : outcome == -1 ? Ui.alpha(ui.error, 90) : ui.border);
         node.view().setSelected(selected);
         node.view().setTextColor(color);
         node.view().setFocusable(true);
-        ui.clickable(node.view(), selected ? ui.action : ui.tonal, 12);
+        ui.clickableDrawable(node.view(), ui.outlined(fill, stroke, 12), 12);
         android.graphics.drawable.InsetDrawable inset = new android.graphics.drawable.InsetDrawable(node.view().getBackground(), ui.dp(5), ui.dp(6), ui.dp(5), ui.dp(6));
         node.view().setBackground(inset);
         node.view().setPadding(0, 0, 0, 0);
@@ -196,14 +200,16 @@ final class Cs2EventGraph {
             bracket.addView(tree(lane), new LinearLayout.LayoutParams(-1, -2));
         };
         if (lanes.size() > 1) {
-            LinearLayout row = ui.row();
+            LinearLayout row = ui.segmentedTrack();
             HorizontalScrollView strip = new HorizontalScrollView(ui.c);
             strip.setHorizontalScrollBarEnabled(false);
             for (int index = 0; index < lanes.size(); index++) {
                 int position = index;
                 TextView button = ui.tab(lanes.get(index).label(), index == 0, () -> choose.accept(position));
                 controls.add(button);
-                row.addView(button, new LinearLayout.LayoutParams(-2, -2));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+                if (index > 0) lp.setMarginStart(ui.dp(4));
+                row.addView(button, lp);
             }
             strip.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
             into.addView(strip);
@@ -294,7 +300,7 @@ final class Cs2EventGraph {
     private void games(LinearLayout into, List<Cs2Tournament.Game> games) {
         if (games.isEmpty()) { into.addView(note("No matchups published.")); return; }
         LinearLayout panel = ui.column();
-        panel.setBackground(ui.shape(ui.surface, 16));
+        panel.setBackground(ui.panel());
         for (Cs2Tournament.Game entry : games) {
             if (panel.getChildCount() > 0) panel.addView(ui.divider());
             panel.addView(game(entry, true), new LinearLayout.LayoutParams(-1, -2));
@@ -304,7 +310,7 @@ final class Cs2EventGraph {
 
     private View game(Cs2Tournament.Game game, boolean ledger) {
         LinearLayout item = ui.column();
-        item.setPadding(ui.dp(12), ui.dp(ledger ? 9 : 7), ui.dp(12), ui.dp(ledger ? 9 : 7));
+        item.setPadding(ui.dp(12), ui.dp(ledger ? 10 : 8), ui.dp(12), ui.dp(ledger ? 10 : 8));
         boolean assigned = !unknown(game.first()) || !unknown(game.second());
         if (assigned || !game.first().from().isBlank() || !game.second().from().isBlank()) {
             item.addView(side(game.first()));
@@ -315,13 +321,14 @@ final class Cs2EventGraph {
         if (!meta.isBlank()) item.addView(note(meta));
         if (game.id().matches("(?:five:cs2:)?csgo_mc_[0-9]+")) {
             item.setMinimumHeight(ui.dp(48));
-            ui.clickable(item, ledger ? Color.TRANSPARENT : ui.surface, ledger ? 0 : 12);
+            if (ledger) ui.clickable(item, Color.TRANSPARENT, 0);
+            else ui.clickableDrawable(item, ui.panel(), Ui.CARD_RADIUS);
             item.setFocusable(true);
             item.setContentDescription(join(EnglishDisplay.text(game.time()), game.bestOf(), status,
                 assigned ? announce(game.first()) + " vs " + announce(game.second()) : "Matchup TBD"));
             item.setTag("cs2-event-match");
             item.setOnClickListener(view -> open.accept(game));
-        } else if (!ledger) item.setBackground(ui.shape(ui.surface, 12));
+        } else if (!ledger) item.setBackground(ui.panel());
         return item;
     }
 
@@ -342,7 +349,7 @@ final class Cs2EventGraph {
     private void teams(LinearLayout into, List<Cs2Tournament.Team> entries, String record) {
         LinearLayout panel = ui.column();
         panel.setPadding(ui.dp(12), ui.dp(4), ui.dp(12), ui.dp(4));
-        panel.setBackground(ui.shape(ui.surface, 16));
+        panel.setBackground(ui.panel());
         String expected = result(record) == 1 ? "晋级" : "淘汰";
         for (Cs2Tournament.Team team : entries) if (record.equals(team.record()) && expected.equals(team.status())) {
             LinearLayout row = ui.row();

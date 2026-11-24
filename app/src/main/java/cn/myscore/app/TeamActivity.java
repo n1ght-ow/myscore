@@ -38,8 +38,9 @@ public final class TeamActivity extends Activity {
     private ScoreList list;
     private TeamScheduleAdapter adapter;
     private TextView status,error;
-    private HorizontalScrollView filterScroll;
-    private LinearLayout filters;
+    private LinearLayout filterTrack;
+    private LinearLayout formStrip;
+    private LinearLayout padFormStrip;
     private String filter="upcoming";
     private CalendarSync calendarSync;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener calendarListener=(preferences,key)->{
@@ -109,6 +110,7 @@ public final class TeamActivity extends Activity {
 
     private void build() {
         if(pad){buildPad();return;}
+        int accent=ui.sportAccent(team.league,"");
         LinearLayout appbar=ui.row();
         appbar.setPadding(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(2));
         appbar.addView(iconButton("back","Back",this::finish));
@@ -117,36 +119,60 @@ public final class TeamActivity extends Activity {
         appbar.addView(iconButton("refresh","Refresh schedule",()->load(true)));
         root.addView(appbar);
 
-        LinearLayout card=ui.row();card.setBackgroundColor(ui.bg);
-        card.setPadding(ui.dp(4),ui.dp(6),ui.dp(4),ui.dp(6));
+        // Sport-tinted Team Hero Banner
+        LinearLayout hero=ui.column();
+        hero.setBackground(ui.heroPanel(accent));
+        hero.setPadding(ui.dp(16),ui.dp(14),ui.dp(16),ui.dp(14));
+
+        LinearLayout topRow=ui.row();
         FrameLayout crest=new FrameLayout(this);
-        headerCrest=Logos.crest(ui,48,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
-        crest.addView(headerCrest.box,new FrameLayout.LayoutParams(ui.dp(48),ui.dp(48),Gravity.CENTER));
-        card.addView(crest,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
+        crest.setBackground(ui.outlined(ui.tonal,ui.border,16));
+        headerCrest=Logos.crest(ui,40,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
+        crest.addView(headerCrest.box,new FrameLayout.LayoutParams(ui.dp(40),ui.dp(40),Gravity.CENTER));
+        topRow.addView(crest,new LinearLayout.LayoutParams(ui.dp(54),ui.dp(54)));
+
         LinearLayout names=ui.column();
-        TextView name=ui.text(team.name,20,ui.text,true);name.setLetterSpacing(-0.02f);names.addView(name);
-        ui.gap(names,4);
-        names.addView(ui.text(competitionLabel(),12,ui.muted,false));
+        names.addView(ui.eyebrow(competitionLabel(),accent));
+        ui.gap(names,2);
+        TextView name=ui.display(team.name,20,ui.text);
+        name.setMaxLines(2);
+        names.addView(name);
         LinearLayout.LayoutParams namesParams=new LinearLayout.LayoutParams(0,-2,1);
-        namesParams.setMarginStart(ui.dp(14));card.addView(names,namesParams);
+        namesParams.setMarginStart(ui.dp(14));
+        topRow.addView(names,namesParams);
+
+        LinearLayout standingsPill=buildStandingsPill(accent);
+        if(standingsPill!=null){
+            LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);
+            sp.setMarginStart(ui.dp(8));
+            topRow.addView(standingsPill,sp);
+        }
+        hero.addView(topRow);
+
+        // Real W/D/L Form & Record Snapshot strip (populated once schedule loads)
+        formStrip=ui.column();
+        formStrip.setVisibility(View.GONE);
+        hero.addView(formStrip,new LinearLayout.LayoutParams(-1,-2));
+
         LinearLayout.LayoutParams cardParams=new LinearLayout.LayoutParams(-1,-2);
-        cardParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(4));root.addView(card,cardParams);
+        cardParams.setMargins(ui.dp(16),ui.dp(6),ui.dp(16),ui.dp(8));
+        root.addView(hero,cardParams);
 
         status=ui.text("",11,ui.muted,false);status.setPadding(ui.dp(4),ui.dp(12),ui.dp(4),ui.dp(4));status.setVisibility(View.GONE);
         error=ui.text("",13,ui.error,false);error.setLineSpacing(ui.dp(4),1);
-        error.setBackground(ui.shape(ui.tonal,Ui.CONTROL_RADIUS));error.setPadding(ui.dp(14),ui.dp(12),ui.dp(14),ui.dp(12));
-        LinearLayout.LayoutParams errorParams=new LinearLayout.LayoutParams(-1,-2);errorParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(10));
+        error.setBackground(ui.outlined(ui.errorSoft,Ui.alpha(ui.error,80),Ui.CONTROL_RADIUS));error.setPadding(ui.dp(14),ui.dp(12),ui.dp(14),ui.dp(12));
+        LinearLayout.LayoutParams errorParams=new LinearLayout.LayoutParams(-1,-2);errorParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(8));
         error.setVisibility(View.GONE);root.addView(error,errorParams);
 
-        filterScroll=new HorizontalScrollView(this);filterScroll.setHorizontalScrollBarEnabled(false);
-        filters=ui.row();filters.setPadding(ui.dp(6),0,ui.dp(6),0);
-        filterScroll.addView(filters);filterScroll.setVisibility(View.GONE);
-        root.addView(filterScroll,new LinearLayout.LayoutParams(-1,-2));
+        filterTrack=ui.segmentedTrack();
+        filterTrack.setVisibility(View.GONE);
+        LinearLayout.LayoutParams fp=new LinearLayout.LayoutParams(-1,-2);
+        fp.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(8));
+        root.addView(filterTrack,fp);
 
-        root.addView(ui.divider());
         list=new ScoreList(this);
         list.setDivider(null);list.setDividerHeight(0);list.setClipToPadding(false);list.setVerticalScrollBarEnabled(false);
-        list.setPadding(ui.dp(16),ui.dp(6),ui.dp(16),ui.dp(24));
+        list.setPadding(ui.dp(16),ui.dp(4),ui.dp(16),ui.dp(24));
         list.setSelector(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
         list.setCacheColorHint(android.graphics.Color.TRANSPARENT);
         adapter=new TeamScheduleAdapter(ui,new TeamScheduleAdapter.Host() {
@@ -160,26 +186,107 @@ public final class TeamActivity extends Activity {
         root.addView(list,new LinearLayout.LayoutParams(-1,0,1));
     }
 
+    private LinearLayout buildStandingsPill(int accent) {
+        String linkLabel=StandingsActivity.competitionLinkLabel(team.league);
+        if(linkLabel.isBlank())return null;
+        String shortLabel=("fa".equals(team.league)||"efl".equals(team.league))?"Rounds":"cs2".equals(team.league)?"Rankings":"Standings";
+        LinearLayout pill=ui.row();
+        pill.setGravity(Gravity.CENTER);
+        pill.setMinimumHeight(ui.dp(34));
+        pill.setPadding(ui.dp(11),ui.dp(6),ui.dp(9),ui.dp(6));
+        Ui.Icon ic=new Ui.Icon(this,"trophy",accent);
+        LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(ui.dp(14),ui.dp(14));
+        ip.setMarginEnd(ui.dp(5));
+        pill.addView(ic,ip);
+        pill.addView(ui.text(shortLabel,12,ui.text,true));
+        Ui.Icon chev=new Ui.Icon(this,"chevron",ui.muted);
+        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(ui.dp(12),ui.dp(12));
+        cp.setMarginStart(ui.dp(3));
+        pill.addView(chev,cp);
+        ui.clickableDrawable(pill,ui.outlined(ui.tonal,ui.border,Ui.PILL_RADIUS),Ui.PILL_RADIUS);
+        pill.setFocusable(true);
+        pill.setContentDescription("Open "+competitionLabel()+" standings");
+        pill.setOnClickListener(v->startActivity(StandingsActivity.forCompetition(this,team.league)));
+        return pill;
+    }
+
+    private void renderFormStrip(LinearLayout host) {
+        if(host==null)return;
+        host.removeAllViews();
+        if(result==null||result.matches.isEmpty()){host.setVisibility(View.GONE);return;}
+        ScoreFeedOrganizer.TeamSnapshot snap=ScoreFeedOrganizer.summarizeTeam(team,result.matches);
+        if(snap.recentForm().isEmpty()&&snap.upcoming()==0&&snap.live()==0){host.setVisibility(View.GONE);return;}
+        host.setVisibility(View.VISIBLE);
+        ui.gap(host,12);
+        host.addView(ui.divider());
+        ui.gap(host,10);
+
+        LinearLayout bar=ui.row();
+        LinearLayout left=ui.column();
+        boolean hasDraws=snap.draws()>0||"epl".equals(team.league)||"ucl".equals(team.league)||"fa".equals(team.league)||"efl".equals(team.league)||NationalTeams.LEAGUE.equals(team.league);
+        String record=hasDraws?(snap.wins()+"W · "+snap.draws()+"D · "+snap.losses()+"L"):(snap.wins()+"W · "+snap.losses()+"L");
+        left.addView(ui.eyebrow("Season Record",ui.dim));
+        ui.gap(left,2);
+        left.addView(ui.text(snap.completed()>0?record:(snap.upcoming()+" upcoming"),13,ui.text,true));
+        bar.addView(left,new LinearLayout.LayoutParams(0,-2,1));
+
+        if(!snap.recentForm().isEmpty()){
+            LinearLayout right=ui.column();
+            right.setGravity(Gravity.END);
+            TextView lbl=ui.eyebrow("Recent Form",ui.dim);
+            lbl.setGravity(Gravity.END);
+            right.addView(lbl);
+            ui.gap(right,4);
+            LinearLayout pills=ui.row();
+            for(int i=0;i<snap.recentForm().size();i++){
+                ScoreFeedOrganizer.FormEntry entry=snap.recentForm().get(i);
+                TextView pill=ui.formPill(entry.result());
+                LinearLayout.LayoutParams pp=(LinearLayout.LayoutParams)pill.getLayoutParams();
+                if(i>0)pp.setMarginStart(ui.dp(4));
+                pill.setTooltipText(entry.result()+" vs "+entry.opponent()+" ("+entry.score()+")");
+                pill.setContentDescription(entry.result()+" vs "+entry.opponent()+" "+entry.score());
+                pill.setOnClickListener(v->startActivity(new Intent(TeamActivity.this,DetailActivity.class).putExtra("match",entry.match().json().toString())));
+                pills.addView(pill,pp);
+            }
+            right.addView(pills);
+            bar.addView(right,new LinearLayout.LayoutParams(-2,-2));
+        }
+        host.addView(bar);
+    }
+
     private void buildPad(){
+        int accent=ui.sportAccent(team.league,"");
         LinearLayout bar=ui.row();bar.setPadding(ui.dp(12),ui.dp(10),ui.dp(16),ui.dp(10));
         bar.addView(iconButton("back","Back to matches",this::finish));
         TextView title=ui.text(pageName(),17,ui.text,true);LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,-2,1);tp.setMarginStart(ui.dp(6));bar.addView(title,tp);
+        LinearLayout standingsPill=buildStandingsPill(accent);
+        if(standingsPill!=null){
+            LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);
+            sp.setMarginEnd(ui.dp(8));
+            bar.addView(standingsPill,sp);
+        }
         bar.addView(iconButton("refresh","Refresh schedule",()->load(true)));
         root.addView(bar);root.addView(ui.divider());
 
-        LinearLayout hero=ui.row();hero.setPadding(ui.dp(28),ui.dp(14),ui.dp(28),ui.dp(14));
-        headerCrest=Logos.crest(ui,60,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
-        hero.addView(headerCrest.box,new LinearLayout.LayoutParams(ui.dp(60),ui.dp(60)));
+        LinearLayout heroWrap=ui.column();
+        heroWrap.setBackground(ui.heroPanel(accent));
+        heroWrap.setPadding(ui.dp(24),ui.dp(16),ui.dp(24),ui.dp(16));
+        LinearLayout hero=ui.row();
+        FrameLayout crestBox=new FrameLayout(this);
+        crestBox.setBackground(ui.outlined(ui.tonal,ui.border,18));
+        headerCrest=Logos.crest(ui,48,false);headerLogo=team.logo;Logos.bind(headerCrest,headerLogo,team.name);
+        crestBox.addView(headerCrest.box,new FrameLayout.LayoutParams(ui.dp(48),ui.dp(48),Gravity.CENTER));
+        hero.addView(crestBox,new LinearLayout.LayoutParams(ui.dp(64),ui.dp(64)));
         LinearLayout names=ui.column();LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(0,-2,1);np.setMarginStart(ui.dp(18));
-        TextView name=ui.text(team.name,26,ui.text,true);name.setLetterSpacing(-0.03f);names.addView(name);
-        ui.gap(names,4);
-        names.addView(ui.text(competitionLabel(),12,ui.muted,false));
+        names.addView(ui.eyebrow(competitionLabel(),accent));
+        ui.gap(names,2);
+        TextView name=ui.display(team.name,26,ui.text);names.addView(name);
         ui.gap(names,6);
         padStatus=ui.text("Loading schedule…",11,ui.muted,false);names.addView(padStatus);
         padError=ui.text("",12,ui.error,false);padError.setLineSpacing(ui.dp(3),1);padError.setVisibility(View.GONE);ui.gap(names,6);names.addView(padError);
         hero.addView(names,np);
         LinearLayout stats=ui.row();
-        stats.setBackground(ui.shape(ui.tonal,Ui.CARD_RADIUS));
+        stats.setBackground(ui.outlined(ui.tonal,ui.border,Ui.CARD_RADIUS));
         stats.setPadding(ui.dp(6),ui.dp(8),ui.dp(6),ui.dp(8));
         padStatUpcoming=padStatCell(stats,"Upcoming");
         View rule1=new View(this);rule1.setBackgroundColor(ui.line);stats.addView(rule1,new LinearLayout.LayoutParams(ui.dp(1),ui.dp(28)));
@@ -188,7 +295,13 @@ public final class TeamActivity extends Activity {
         padStatTotal=padStatCell(stats,"Total");
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.setMarginStart(ui.dp(20));
         hero.addView(stats,sp);
-        root.addView(hero);root.addView(ui.divider());
+        heroWrap.addView(hero);
+        padFormStrip=ui.column();
+        padFormStrip.setVisibility(View.GONE);
+        heroWrap.addView(padFormStrip);
+        LinearLayout.LayoutParams hwp=new LinearLayout.LayoutParams(-1,-2);
+        hwp.setMargins(ui.dp(20),ui.dp(14),ui.dp(20),ui.dp(10));
+        root.addView(heroWrap,hwp);
 
         LinearLayout columns=ui.row();
         LinearLayout left=padColumn("Upcoming","Live and starting soon",true);
@@ -259,6 +372,7 @@ public final class TeamActivity extends Activity {
             padError.setVisibility(failed?View.VISIBLE:View.GONE);
             if(failed)padError.setText((result.fetched>0?"Couldn't refresh · ":"Couldn't load schedule · ")+result.error+(result.fetched>0?"\nShowing the last saved schedule.":""));
         }
+        renderFormStrip(padFormStrip);
         List<TeamScheduleRow> upcoming=padRows(false),finished=padRows(true);
         if(padUpcomingAdapter!=null)padUpcomingAdapter.updateRows(upcoming);
         if(padFinishedAdapter!=null)padFinishedAdapter.updateRows(finished);
@@ -398,6 +512,7 @@ public final class TeamActivity extends Activity {
                 if(!logo.isBlank()){headerLogo=logo;Logos.bind(headerCrest,logo,team.name);break;}
             }
         }
+        renderFormStrip(formStrip);
         updateStatus();
         updateFilters();
         List<TeamScheduleRow> rows=buildRows();
@@ -406,7 +521,7 @@ public final class TeamActivity extends Activity {
     }
 
     private String pageName() {
-        return "Schedule";
+        return "Team Hub";
     }
 
     private void refreshSubscriptionViews() {
@@ -468,32 +583,35 @@ public final class TeamActivity extends Activity {
         rows.add(TeamScheduleRow.note("Schedule notes",footnote()));
         return rows;
     }
-    /** The two-chip switch appears only when both upcoming fixtures and results exist. */
+    /** Segmented switcher appears when both upcoming fixtures and results exist. */
     private void updateFilters() {
-        if(filters==null)return;
-        filters.removeAllViews();
-        if(result==null){filterScroll.setVisibility(View.GONE);return;}
+        if(filterTrack==null)return;
+        filterTrack.removeAllViews();
+        if(result==null){filterTrack.setVisibility(View.GONE);return;}
         int upcoming=0,finished=0;
         for(Match m:result.matches) {
             if(m.finalised())finished++;
             else if(m.live()||m.scheduled()||m.state.equals("delayed"))upcoming++;
         }
         if(upcoming==0||finished==0) {
-            filterScroll.setVisibility(View.GONE);
+            filterTrack.setVisibility(View.GONE);
             if(!filter.equals("all"))filter="all";
             return;
         }
-        filterScroll.setVisibility(View.VISIBLE);
-        option("All","all",result.matches.size());
-        option("Upcoming","upcoming",upcoming);
-        option("Results","finished",finished);
+        filterTrack.setVisibility(View.VISIBLE);
+        option("Upcoming","upcoming",upcoming,false);
+        option("Results","finished",finished,true);
+        option("All","all",result.matches.size(),true);
     }
-    private void option(String label,String value,int count) {
+    private void option(String label,String value,int count,boolean gap) {
         boolean selected=filter.equals(value);
         TextView chip=ui.tab(label+" "+count,selected,()->{filter=value;list.setSelection(0);render();});
+        chip.setMinWidth(0);
+        chip.setPadding(ui.dp(6),ui.dp(8),ui.dp(6),ui.dp(8));
         chip.setContentDescription(label+" "+count+" "+(count==1?"fixture":"fixtures")+(selected?", selected":", filter schedule"));
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,-2);
-        params.setMarginEnd(ui.dp(8));filters.addView(chip,params);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-2,1);
+        if(gap)params.setMarginStart(ui.dp(4));
+        filterTrack.addView(chip,params);
     }
     private void append(List<TeamScheduleRow> rows,String title,List<Match> matches) {
         if(matches.isEmpty())return;

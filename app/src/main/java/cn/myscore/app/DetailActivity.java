@@ -67,7 +67,6 @@ extends Activity {
     private WatchLauncher watchLauncher;
     private Ui.WatchRow headerWatch;
     private View headerWatchGap;
-    private View headerWatchRule;
     private LinearLayout root;
     private LinearLayout body;
     private LinearLayout content;
@@ -75,6 +74,8 @@ extends Activity {
     private TextView status;
     private TextView headerTitle;
     private TextView headerState;
+    private LinearLayout headerLivePill;
+    private TextView headerLiveText;
     private TextView headerStart;
     private TextView headerHome;
     private TextView headerAway;
@@ -85,8 +86,10 @@ extends Activity {
     private Logos.Crest headerAwayCrest;
     private FrameLayout headerHomeSlot;
     private FrameLayout headerAwaySlot;
+    private LinearLayout headerRemindBtn;
+    private Ui.Icon headerRemindIcon;
+    private TextView headerRemindLabel;
     private TextView[] tabLabels;
-    private View[] tabRules;
     private String[] tabKeys;
     private String[] tabNames;
     private String tab = "overview";
@@ -99,6 +102,23 @@ extends Activity {
     private boolean pendingForce;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService calendarWorker = Executors.newSingleThreadExecutor();
+    private CalendarSync calendarSync;
+    private boolean calendarBusy;
+    private boolean pendingSubscribe;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener calendarListener = (prefs, key) -> {
+        if (key == null || key.startsWith("match:")) {
+            this.handler.post(() -> {
+                if (this.active && !this.isDestroyed()) {
+                    this.updateRemindControl();
+                    if (this.pad) {
+                        this.renderedPadLeft = "";
+                        this.updatePadChrome();
+                    }
+                }
+            });
+        }
+    };
     private final Runnable tick = () -> this.load(false);
     private String rendered = "";
     private long lastScroll;
@@ -165,6 +185,8 @@ extends Activity {
             this.tab = "overview";
         }
         this.repository = new DetailRepository((Context)this);
+        this.calendarSync = new CalendarSync((Context)this);
+        this.getSharedPreferences("calendar-links", 0).registerOnSharedPreferenceChangeListener(this.calendarListener);
         this.watches = WatchRepository.get(this);
         this.watchLauncher = new WatchLauncher(this, this.watches);
         this.getWindow().setStatusBarColor(this.ui.bg);
@@ -234,10 +256,169 @@ extends Activity {
 
     public void onDestroy() {
         this.active = false;
+        this.getSharedPreferences("calendar-links", 0).unregisterOnSharedPreferenceChangeListener(this.calendarListener);
         Sheet.dismissAll(this);
         this.handler.removeCallbacksAndMessages(null);
         this.worker.shutdownNow();
+        this.calendarWorker.shutdownNow();
         super.onDestroy();
+    }
+
+    private boolean canRemindMatch() {
+        if (this.match == null || this.calendarSync == null) return false;
+        if (this.calendarSync.isSubscribed(this.match.id)) return true;
+        return this.match.scheduled() && this.match.timeConfirmed && this.match.start > System.currentTimeMillis();
+    }
+
+    private void toggleCalendar() {
+        if (this.calendarBusy || this.match == null || this.calendarSync == null) return;
+        boolean remove = this.calendarSync.isSubscribed(this.match.id);
+        if (!remove && !(this.match.scheduled() && this.match.timeConfirmed && this.match.start > System.currentTimeMillis())) {
+            Sheet.message(this, "Can't set reminder", "This match has no confirmed kickoff time or has already started.");
+            return;
+        }
+        if (!CalendarSync.permitted(this)) {
+            this.pendingSubscribe = true;
+            this.requestPermissions(new String[]{android.Manifest.permission.READ_CALENDAR, android.Manifest.permission.WRITE_CALENDAR}, 44);
+            return;
+        }
+        if (remove) {
+            Sheet.confirm(this, "Remove reminder", "Remove “" + this.match.displayTitle() + "” from your calendar?", "Remove", () -> this.writeCalendar(true));
+        } else {
+            this.writeCalendar(false);
+        }
+    }
+
+    private void writeCalendar(boolean remove) {
+        if (this.calendarBusy || this.match == null) return;
+        this.calendarBusy = true;
+        this.updateRemindControl();
+        Match target = this.match;
+        this.calendarWorker.submit(() -> {
+            CalendarSync.Result outcome;
+            try {
+                if (remove) {
+                    outcome = this.calendarSync.unsubscribe(target.id);
+                } else {
+                    if (!this.calendarSync.hasCalendar(this.calendarSync.calendarId())) {
+                        CalendarSync.CalendarChoice best = this.calendarSync.bestCalendar();
+                        if (best == null) throw new IllegalStateException("Enable a local or system calendar first.");
+                        this.calendarSync.chooseCalendar(best.id, best.name);
+                    }
+                    outcome = this.calendarSync.subscribe(target, System.currentTimeMillis());
+                }
+            } catch (RuntimeException e) {
+                outcome = new CalendarSync.Result();
+                outcome.failed = 1;
+                outcome.error = e.getMessage() == null ? "Calendar write failed" : e.getMessage();
+            }
+            CalendarSync.Result completed = outcome;
+            this.handler.post(() -> {
+                this.calendarBusy = false;
+                if (this.isDestroyed()) return;
+                this.updateRemindControl();
+                if (this.pad) {
+                    this.renderedPadLeft = "";
+                    this.updatePadChrome();
+                }
+                CalendarJob.schedule(this);
+                if (completed.failed > 0) {
+                    Sheet.message(this, remove ? "Couldn't remove reminder" : "Couldn't save reminder", completed.error);
+                } else {
+                    android.widget.Toast.makeText(this, remove ? "Removed from calendar" : "Saved · 5-min reminder set", android.widget.Toast.LENGTH_SHORT).show();
+                    if (!remove) ResultNotify.requestIfNeeded(this);
+                }
+            });
+        });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(code, permissions, results);
+        if (code != 44) return;
+        boolean queued = this.pendingSubscribe;
+        this.pendingSubscribe = false;
+        if (CalendarSync.permitted(this)) {
+            CalendarUpdates.start(this);
+            CalendarCloudSync.opened(this);
+            if (queued) this.toggleCalendar();
+        } else {
+            Sheet.message(this, "Calendar permission required", "Allow calendar access to save match reminders.");
+        }
+    }
+
+    private LinearLayout buildRemindPill() {
+        LinearLayout pill = this.ui.row();
+        pill.setGravity(Gravity.CENTER);
+        pill.setMinimumHeight(this.ui.dp(38));
+        pill.setPadding(this.ui.dp(13), this.ui.dp(7), this.ui.dp(14), this.ui.dp(7));
+        Ui.Icon ic = new Ui.Icon(this, "bell", this.ui.text);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(this.ui.dp(15), this.ui.dp(15));
+        ip.setMarginEnd(this.ui.dp(6));
+        pill.addView(ic, ip);
+        TextView lbl = this.ui.text("Remind", 12, this.ui.text, true);
+        pill.addView(lbl);
+        pill.setFocusable(true);
+        pill.setOnClickListener(v -> this.toggleCalendar());
+        this.styleRemindPill(pill, ic, lbl);
+        return pill;
+    }
+
+    private void styleRemindPill(LinearLayout pill, Ui.Icon ic, TextView lbl) {
+        if (pill == null) return;
+        boolean eligible = this.canRemindMatch();
+        pill.setVisibility(eligible ? View.VISIBLE : View.GONE);
+        if (!eligible) return;
+        boolean saved = this.calendarSync != null && this.calendarSync.isSubscribed(this.match.id);
+        ic.set(saved ? "calendar-check" : "bell", saved ? this.ui.primary : this.ui.text);
+        lbl.setText(saved ? "Saved" : "Remind");
+        lbl.setTextColor(saved ? this.ui.primary : this.ui.text);
+        this.ui.clickableDrawable(pill, saved
+            ? this.ui.outlined(this.ui.primarySoft, Ui.alpha(this.ui.primary, 100), Ui.PILL_RADIUS)
+            : this.ui.outlined(this.ui.tonal, this.ui.border, Ui.PILL_RADIUS), Ui.PILL_RADIUS);
+        pill.setEnabled(!this.calendarBusy);
+        pill.setAlpha(this.calendarBusy ? 0.5f : 1f);
+        pill.setContentDescription(saved ? "Remove calendar reminder" : "Set calendar reminder");
+    }
+
+    private void updateRemindControl() {
+        this.styleRemindPill(this.headerRemindBtn, this.headerRemindIcon, this.headerRemindLabel);
+    }
+
+    private LinearLayout buildCompetitionPill() {
+        boolean tournament = "cs2".equals(this.match.league) && this.match.eventId.matches("csgo_tt_[0-9]+");
+        if (tournament && this.match.eventId.equals(this.getIntent().getStringExtra(EXTRA_PARENT_TOURNAMENT))) return null;
+        String label = tournament ? "Bracket" : StandingsActivity.competitionLinkLabel(this.match.league);
+        if (label.isBlank()) return null;
+        String shortLabel = tournament ? "Tournament" : ("fa".equals(this.match.league) || "efl".equals(this.match.league)) ? "Cup Rounds" : "cs2".equals(this.match.league) ? "Rankings" : "Standings";
+        int accent = this.ui.sportAccent(this.match.league, this.match.group);
+        LinearLayout pill = this.ui.row();
+        pill.setGravity(Gravity.CENTER);
+        pill.setMinimumHeight(this.ui.dp(38));
+        pill.setPadding(this.ui.dp(13), this.ui.dp(7), this.ui.dp(12), this.ui.dp(7));
+        Ui.Icon ic = new Ui.Icon(this, tournament ? "bracket" : "trophy", accent);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(this.ui.dp(15), this.ui.dp(15));
+        ip.setMarginEnd(this.ui.dp(6));
+        pill.addView(ic, ip);
+        pill.addView(this.ui.text(shortLabel, 12, this.ui.text, true));
+        Ui.Icon chev = new Ui.Icon(this, "chevron", this.ui.muted);
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(this.ui.dp(13), this.ui.dp(13));
+        cp.setMarginStart(this.ui.dp(4));
+        pill.addView(chev, cp);
+        this.ui.clickableDrawable(pill, this.ui.outlined(this.ui.tonal, this.ui.border, Ui.PILL_RADIUS), Ui.PILL_RADIUS);
+        pill.setTag(tournament ? "cs2-tournament-overview" : "match-competition");
+        pill.setFocusable(true);
+        pill.setOnClickListener(v -> {
+            if (tournament) {
+                this.startActivity(new Intent(this, Cs2EventActivity.class)
+                    .putExtra("event", this.match.eventId)
+                    .putExtra("name", this.match.event)
+                    .putExtra("day", this.match.day() == null ? "" : this.match.day().toString()));
+            } else {
+                this.startActivity(StandingsActivity.forCompetition(this, this.match.league));
+            }
+        });
+        return pill;
     }
 
     protected void onSaveInstanceState(Bundle state) {
@@ -457,7 +638,7 @@ extends Activity {
         LinearLayout reading = this.ui.column();
         work.addView((View)reading, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -1, 1.0f));
         this.padTabs = this.ui.row();
-        this.padTabs.setPadding(this.ui.dp(24.0f), 0, this.ui.dp(24.0f), 0);
+        this.padTabs.setPadding(this.ui.dp(24.0f), this.ui.dp(10.0f), this.ui.dp(24.0f), this.ui.dp(10.0f));
         reading.addView((View)this.padTabs);
         reading.addView(this.ui.divider());
         this.scroll = new ScrollView((Context)this);
@@ -501,64 +682,22 @@ extends Activity {
             this.tab = "lineup";
         }
         if (cs) {
-            String[] stringArray3 = new String[3];
-            stringArray3[0] = "overview";
-            stringArray3[1] = "lineup";
-            stringArray2 = stringArray3;
-            stringArray3[2] = "events";
+            stringArray2 = new String[]{"overview", "lineup", "events"};
+            stringArray = new String[]{"Overview", "Players", "Maps"};
         } else if (f1) {
-            String[] stringArray4 = new String[3];
-            stringArray4[0] = "overview";
-            stringArray4[1] = "lineup";
-            stringArray2 = stringArray4;
-            stringArray4[2] = "stats";
+            stringArray2 = new String[]{"overview", "lineup", "stats"};
+            stringArray = new String[]{"Overview", "Drivers", "Results"};
         } else {
-            String[] stringArray5 = new String[4];
-            stringArray5[0] = "overview";
-            stringArray5[1] = "lineup";
-            stringArray5[2] = "stats";
-            stringArray2 = stringArray5;
-            stringArray5[3] = "events";
+            stringArray2 = new String[]{"overview", "lineup", "stats", "events"};
+            stringArray = new String[]{"Overview", this.lineupName(), "Stats", "Events"};
         }
         this.tabKeys = stringArray2;
-        if (cs) {
-            String[] stringArray6 = new String[3];
-            stringArray6[0] = "Overview";
-            stringArray6[1] = "Players";
-            stringArray = stringArray6;
-            stringArray6[2] = "Maps";
-        } else if (f1) {
-            String[] stringArray7 = new String[3];
-            stringArray7[0] = "Overview";
-            stringArray7[1] = "Drivers";
-            stringArray = stringArray7;
-            stringArray7[2] = "Results";
-        } else {
-            String[] stringArray9 = new String[4];
-            stringArray9[0] = "Overview";
-            stringArray9[1] = this.lineupName();
-            stringArray9[2] = "Stats";
-            stringArray = stringArray9;
-            stringArray9[3] = "Events";
-        }
         this.tabNames = stringArray;
         this.tabLabels = new TextView[this.tabKeys.length];
-        this.tabRules = new View[this.tabKeys.length];
+        LinearLayout track = this.ui.segmentedTrack();
         for (int i = 0; i < this.tabKeys.length; ++i) {
             String key = this.tabKeys[i];
-            LinearLayout item = this.ui.column();
-            item.setGravity(17);
-            this.ui.clickable((View)item, 0, 0);
-            item.setFocusable(true);
-            TextView label = this.ui.text(this.tabNames[i], 14, this.tab.equals(key) ? this.ui.text : this.ui.muted, this.tab.equals(key));
-            label.setGravity(17);
-            label.setMinHeight(this.ui.dp(48.0f));
-            label.setPadding(this.ui.dp(18.0f), 0, this.ui.dp(18.0f), 0);
-            item.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
-            View underline = new View((Context)this);
-            underline.setBackground((Drawable)this.ui.shape(this.tab.equals(key) ? this.ui.text : this.ui.bg, 2));
-            item.addView(underline, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(28.0f), this.ui.dp(2.0f)));
-            item.setOnClickListener(v -> {
+            TextView label = this.ui.tab(this.tabNames[i], this.tab.equals(key), () -> {
                 this.tab = key;
                 this.categoryFilter = "";
                 this.sortColumn = "";
@@ -566,10 +705,12 @@ extends Activity {
                 this.playerLimit = 16;
                 this.render(false);
             });
-            this.padTabs.addView((View)item, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            if (i > 0) lp.setMarginStart(this.ui.dp(4));
+            track.addView(label, lp);
             this.tabLabels[i] = label;
-            this.tabRules[i] = underline;
         }
+        this.padTabs.addView(track, new LinearLayout.LayoutParams(-2, -2));
         this.updateTabs();
     }
 
@@ -608,7 +749,6 @@ extends Activity {
         int y = this.padLeftScroll == null ? 0 : this.padLeftScroll.getScrollY();
         this.padLeftHost.removeAllViews();
         this.padLeftHost.addView((View)this.padScoreCard());
-        this.competitionLink(this.padLeftHost);
         if (this.detail != null) {
             Map<String, List<String>> facts = this.matchFacts();
             if (!facts.isEmpty()) {
@@ -637,27 +777,45 @@ extends Activity {
     }
 
     private LinearLayout padScoreCard() {
+        int accent = this.ui.sportAccent(this.match.league, this.match.group);
         LinearLayout card = this.ui.column();
-        card.setBackground((Drawable)this.ui.panel());
-        card.setPadding(this.ui.dp(18.0f), this.ui.dp(16.0f), this.ui.dp(18.0f), this.ui.dp(14.0f));
-        if (this.match.group.equals("F1")) {
-            TextView title = this.ui.text(displayText(this.match.displayTitle()), 22, this.ui.text, true);
-            title.setLetterSpacing(-0.02f);
-            card.addView((View)title);
-            this.ui.gap(card, 8);
-            card.addView((View)this.ui.text(displayText(this.match.status), 12, this.match.live() ? this.ui.primary : this.ui.muted, false));
-            return card;
+        card.setBackground(this.ui.heroPanel(accent));
+        card.setPadding(this.ui.dp(18.0f), this.ui.dp(16.0f), this.ui.dp(18.0f), this.ui.dp(16.0f));
+        LinearLayout top = this.ui.row();
+        top.addView(this.ui.eyebrow(displayText(MatchLabel.of(this.match)), accent), new LinearLayout.LayoutParams(0, -2, 1f));
+        if (this.match.live()) {
+            top.addView(this.ui.liveBadge(displayText(this.match.status.isBlank() ? "LIVE" : this.match.status)));
+        } else {
+            top.addView(this.ui.badge(displayText(this.match.status.isBlank() ? Rules.stateLabel(this.match.state) : this.match.status), this.ui.tonal, this.ui.muted));
         }
-        card.addView((View)this.padTeamLine(true));
-        this.ui.gap(card, 12);
-        card.addView((View)this.padTeamLine(false));
+        card.addView(top);
         this.ui.gap(card, 14);
-        TextView status = this.ui.text(displayText(this.match.live() && !this.match.status.isBlank() ? this.match.status : Rules.stateLabel(this.match.state)), 12, this.match.live() ? this.ui.primary : this.ui.muted, false);
-        card.addView((View)status);
+        if (this.match.group.equals("F1")) {
+            TextView title = this.ui.display(displayText(this.match.displayTitle()), 22, this.ui.text);
+            card.addView((View)title);
+        } else {
+            card.addView((View)this.padTeamLine(true));
+            this.ui.gap(card, 12);
+            card.addView((View)this.padTeamLine(false));
+        }
+        LinearLayout quick = this.ui.row();
+        LinearLayout remind = this.buildRemindPill();
+        LinearLayout comp = this.buildCompetitionPill();
+        if (remind.getVisibility() == View.VISIBLE) {
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f);
+            if (comp != null) rp.setMarginEnd(this.ui.dp(8));
+            quick.addView(remind, rp);
+        }
+        if (comp != null) {
+            quick.addView(comp, new LinearLayout.LayoutParams(remind.getVisibility() == View.VISIBLE ? 0 : -1, -2, remind.getVisibility() == View.VISIBLE ? 1f : 0f));
+        }
+        if (quick.getChildCount() > 0) {
+            this.ui.gap(card, 14);
+            card.addView(quick);
+        }
         WatchLinks.Link watch = this.watches.link(this.match);
         if (watch != null) {
             this.ui.gap(card, 10);
-            card.addView(this.ui.divider());
             Ui.WatchRow row = this.ui.watchRow();
             row.bind(watch, this.match.live(), this::openWatch);
             card.addView((View)row);
@@ -671,19 +829,20 @@ extends Activity {
         String logo = home ? this.match.homeLogo : this.match.awayLogo;
         String id = home ? this.match.homeId : this.match.awayId;
         FrameLayout crest = new FrameLayout((Context)this);
-        crest.addView((View)Logos.view(this.ui, logo, name, 44), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(44.0f), this.ui.dp(44.0f), Gravity.START | Gravity.CENTER_VERTICAL));
+        crest.setBackground(this.ui.outlined(this.ui.tonal, this.ui.border, 14));
+        crest.addView((View)Logos.view(this.ui, logo, name, 36), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(36.0f), this.ui.dp(36.0f), Gravity.CENTER));
         boolean available = id != null && !id.isBlank();
         crest.setFocusable(available);
         crest.setClickable(available);
         crest.setContentDescription(available ? displayText("View " + name + " schedule") : null);
         crest.setOnClickListener(available ? v -> this.openTeam(home) : null);
-        row.addView((View)crest, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(52.0f), this.ui.dp(48.0f)));
+        row.addView((View)crest, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(48.0f), this.ui.dp(48.0f)));
         TextView team = this.ui.text(name, 17, this.ui.text, true);
-        team.setPadding(this.ui.dp(8.0f), 0, this.ui.dp(8.0f), 0);
+        team.setPadding(this.ui.dp(12.0f), 0, this.ui.dp(8.0f), 0);
         row.addView((View)team, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        TextView score = this.ui.text(this.match.hasScore() ? this.match.displayScore(home) : "—", 32, this.ui.scoreColor(this.match, home), true);
-        score.setMinWidth(this.ui.scoreColumnWidth(32,this.match));
-        score.setGravity(0x800005);
+        TextView score = this.ui.display(this.match.hasScore() ? this.match.displayScore(home) : "—", 32, this.ui.scoreColor(this.match, home));
+        score.setMinWidth(this.ui.scoreColumnWidth(32, this.match));
+        score.setGravity(Gravity.END);
         score.setIncludeFontPadding(false);
         row.addView((View)score);
         row.setContentDescription((CharSequence)displayText(name + (this.match.hasScore() ? ", score " + this.match.displayScore(home) : ", score unavailable")));
@@ -692,52 +851,28 @@ extends Activity {
 
     private void padLeftHeading(String text) {
         this.ui.gap(this.padLeftHost, 20);
-        this.padLeftHost.addView((View)this.ui.text(text, 12, this.ui.muted, true));
+        this.padLeftHost.addView((View)this.ui.eyebrow(text, this.ui.muted));
         this.ui.gap(this.padLeftHost, 9);
     }
 
     private LinearLayout padStatsCard(List<MatchDetail.Stat> stats, int limit) {
         LinearLayout card = this.ui.column();
         card.setBackground((Drawable)this.ui.panel());
-        card.setPadding(this.ui.dp(16.0f), this.ui.dp(12.0f), this.ui.dp(16.0f), this.ui.dp(12.0f));
+        card.setPadding(this.ui.dp(16.0f), this.ui.dp(14.0f), this.ui.dp(16.0f), this.ui.dp(14.0f));
         LinearLayout names = this.ui.row();
-        TextView home = this.ui.text(this.match.home, 11, this.ui.text, true);
-        TextView away = this.ui.text(this.match.away, 11, this.ui.text, true);
-        away.setGravity(0x800005);
+        TextView home = this.ui.text(this.match.home, 12, this.ui.primary, true);
+        TextView away = this.ui.text(this.match.away, 12, this.ui.info, true);
+        away.setGravity(Gravity.END);
         names.addView((View)home, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         names.addView((View)away, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         card.addView((View)names);
-        this.ui.gap(card, 6);
+        this.ui.gap(card, 8);
         card.addView(this.ui.divider());
-        for (int i = 0; i < Math.min(limit, stats.size()); ++i) {
+        int count = Math.min(limit, stats.size());
+        for (int i = 0; i < count; ++i) {
             MatchDetail.Stat s = stats.get(i);
-            LinearLayout row = this.ui.row();
-            row.setPadding(0, this.ui.dp(9.0f), 0, this.ui.dp(9.0f));
-            TextView h = this.ui.text(s.home(), 13, this.ui.primary, true);
-            TextView label = this.ui.text(this.statLabel(s.label()), 10, this.ui.muted, false);
-            TextView a = this.ui.text(s.away(), 13, this.ui.secondary, true);
-            label.setGravity(17);
-            a.setGravity(0x800005);
-            row.addView((View)h, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-            row.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.4f));
-            row.addView((View)a, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-            card.addView((View)row);
-            double hv = DetailActivity.numeric(s.home());
-            double av = DetailActivity.numeric(s.away());
-            if (hv >= 0.0 && av >= 0.0 && hv + av > 0.0) {
-                LinearLayout track = this.ui.row();
-                View left = new View((Context)this);
-                View right = new View((Context)this);
-                left.setBackground((Drawable)this.ui.shape(this.ui.primary, 2));
-                right.setBackground((Drawable)this.ui.shape(this.ui.secondary, 2));
-                track.addView(left, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, this.ui.dp(3.0f), (float)hv));
-                LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, this.ui.dp(3.0f), (float)av);
-                rp.setMarginStart(this.ui.dp(4.0f));
-                track.addView(right, (ViewGroup.LayoutParams)rp);
-                card.addView((View)track);
-            }
-            if (i >= Math.min(limit, stats.size()) - 1) continue;
-            card.addView(this.ui.divider());
+            card.addView(this.ui.statComparisonRow(this.statLabel(s.label()), s.home(), s.away()));
+            if (i < count - 1) card.addView(this.ui.divider());
         }
         return card;
     }
@@ -914,7 +1049,6 @@ extends Activity {
             WatchLinks.Link link = this.watches.link(this.match);
             this.headerWatch.bind(link, this.match.live(), this::openWatch);
             if (this.headerWatchGap != null) this.headerWatchGap.setVisibility(link != null ? View.VISIBLE : View.GONE);
-            if (this.headerWatchRule != null) this.headerWatchRule.setVisibility(link != null ? View.VISIBLE : View.GONE);
         }
         this.watches.resolve(this.match, () -> {
             if (!this.active || this.isFinishing() || this.isDestroyed()) {
@@ -926,7 +1060,6 @@ extends Activity {
                 WatchLinks.Link link = this.watches.link(this.match);
                 this.headerWatch.bind(link, this.match.live(), this::openWatch);
                 if (this.headerWatchGap != null) this.headerWatchGap.setVisibility(link != null ? View.VISIBLE : View.GONE);
-                if (this.headerWatchRule != null) this.headerWatchRule.setVisibility(link != null ? View.VISIBLE : View.GONE);
             }
         });
     }
@@ -1006,63 +1139,93 @@ extends Activity {
     }
 
     private void buildScoreHeader() {
+        int accent = this.ui.sportAccent(this.match.league, this.match.group);
         LinearLayout card = this.ui.column();
-        card.setBackground((Drawable)this.ui.panel());
-        card.setPadding(this.ui.dp(16.0f), this.ui.dp(14.0f), this.ui.dp(16.0f), this.ui.dp(12.0f));
+        card.setBackground(this.ui.heroPanel(accent));
+        card.setPadding(this.ui.dp(18.0f), this.ui.dp(16.0f), this.ui.dp(18.0f), this.ui.dp(16.0f));
+
+        LinearLayout heroTop = this.ui.row();
+        TextView compBadge = this.ui.eyebrow(displayText(MatchLabel.of(this.match)), accent);
+        heroTop.addView(compBadge, new LinearLayout.LayoutParams(0, -2, 1f));
+        this.headerLivePill = this.ui.liveBadge(displayText(this.match.status.isBlank() ? "LIVE" : this.match.status));
+        this.headerLiveText = (TextView) this.headerLivePill.getChildAt(1);
+        this.headerLivePill.setVisibility(this.match.live() ? View.VISIBLE : View.GONE);
+        heroTop.addView(this.headerLivePill);
+        this.headerState = this.ui.badge(displayText(this.match.status.isBlank() ? Rules.stateLabel(this.match.state) : this.match.status), this.ui.tonal, this.ui.muted);
+        this.headerState.setVisibility(this.match.live() ? View.GONE : View.VISIBLE);
+        heroTop.addView(this.headerState);
+        card.addView(heroTop);
+        this.ui.gap(card, 14);
+
         if (this.match.group.equals("F1")) {
-            this.headerTitle = this.ui.text(displayText(this.match.displayTitle()), 18, this.ui.text, true);
-            this.headerTitle.setGravity(17);
+            this.headerTitle = this.ui.display(displayText(this.match.displayTitle()), 20, this.ui.text);
+            this.headerTitle.setGravity(Gravity.CENTER);
             card.addView((View)this.headerTitle);
-            this.ui.gap(card, 8);
-            this.headerState = this.ui.text(displayText(this.match.status) + " · " + (this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD"), 12, this.ui.muted, false);
-            this.headerState.setGravity(17);
-            card.addView((View)this.headerState);
+            this.ui.gap(card, 6);
+            this.headerStart = this.ui.text(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "MMM d · HH:mm") : "Time TBD", 12, this.ui.muted, false);
+            this.headerStart.setGravity(Gravity.CENTER);
+            card.addView((View)this.headerStart);
         } else if (this.getResources().getConfiguration().fontScale >= 1.5f || this.getResources().getConfiguration().fontScale >= 1.25f && this.ui.contentWidthDp() < 400) {
             this.headerHomeScore = this.stackedTeam(card, true);
-            this.ui.gap(card, 16);
+            this.ui.gap(card, 14);
             this.headerAwayScore = this.stackedTeam(card, false);
-            this.ui.gap(card, 16);
-            this.headerState = this.ui.text(displayText(this.match.status), 12, this.match.live() ? this.ui.primary : this.ui.muted, true);
-            card.addView((View)this.headerState);
-            this.headerStart = this.ui.text(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD", 12, this.ui.muted, false);
+            this.ui.gap(card, 10);
+            this.headerStart = this.ui.text(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "MMM d · HH:mm") : "Time TBD", 12, this.ui.muted, false);
             card.addView((View)this.headerStart);
         } else {
             LinearLayout row = this.ui.row();
-            row.setGravity(17);
+            row.setGravity(Gravity.CENTER);
             LinearLayout homeSide = this.team(true);
-            row.addView((View)homeSide, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            row.addView((View)homeSide, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.05f));
             LinearLayout center = this.ui.column();
-            center.setGravity(17);
-            this.headerScore = this.ui.score(this.match.displayScore(true), this.match.displayScore(false), this.match.hasScore(), 34);
+            center.setGravity(Gravity.CENTER);
+            this.headerScore = this.ui.score(this.match.displayScore(true), this.match.displayScore(false), this.match.hasScore(), 36);
             this.headerScore.setResultColors(this.ui.scoreColor(this.match, true), this.ui.scoreColor(this.match, false));
             center.addView((View)this.headerScore, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
-            this.ui.gap(center, 8);
-            this.headerState = this.ui.text(displayText(this.match.status), 12, this.match.live() ? this.ui.primary : this.ui.muted, true);
-            this.headerState.setGravity(17);
-            center.addView((View)this.headerState, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(center, 6);
-            this.headerStart = this.ui.text(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD", 11, this.ui.muted, false);
-            this.headerStart.setGravity(17);
+            this.headerStart = this.ui.text(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "MMM d · HH:mm") : "Time TBD", 11, this.ui.muted, false);
+            this.headerStart.setGravity(Gravity.CENTER);
             center.addView((View)this.headerStart, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
-            row.addView((View)center, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.35f));
+            row.addView((View)center, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.25f));
             LinearLayout awaySide = this.team(false);
-            row.addView((View)awaySide, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            row.addView((View)awaySide, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.05f));
             card.addView((View)row);
             this.headerHome = (TextView)homeSide.getChildAt(2);
             this.headerAway = (TextView)awaySide.getChildAt(2);
         }
+
+        // Integrated Quick Actions row: Remind + Standings/Bracket directly in Match Center hero
+        LinearLayout quick = this.ui.row();
+        this.headerRemindBtn = this.buildRemindPill();
+        this.headerRemindIcon = (Ui.Icon) this.headerRemindBtn.getChildAt(0);
+        this.headerRemindLabel = (TextView) this.headerRemindBtn.getChildAt(1);
+        LinearLayout compPill = this.buildCompetitionPill();
+        boolean hasRemind = this.headerRemindBtn.getVisibility() == View.VISIBLE;
+        if (hasRemind) {
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f);
+            if (compPill != null) rp.setMarginEnd(this.ui.dp(8));
+            quick.addView(this.headerRemindBtn, rp);
+        } else {
+            quick.addView(this.headerRemindBtn, new LinearLayout.LayoutParams(0, -2, 1f));
+        }
+        if (compPill != null) {
+            quick.addView(compPill, new LinearLayout.LayoutParams(0, -2, 1f));
+        }
+        if (hasRemind || compPill != null) {
+            this.ui.gap(card, 14);
+            card.addView(quick);
+        }
+
         WatchLinks.Link watch = this.watches.link(this.match);
         this.headerWatchGap = new View((Context)this);
         this.headerWatchGap.setVisibility(watch != null ? View.VISIBLE : View.GONE);
         card.addView(this.headerWatchGap, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(1, this.ui.dp(10.0f)));
-        this.headerWatchRule = this.ui.divider();
-        this.headerWatchRule.setVisibility(watch != null ? View.VISIBLE : View.GONE);
-        card.addView(this.headerWatchRule);
         this.headerWatch = this.ui.watchRow();
         this.headerWatch.bind(watch, this.match.live(), this::openWatch);
         card.addView((View)this.headerWatch);
+
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.setMargins(this.ui.dp(16.0f), this.ui.dp(10.0f), this.ui.dp(16.0f), this.ui.dp(2.0f));
+        cp.setMargins(this.ui.dp(16.0f), this.ui.dp(8.0f), this.ui.dp(16.0f), this.ui.dp(6.0f));
         this.content.addView((View)card, (ViewGroup.LayoutParams)cp);
     }
 
@@ -1078,21 +1241,32 @@ extends Activity {
         side.removeView(crest);
         LinearLayout line = this.ui.row();
         line.addView(crest, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(56.0f), this.ui.dp(56.0f)));
-        TextView score = this.ui.text(this.match.hasScore() ? this.match.displayScore(home) : "—", 26, this.ui.scoreColor(this.match, home), true);
-        score.setGravity(0x800005);
+        TextView score = this.ui.display(this.match.hasScore() ? this.match.displayScore(home) : "—", 28, this.ui.scoreColor(this.match, home));
+        score.setGravity(Gravity.END);
         line.addView((View)score, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         card.addView((View)line);
-        name.setGravity(0x800003);
-        side.setGravity(0x800003);
+        name.setGravity(Gravity.START);
+        side.setGravity(Gravity.START);
         card.addView((View)side, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
         return score;
     }
 
     private void updateChrome() {
+        String stateText = displayText(this.match.status.isBlank() ? Rules.stateLabel(this.match.state) : this.match.status);
+        if (this.headerLivePill != null) {
+            this.headerLivePill.setVisibility(this.match.live() ? View.VISIBLE : View.GONE);
+            if (this.headerLiveText != null) this.headerLiveText.setText(stateText.isBlank() ? "LIVE" : stateText);
+        }
+        if (this.headerState != null) {
+            this.headerState.setVisibility(this.match.live() ? View.GONE : View.VISIBLE);
+            this.headerState.setText(stateText);
+        }
         if (this.match.group.equals("F1")) {
             if (this.headerTitle != null) {
                 this.headerTitle.setText((CharSequence)displayText(this.match.displayTitle()));
-                this.headerState.setText((CharSequence)(displayText(this.match.status) + " · " + (this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD")));
+            }
+            if (this.headerStart != null) {
+                this.headerStart.setText(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "MMM d · HH:mm") : "Time TBD");
             }
         } else if (this.headerHome != null) {
             this.headerHome.setText((CharSequence)this.match.home);
@@ -1100,18 +1274,19 @@ extends Activity {
             if (this.headerScore != null) {
                 this.headerScore.setScore(this.match.displayScore(true), this.match.displayScore(false), this.match.hasScore());
                 this.headerScore.setResultColors(this.ui.scoreColor(this.match, true), this.ui.scoreColor(this.match, false));
-            } else {
+            } else if (this.headerHomeScore != null && this.headerAwayScore != null) {
                 this.headerHomeScore.setText((CharSequence)this.match.displayScore(true));
                 this.headerAwayScore.setText((CharSequence)this.match.displayScore(false));
                 this.headerHomeScore.setTextColor(this.ui.scoreColor(this.match, true));
                 this.headerAwayScore.setTextColor(this.ui.scoreColor(this.match, false));
             }
-            this.headerState.setText((CharSequence)displayText(this.match.status));
-            this.headerState.setTextColor(this.match.live() ? this.ui.primary : this.ui.muted);
-            this.headerStart.setText((CharSequence)(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "M/d HH:mm") : "Time TBD"));
+            if (this.headerStart != null) {
+                this.headerStart.setText((CharSequence)(this.match.timeConfirmed ? DetailActivity.time(this.match.start, "MMM d · HH:mm") : "Time TBD"));
+            }
             this.bindHeaderTeam(true);
             this.bindHeaderTeam(false);
         }
+        this.updateRemindControl();
         this.updateTabs();
         this.updateStatus();
     }
@@ -1167,7 +1342,6 @@ extends Activity {
             this.ui.gap(this.body, 14);
         }
         if (this.detail == null) {
-            if (this.tab.equals("overview")) this.competitionLink(this.body);
             this.empty(this.busy ? "Loading match data" : "Match details are unavailable", this.busy ? "Connecting to this match's source." : "Check your connection and reload. The match list keeps its last record.");
         } else if (this.tab.equals("overview")) {
             this.overview();
@@ -1214,9 +1388,9 @@ extends Activity {
         String logo = home ? this.match.homeLogo : this.match.awayLogo;
         String id = home ? this.match.homeId : this.match.awayId;
         LinearLayout side = this.ui.column();
-        side.setGravity(17);
+        side.setGravity(Gravity.CENTER_HORIZONTAL);
         FrameLayout slot = new FrameLayout((Context)this);
-        Logos.Crest crest = Logos.crest(this.ui, 44, false);
+        Logos.Crest crest = Logos.crest(this.ui, 40, false);
         Logos.bind(crest, logo, name);
         if (home) {
             this.headerHomeCrest = crest;
@@ -1225,17 +1399,18 @@ extends Activity {
             this.headerAwayCrest = crest;
             this.headerAwaySlot = slot;
         }
-        slot.addView((View)crest.box, (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(44.0f), this.ui.dp(44.0f), 17));
-        this.ui.clickable((View)slot, 0, 28);
+        slot.addView((View)crest.box, (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(40.0f), this.ui.dp(40.0f), Gravity.CENTER));
+        this.ui.clickableDrawable(slot, this.ui.outlined(this.ui.tonal, this.ui.border, 16), 16);
         boolean available = id != null && !id.isBlank();
         slot.setClickable(available);
         slot.setFocusable(available);
         slot.setContentDescription(available ? displayText("View " + name + " schedule") : null);
         slot.setOnClickListener(available ? v -> this.openTeam(home) : null);
         side.addView((View)slot, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(56.0f), this.ui.dp(56.0f)));
-        this.ui.gap(side, 4);
-        TextView text = this.ui.text(name, 14, this.ui.text, true);
-        text.setGravity(17);
+        this.ui.gap(side, 8);
+        TextView text = this.ui.text(name, 13, this.ui.text, true);
+        text.setGravity(Gravity.CENTER);
+        text.setMaxLines(2);
         side.addView((View)text, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
         return side;
     }
@@ -1259,72 +1434,26 @@ extends Activity {
     }
 
     private void buildTabs() {
-        String[] stringArray;
-        String[] stringArray2;
-        LinearLayout row = this.ui.row();
         boolean f1 = this.match.group.equals("F1");
         boolean cs = this.match.group.equals("CS2");
         if (cs && this.tab.equals("stats")) {
             this.tab = "lineup";
         }
         if (cs) {
-            String[] stringArray3 = new String[3];
-            stringArray3[0] = "overview";
-            stringArray3[1] = "lineup";
-            stringArray2 = stringArray3;
-            stringArray3[2] = "events";
+            this.tabKeys = new String[]{"overview", "lineup", "events"};
+            this.tabNames = new String[]{"Overview", "Players", "Maps"};
         } else if (f1) {
-            String[] stringArray4 = new String[3];
-            stringArray4[0] = "overview";
-            stringArray4[1] = "lineup";
-            stringArray2 = stringArray4;
-            stringArray4[2] = "stats";
+            this.tabKeys = new String[]{"overview", "lineup", "stats"};
+            this.tabNames = new String[]{"Overview", "Drivers", "Results"};
         } else {
-            String[] stringArray5 = new String[4];
-            stringArray5[0] = "overview";
-            stringArray5[1] = "lineup";
-            stringArray5[2] = "stats";
-            stringArray2 = stringArray5;
-            stringArray5[3] = "events";
+            this.tabKeys = new String[]{"overview", "lineup", "stats", "events"};
+            this.tabNames = new String[]{"Overview", this.lineupName(), "Stats", "Events"};
         }
-        this.tabKeys = stringArray2;
-        if (cs) {
-            String[] stringArray6 = new String[3];
-            stringArray6[0] = "Overview";
-            stringArray6[1] = "Players";
-            stringArray = stringArray6;
-            stringArray6[2] = "Maps";
-        } else if (f1) {
-            String[] stringArray7 = new String[3];
-            stringArray7[0] = "Overview";
-            stringArray7[1] = "Drivers";
-            stringArray = stringArray7;
-            stringArray7[2] = "Results";
-        } else {
-            String[] stringArray9 = new String[4];
-            stringArray9[0] = "Overview";
-            stringArray9[1] = this.lineupName();
-            stringArray9[2] = "Stats";
-            stringArray = stringArray9;
-            stringArray9[3] = "Events";
-        }
-        this.tabNames = stringArray;
         this.tabLabels = new TextView[this.tabKeys.length];
-        this.tabRules = new View[this.tabKeys.length];
+        LinearLayout track = this.ui.segmentedTrack();
         for (int i = 0; i < this.tabKeys.length; ++i) {
             String key = this.tabKeys[i];
-            LinearLayout item = this.ui.column();
-            item.setGravity(17);
-            this.ui.clickable((View)item, this.ui.bg, 0);
-            item.setFocusable(true);
-            TextView label = this.ui.text(this.tabNames[i], 14, this.tab.equals(key) ? this.ui.text : this.ui.muted, this.tab.equals(key));
-            label.setGravity(17);
-            label.setMinHeight(this.ui.dp(48.0f));
-            item.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
-            View underline = new View((Context)this);
-            underline.setBackground((Drawable)this.ui.shape(this.tab.equals(key) ? this.ui.text : this.ui.bg, 2));
-            item.addView(underline, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(24.0f), this.ui.dp(2.0f)));
-            item.setOnClickListener(v -> {
+            TextView label = this.ui.tab(this.tabNames[i], this.tab.equals(key), () -> {
                 this.tab = key;
                 this.categoryFilter = "";
                 this.sortColumn = "";
@@ -1332,13 +1461,16 @@ extends Activity {
                 this.playerLimit = 16;
                 this.render(false);
             });
-            row.addView((View)item, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            label.setPadding(this.ui.dp(6), this.ui.dp(8), this.ui.dp(6), this.ui.dp(8));
+            label.setMinWidth(0);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+            if (i > 0) lp.setMarginStart(this.ui.dp(4));
+            track.addView(label, lp);
             this.tabLabels[i] = label;
-            this.tabRules[i] = underline;
         }
-        this.ui.gap(this.content, 6);
-        this.content.addView((View)row);
-        this.content.addView(this.ui.divider());
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-1, -2);
+        tp.setMargins(this.ui.dp(16), this.ui.dp(6), this.ui.dp(16), this.ui.dp(6));
+        this.content.addView(track, tp);
         this.updateTabs();
     }
 
@@ -1348,12 +1480,8 @@ extends Activity {
         }
         for (int i = 0; i < this.tabLabels.length; ++i) {
             boolean on = this.tabKeys[i].equals(this.tab);
-            this.tabLabels[i].setTextColor(on ? this.ui.text : this.ui.muted);
-            this.tabRules[i].setBackground((Drawable)this.ui.shape(on ? this.ui.text : this.ui.bg, 2));
-            this.tabLabels[i].setSelected(on);
-            View item = (View)this.tabLabels[i].getParent();
-            item.setSelected(on);
-            item.setContentDescription((CharSequence)(this.tabNames[i] + (on ? ", selected" : "")));
+            this.ui.selectTab(this.tabLabels[i], on);
+            this.tabLabels[i].setContentDescription((CharSequence)(this.tabNames[i] + (on ? ", selected" : "")));
         }
     }
 
@@ -1366,13 +1494,12 @@ extends Activity {
 
     private void heading(String text) {
         this.ui.gap(this.body, 16);
-        this.body.addView((View)this.ui.text(displayText(text), 15, this.ui.text, true));
+        this.body.addView((View)this.ui.eyebrow(displayText(text), this.ui.muted));
         this.ui.gap(this.body, 8);
     }
 
     private void overview() {
         int i;
-        this.competitionLink(this.body);
         if (!this.match.group.equals("CS2")) {
             this.tables("overview");
         }
@@ -1380,7 +1507,7 @@ extends Activity {
             this.heading("Key stats");
             LinearLayout card = this.panel();
             this.teamNames(card);
-            int statLimit = Math.min(3, this.detail.stats.size());
+            int statLimit = Math.min(4, this.detail.stats.size());
             for (i = 0; i < statLimit; ++i) {
                 this.stat(card, this.detail.stats.get(i), i < statLimit - 1);
             }
@@ -1389,7 +1516,7 @@ extends Activity {
         if (!this.detail.events.isEmpty()) {
             this.heading("Latest events");
             LinearLayout timeline = this.panel();
-            for (i = 0; i < Math.min(3, this.detail.events.size()); ++i) {
+            for (i = 0; i < Math.min(5, this.detail.events.size()); ++i) {
                 this.event(timeline, this.detail.events.get(i));
             }
             this.body.addView((View)timeline);
@@ -1398,23 +1525,6 @@ extends Activity {
         this.sourceLink();
     }
 
-    private void competitionLink(LinearLayout into) {
-        boolean tournament = "cs2".equals(this.match.league) && this.match.eventId.matches("csgo_tt_[0-9]+");
-        if (tournament && this.match.eventId.equals(this.getIntent().getStringExtra(EXTRA_PARENT_TOURNAMENT))) return;
-        String label = tournament ? "Tournament overview" : StandingsActivity.competitionLinkLabel(this.match.league);
-        if (label.isBlank()) return;
-        TextView link = this.ui.textButton(label, () -> {
-            if (tournament) {
-                this.startActivity(new Intent(this, Cs2EventActivity.class).putExtra("event", this.match.eventId)
-                    .putExtra("name", this.match.event).putExtra("day", this.match.day() == null ? "" : this.match.day().toString()));
-            } else {
-                this.startActivity(StandingsActivity.forCompetition(this, this.match.league));
-            }
-        });
-        link.setPaintFlags(link.getPaintFlags() | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
-        link.setTag(tournament ? "cs2-tournament-overview" : "match-competition");
-        into.addView(link, new LinearLayout.LayoutParams(-1, -2));
-    }
 
     private Map<String, List<String>> matchFacts() {
         Map<String, List<String>> facts = new LinkedHashMap<>();
@@ -1565,9 +1675,9 @@ extends Activity {
 
     private void teamNames(LinearLayout card) {
         LinearLayout names = this.ui.row();
-        TextView home = this.ui.text(this.match.home, 12, this.ui.text, true);
-        TextView away = this.ui.text(this.match.away, 12, this.ui.text, true);
-        away.setGravity(0x800005);
+        TextView home = this.ui.text(this.match.home, 12, this.ui.primary, true);
+        TextView away = this.ui.text(this.match.away, 12, this.ui.info, true);
+        away.setGravity(Gravity.END);
         names.addView((View)home, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         names.addView((View)away, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         card.addView((View)names);
@@ -1576,43 +1686,9 @@ extends Activity {
     }
 
     private void stat(LinearLayout card, MatchDetail.Stat stat, boolean hasNext) {
-        LinearLayout row = this.ui.row();
-        row.setPadding(0, this.ui.dp(9.0f), 0, this.ui.dp(7.0f));
-        TextView h = this.ui.text(stat.home(), 16, this.ui.primary, true);
-        TextView label = this.ui.text(this.statLabel(stat.label()), 12, this.ui.muted, false);
-        TextView a = this.ui.text(stat.away(), 16, this.ui.secondary, true);
-        label.setGravity(17);
-        a.setGravity(0x800005);
-        row.addView((View)h, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        row.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 2.0f));
-        row.addView((View)a, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        card.addView((View)row);
-        double home = DetailActivity.numeric(stat.home());
-        double away = DetailActivity.numeric(stat.away());
-        if (home >= 0.0 && away >= 0.0 && home + away > 0.0) {
-            LinearLayout track = this.ui.row();
-            View left = new View((Context)this);
-            View right = new View((Context)this);
-            left.setBackground((Drawable)this.ui.shape(this.ui.primary, 2));
-            right.setBackground((Drawable)this.ui.shape(this.ui.secondary, 2));
-            track.addView(left, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, this.ui.dp(4.0f), (float)home));
-            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, this.ui.dp(4.0f), (float)away);
-            rp.setMarginStart(this.ui.dp(4.0f));
-            track.addView(right, (ViewGroup.LayoutParams)rp);
-            card.addView((View)track);
-        }
+        card.addView(this.ui.statComparisonRow(this.statLabel(stat.label()), stat.home(), stat.away()));
         if (hasNext) {
-            this.ui.gap(card, 8);
             card.addView(this.ui.divider());
-        }
-    }
-
-    private static double numeric(String value) {
-        try {
-            return value.matches("[0-9]+(?:\\.[0-9]+)?%?") ? Double.parseDouble(value.replace("%", "")) : -1.0;
-        }
-        catch (RuntimeException e) {
-            return -1.0;
         }
     }
 
@@ -1832,18 +1908,35 @@ extends Activity {
             timeline.addView(this.ui.divider());
         }
         LinearLayout row = this.ui.row();
-        row.setGravity(48);
-        row.setPadding(0, this.ui.dp(9.0f), 0, this.ui.dp(9.0f));
-        TextView clock = this.ui.text(displayText(event.time()), 11, this.ui.muted, true);
-        LinearLayout.LayoutParams clockSlot = new LinearLayout.LayoutParams(this.ui.dp(50.0f), -2);
-        clockSlot.setMarginEnd(this.ui.dp(8.0f));
-        row.addView(clock, clockSlot);
-        LinearLayout words = this.ui.column();
+        row.setGravity(Gravity.TOP);
+        row.setPadding(0, this.ui.dp(10.0f), 0, this.ui.dp(10.0f));
         String title = displayText(DetailParsers.plain(event.title()));
         String text = displayText(DetailParsers.plain(event.text()));
+        String combined = (title + " " + text).toLowerCase(java.util.Locale.ROOT);
+        int pillBg = this.ui.tonal;
+        int pillInk = this.ui.muted;
+        if (combined.contains("goal") || combined.contains("touchdown") || combined.contains("penalty scored") || combined.contains("进球")) {
+            pillBg = this.ui.primarySoft;
+            pillInk = this.ui.primary;
+        } else if (combined.contains("red card") || combined.contains("红牌") || combined.contains("sent off")) {
+            pillBg = this.ui.errorSoft;
+            pillInk = this.ui.error;
+        } else if (combined.contains("yellow card") || combined.contains("黄牌")) {
+            pillBg = this.ui.warnSoft;
+            pillInk = this.ui.warn;
+        } else if (combined.contains("substit") || combined.contains("换人")) {
+            pillBg = this.ui.infoSoft;
+            pillInk = this.ui.info;
+        }
+        String clockText = displayText(event.time());
+        TextView clock = this.ui.badge(clockText.isBlank() ? "•" : clockText, pillBg, pillInk);
+        LinearLayout.LayoutParams clockSlot = new LinearLayout.LayoutParams(this.ui.dp(54.0f), -2);
+        clockSlot.setMarginEnd(this.ui.dp(12.0f));
+        row.addView(clock, clockSlot);
+        LinearLayout words = this.ui.column();
         if (!title.isBlank()) {
             words.addView((View)this.ui.text(title, 13, this.ui.text, true));
-            this.ui.gap(words, 4);
+            this.ui.gap(words, 3);
         }
         if (!text.isBlank()) {
             words.addView((View)this.ui.text(text, 13, title.isBlank() ? this.ui.text : this.ui.muted, false));

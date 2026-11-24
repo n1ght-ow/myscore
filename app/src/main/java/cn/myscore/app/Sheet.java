@@ -22,16 +22,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.WeakHashMap;
 
-/** One in-app sheet language for every secondary menu. No platform AlertDialog. */
+/** Modern elevated modal sheets and calendar picker sharing the unified design system. */
 final class Sheet {
-    private static final WeakHashMap<Activity,List<Dialog>> OPEN=new WeakHashMap<>();
+    private static final WeakHashMap<Activity, List<Dialog>> OPEN = new WeakHashMap<>();
     interface Pick { void onPick(int index); }
     interface PickDate { void onDate(LocalDate date); }
     interface Action { void run(); }
     static final class Item {
         final String title, detail;
         final boolean selected;
-        Item(String title, String detail, boolean selected) {this.title=title;this.detail=detail;this.selected=selected;}
+        Item(String title, String detail, boolean selected) { this.title = title; this.detail = detail; this.selected = selected; }
     }
     private Sheet() {}
 
@@ -45,95 +45,135 @@ final class Sheet {
             boolean on = i == selected;
             LinearLayout row = ui.row();
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setMinimumHeight(ui.dp(50));
-            row.setPadding(ui.dp(12), ui.dp(8), ui.dp(12), ui.dp(8));
-            ui.clickable(row, on ? ui.tonal : Color.TRANSPARENT, Ui.CONTROL_RADIUS);
+            row.setMinimumHeight(ui.dp(54));
+            row.setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10));
+            ui.clickableDrawable(row, on ? ui.outlined(ui.primarySoft, Ui.alpha(ui.primary, 110), Ui.CONTROL_RADIUS) : ui.shape(Color.TRANSPARENT, Ui.CONTROL_RADIUS), Ui.CONTROL_RADIUS);
             row.setSelected(on);
             row.setFocusable(true);
             row.setContentDescription(item.title + (item.detail.isEmpty() ? "" : ", " + item.detail) + (on ? ", selected" : ""));
             LinearLayout texts = ui.column();
-            texts.addView(ui.text(item.title, 15, ui.text, true));
-            if (!item.detail.isEmpty()) { ui.gap(texts, 3); texts.addView(ui.text(item.detail, 12, ui.muted, false)); }
+            texts.addView(ui.text(item.title, 15, on ? ui.primary : ui.text, true));
+            if (!item.detail.isEmpty()) {
+                ui.gap(texts, 3);
+                texts.addView(ui.text(item.detail, 12, ui.muted, false));
+            }
             row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
             if (on) {
                 FrameLayout tick = new FrameLayout(activity);
                 tick.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                tick.addView(new Ui.Icon(activity, "check", ui.text), new FrameLayout.LayoutParams(ui.dp(20), ui.dp(20), Gravity.CENTER));
-                row.addView(tick, new LinearLayout.LayoutParams(ui.dp(28), ui.dp(28)));
+                tick.setBackground(ui.shape(ui.primary, Ui.PILL_RADIUS));
+                tick.addView(new Ui.Icon(activity, "check", ui.onPrimary), new FrameLayout.LayoutParams(ui.dp(15), ui.dp(15), Gravity.CENTER));
+                row.addView(tick, new LinearLayout.LayoutParams(ui.dp(24), ui.dp(24)));
             }
             final int index = i;
             row.setOnClickListener(v -> { dialog.dismiss(); if (pick != null) pick.onPick(index); });
             list.addView(row);
-            if (i < items.size() - 1) { View gap = new View(activity); gap.setMinimumHeight(ui.dp(2)); list.addView(gap); }
+            if (i < items.size() - 1) ui.gap(list, 4);
         }
         content.addView(list, new LinearLayout.LayoutParams(-1, -2));
         TextView cancel = ui.button("Cancel", false, dialog::dismiss);
         LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(-1, -2);
-        cancelParams.topMargin = ui.dp(12);
+        cancelParams.topMargin = ui.dp(14);
         content.addView(cancel, cancelParams);
         show(activity, dialog, content);
     }
 
     static void date(Activity activity, LocalDate selected, PickDate pick) {
-        Ui ui=ui(activity);
-        Dialog dialog=base(activity,ui);
-        LinearLayout content=content(activity,ui,dialog,"Select date",null);
-        // Keep seven 48dp date targets on compact phones without shrinking the type.
-        int side=Math.max(0,Math.min(ui.dp(20),(activity.getResources().getDisplayMetrics().widthPixels-ui.dp(336))/2));
-        content.setPadding(side,content.getPaddingTop(),side,content.getPaddingBottom());
-        YearMonth[] month={YearMonth.from(selected)};
-        LinearLayout nav=ui.row();
-        FrameLayout prev=new FrameLayout(activity);
-        prev.addView(new Ui.Icon(activity,"back",ui.text),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
-        ui.clickable(prev,ui.tonal,Ui.CONTROL_RADIUS);prev.setFocusable(true);prev.setContentDescription("Previous month");
-        nav.addView(prev,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
-        TextView title=ui.text("",16,ui.text,true);title.setGravity(Gravity.CENTER);
-        nav.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        FrameLayout next=new FrameLayout(activity);
-        next.addView(new Ui.Icon(activity,"chevron",ui.text),new FrameLayout.LayoutParams(ui.dp(20),ui.dp(20),Gravity.CENTER));
-        ui.clickable(next,ui.tonal,Ui.CONTROL_RADIUS);next.setFocusable(true);next.setContentDescription("Next month");
-        nav.addView(next,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));
+        Ui ui = ui(activity);
+        Dialog dialog = base(activity, ui);
+        LinearLayout content = content(activity, ui, dialog, "Select date", null);
+        int side = Math.max(0, Math.min(ui.dp(20), (activity.getResources().getDisplayMetrics().widthPixels - ui.dp(336)) / 2));
+        content.setPadding(side, content.getPaddingTop(), side, content.getPaddingBottom());
+        YearMonth[] month = {YearMonth.from(selected)};
+        LocalDate todayDate = Match.today(System.currentTimeMillis());
+
+        LinearLayout nav = ui.row();
+        FrameLayout prev = new FrameLayout(activity);
+        prev.addView(new Ui.Icon(activity, "back", ui.text), new FrameLayout.LayoutParams(ui.dp(18), ui.dp(18), Gravity.CENTER));
+        ui.clickableDrawable(prev, ui.outlined(ui.tonal, ui.border, Ui.CONTROL_RADIUS), Ui.CONTROL_RADIUS);
+        prev.setFocusable(true);
+        prev.setContentDescription("Previous month");
+        nav.addView(prev, new LinearLayout.LayoutParams(ui.dp(44), ui.dp(44)));
+
+        TextView title = ui.text("", 16, ui.text, true);
+        title.setGravity(Gravity.CENTER);
+        nav.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+
+        FrameLayout next = new FrameLayout(activity);
+        next.addView(new Ui.Icon(activity, "chevron", ui.text), new FrameLayout.LayoutParams(ui.dp(18), ui.dp(18), Gravity.CENTER));
+        ui.clickableDrawable(next, ui.outlined(ui.tonal, ui.border, Ui.CONTROL_RADIUS), Ui.CONTROL_RADIUS);
+        next.setFocusable(true);
+        next.setContentDescription("Next month");
+        nav.addView(next, new LinearLayout.LayoutParams(ui.dp(44), ui.dp(44)));
         content.addView(nav);
-        ui.gap(content,4);
-        LinearLayout weekdays=ui.row();
-        for(String label:new String[]{"Mon","Tue","Wed","Thu","Fri","Sat","Sun"}){TextView d=ui.text(label,11,ui.muted,false);d.setGravity(Gravity.CENTER);d.setPadding(0,ui.dp(4),0,ui.dp(4));weekdays.addView(d,new LinearLayout.LayoutParams(0,-2,1));}
+        ui.gap(content, 10);
+
+        LinearLayout weekdays = ui.row();
+        for (String label : new String[]{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}) {
+            TextView d = ui.eyebrow(label, ui.dim);
+            d.setGravity(Gravity.CENTER);
+            d.setPadding(0, ui.dp(4), 0, ui.dp(6));
+            weekdays.addView(d, new LinearLayout.LayoutParams(0, -2, 1));
+        }
         content.addView(weekdays);
-        LinearLayout grid=ui.column();content.addView(grid);
-        Runnable[] draw=new Runnable[1];
-        draw[0]=()-> {
-            title.setText(month[0].getMonth().getDisplayName(TextStyle.SHORT,Locale.ENGLISH)+" "+month[0].getYear());
+        LinearLayout grid = ui.column();
+        content.addView(grid);
+
+        Runnable[] draw = new Runnable[1];
+        draw[0] = () -> {
+            title.setText(month[0].getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + month[0].getYear());
             grid.removeAllViews();
-            LocalDate first=month[0].atDay(1);
-            int offset=first.getDayOfWeek().getValue()-1;
-            int days=month[0].lengthOfMonth();
-            int rows=Math.max(5,(offset+days+6)/7);
-            int day=1;
-            for(int r=0;r<rows;r++) {
-                LinearLayout line=ui.row();
-                for(int c=0;c<7;c++) {
-                    int index=r*7+c;
-                    if(index<offset||index>=offset+days){line.addView(new View(activity),new LinearLayout.LayoutParams(0,-2,1));continue;}
-                    LocalDate value=month[0].atDay(day++);
-                    boolean picked=value.equals(selected),today=value.equals(Match.today(System.currentTimeMillis()));
-                    TextView cell=ui.text(String.valueOf(value.getDayOfMonth()),14,picked?ui.onAction:ui.text,picked||today);
-                    cell.setGravity(Gravity.CENTER);cell.setMinHeight(ui.dp(48));ui.clickable(cell,picked?ui.action:today?ui.tonal:Color.TRANSPARENT,Ui.CONTROL_RADIUS);cell.setSelected(picked);
+            LocalDate first = month[0].atDay(1);
+            int offset = first.getDayOfWeek().getValue() - 1;
+            int days = month[0].lengthOfMonth();
+            int rows = Math.max(5, (offset + days + 6) / 7);
+            int day = 1;
+            for (int r = 0; r < rows; r++) {
+                LinearLayout line = ui.row();
+                for (int c = 0; c < 7; c++) {
+                    int index = r * 7 + c;
+                    if (index < offset || index >= offset + days) {
+                        line.addView(new View(activity), new LinearLayout.LayoutParams(0, -2, 1));
+                        continue;
+                    }
+                    LocalDate value = month[0].atDay(day++);
+                    boolean picked = value.equals(selected), today = value.equals(todayDate);
+                    TextView cell = ui.text(String.valueOf(value.getDayOfMonth()), 14, picked ? ui.onPrimary : today ? ui.primary : ui.text, picked || today);
+                    cell.setGravity(Gravity.CENTER);
+                    cell.setMinHeight(ui.dp(46));
+                    GradientDrawable cellBg = picked ? ui.shape(ui.primary, Ui.CONTROL_RADIUS)
+                        : today ? ui.outlined(ui.primarySoft, Ui.alpha(ui.primary, 90), Ui.CONTROL_RADIUS)
+                        : ui.shape(Color.TRANSPARENT, Ui.CONTROL_RADIUS);
+                    ui.clickableDrawable(cell, cellBg, Ui.CONTROL_RADIUS);
+                    cell.setSelected(picked);
                     cell.setFocusable(true);
-                    cell.setContentDescription(value.getMonth().getDisplayName(TextStyle.FULL,Locale.ENGLISH)+" "+value.getDayOfMonth()+", "+value.getYear()+(picked?", selected":today?", today":""));
-                    cell.setOnClickListener(v->{dialog.dismiss();pick.onDate(value);});
-                    line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
+                    cell.setContentDescription(value.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + value.getDayOfMonth() + ", " + value.getYear() + (picked ? ", selected" : today ? ", today" : ""));
+                    cell.setOnClickListener(v -> { dialog.dismiss(); pick.onDate(value); });
+                    LinearLayout.LayoutParams cellLp = new LinearLayout.LayoutParams(0, -2, 1);
+                    cellLp.setMargins(ui.dp(2), ui.dp(2), ui.dp(2), ui.dp(2));
+                    line.addView(cell, cellLp);
                 }
                 grid.addView(line);
             }
         };
-        prev.setOnClickListener(v->{month[0]=month[0].minusMonths(1);draw[0].run();});
-        next.setOnClickListener(v->{month[0]=month[0].plusMonths(1);draw[0].run();});
-        TextView cancel=ui.button("Cancel",false,dialog::dismiss);
-        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.topMargin=ui.dp(12);content.addView(cancel,cp);
+        prev.setOnClickListener(v -> { month[0] = month[0].minusMonths(1); draw[0].run(); });
+        next.setOnClickListener(v -> { month[0] = month[0].plusMonths(1); draw[0].run(); });
+
+        LinearLayout footer = ui.row();
+        footer.setPadding(0, ui.dp(14), 0, 0);
+        TextView jumpToday = ui.button("Today", false, () -> { dialog.dismiss(); pick.onDate(todayDate); });
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0, -2, 1);
+        tp.setMarginEnd(ui.dp(10));
+        footer.addView(jumpToday, tp);
+        TextView cancel = ui.button("Cancel", false, dialog::dismiss);
+        footer.addView(cancel, new LinearLayout.LayoutParams(0, -2, 1));
+        content.addView(footer);
         draw[0].run();
-        show(activity,dialog,content);
+        show(activity, dialog, content);
     }
 
-    static void message(Activity activity, String title, String message) {        Ui ui = ui(activity);
+    static void message(Activity activity, String title, String message) {
+        Ui ui = ui(activity);
         Dialog dialog = base(activity, ui);
         LinearLayout content = content(activity, ui, dialog, title, message);
         content.addView(actions(activity, ui, dialog, "OK", () -> {}, null));
@@ -148,9 +188,8 @@ final class Sheet {
         show(activity, dialog, content);
     }
 
-    private static Ui ui(Activity activity) {
-        return new Ui(activity, Ui.isDark(activity));
-    }
+    private static Ui ui(Activity activity) { return new Ui(activity, Ui.isDark(activity)); }
+
     private static Dialog base(Activity activity, Ui ui) {
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -160,43 +199,47 @@ final class Sheet {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.setGravity(Ui.isPad(activity) ? Gravity.CENTER : Gravity.BOTTOM);
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setDimAmount(0.64f);
+            window.setDimAmount(0.68f);
             window.setNavigationBarColor(ui.surface);
-            window.setWindowAnimations(Ui.isPad(activity)?android.R.style.Animation_Dialog:R.style.SheetAnimation);
+            window.setWindowAnimations(Ui.isPad(activity) ? android.R.style.Animation_Dialog : R.style.SheetAnimation);
         }
         return dialog;
     }
+
     private static LinearLayout content(Activity activity, Ui ui, Dialog dialog, String title, String message) {
         LinearLayout root = ui.column();
         GradientDrawable background = new GradientDrawable();
         background.setColor(ui.surface);
-        background.setStroke(Math.max(1, ui.dp(0.75f)), ui.border);
+        background.setStroke(Math.max(1, ui.dp(1)), ui.borderStrong);
         float r = ui.dp(Ui.SHEET_RADIUS);
         boolean pad = Ui.isPad(activity);
         background.setCornerRadii(pad ? new float[]{r, r, r, r, r, r, r, r} : new float[]{r, r, r, r, 0, 0, 0, 0});
         root.setBackground(background);
-        root.setPadding(ui.dp(pad ? 28 : 20), ui.dp(pad ? 18 : 8), ui.dp(pad ? 28 : 20), ui.dp(20));
+        root.setPadding(ui.dp(pad ? 28 : 20), ui.dp(pad ? 20 : 10), ui.dp(pad ? 28 : 20), ui.dp(22));
         View handle = new View(activity);
-        handle.setBackground(ui.shape(ui.line, 2));
+        handle.setBackground(ui.shape(ui.borderStrong, 3));
         handle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(ui.dp(38), ui.dp(4));
+        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(ui.dp(40), ui.dp(4));
         handleParams.gravity = Gravity.CENTER_HORIZONTAL;
-        handleParams.topMargin = ui.dp(6);
+        handleParams.topMargin = ui.dp(4);
         handle.setVisibility(pad ? View.GONE : View.VISIBLE);
         root.addView(handle, handleParams);
         if (title != null && !title.isEmpty()) {
-            TextView heading = ui.text(title, 20, ui.text, true);
-            heading.setPadding(0, ui.dp(12), 0, 0);
+            TextView heading = ui.display(title, 19, ui.text);
+            heading.setPadding(0, ui.dp(14), 0, 0);
             root.addView(heading);
         }
         if (message != null && !message.isEmpty()) {
             TextView body = ui.text(message, 13, ui.muted, false);
             body.setLineSpacing(ui.dp(3), 1f);
-            body.setPadding(0, ui.dp(8), 0, ui.dp(10));
+            body.setPadding(0, ui.dp(6), 0, ui.dp(12));
             root.addView(body);
+        } else {
+            ui.gap(root, 10);
         }
         return root;
     }
+
     private static LinearLayout actions(Activity activity, Ui ui, Dialog dialog, String primaryLabel, Action primary, String secondaryLabel) {
         LinearLayout row = ui.row();
         row.setPadding(0, ui.dp(12), 0, 0);
@@ -210,48 +253,54 @@ final class Sheet {
         row.addView(ok, new LinearLayout.LayoutParams(secondaryLabel == null ? -1 : 0, -2, secondaryLabel == null ? 0 : 1));
         return row;
     }
+
     private static int maxHeight(Activity activity) {
         return Math.max(activity.getResources().getDisplayMetrics().heightPixels - activity.getResources().getDisplayMetrics().heightPixels / 4, 1);
     }
+
     private static void show(Activity activity, Dialog dialog, LinearLayout content) {
-        MaxScroll scroll=new MaxScroll(activity,maxHeight(activity));
+        MaxScroll scroll = new MaxScroll(activity, maxHeight(activity));
         scroll.setVerticalScrollBarEnabled(false);
-        scroll.setBackground(content.getBackground());scroll.setClipToOutline(true);content.setBackground(null);
-        scroll.addView(content);dialog.setContentView(scroll);
-        try{dialog.show();}catch(RuntimeException e){android.util.Log.w("MyScore","Sheet skipped because the activity left");return;}
+        scroll.setBackground(content.getBackground());
+        scroll.setClipToOutline(true);
+        content.setBackground(null);
+        scroll.addView(content);
+        dialog.setContentView(scroll);
+        try { dialog.show(); } catch (RuntimeException e) { android.util.Log.w("MyScore", "Sheet skipped because the activity left"); return; }
         Window window = dialog.getWindow();
         if (window != null) {
-            int widthPixels=activity.getResources().getDisplayMetrics().widthPixels;
-            if (android.os.Build.VERSION.SDK_INT>=30) {
-                try{widthPixels=activity.getWindowManager().getCurrentWindowMetrics().getBounds().width();}
-                catch(RuntimeException ignored){}
+            int widthPixels = activity.getResources().getDisplayMetrics().widthPixels;
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                try { widthPixels = activity.getWindowManager().getCurrentWindowMetrics().getBounds().width(); }
+                catch (RuntimeException ignored) {}
             }
-            int wide=ui(activity).dp(Ui.isPad(activity)?680:640);
+            int wide = ui(activity).dp(Ui.isPad(activity) ? 680 : 640);
             window.setLayout(Math.min(widthPixels, wide), WindowManager.LayoutParams.WRAP_CONTENT);
             window.getDecorView().setPadding(0, 0, 0, 0);
             Ui.highRefresh(window);
         }
-        List<Dialog> open=OPEN.get(activity);
-        if(open==null){open=new ArrayList<>();OPEN.put(activity,open);}
+        List<Dialog> open = OPEN.get(activity);
+        if (open == null) { open = new ArrayList<>(); OPEN.put(activity, open); }
         open.add(dialog);
         dialog.setOnDismissListener(d -> {
-            List<Dialog> dialogs=OPEN.get(activity);
-            if(dialogs==null)return;
+            List<Dialog> dialogs = OPEN.get(activity);
+            if (dialogs == null) return;
             dialogs.remove(dialog);
-            if(dialogs.isEmpty())OPEN.remove(activity);
+            if (dialogs.isEmpty()) OPEN.remove(activity);
         });
     }
-    /** Close sheets before their Activity/thread pools are torn down. */
+
     static void dismissAll(Activity activity) {
-        List<Dialog> dialogs=OPEN.remove(activity);
-        if(dialogs==null)return;
-        for(Dialog dialog:new ArrayList<>(dialogs)) {
-            try{if(dialog.isShowing())dialog.dismiss();}catch(RuntimeException ignored){}
+        List<Dialog> dialogs = OPEN.remove(activity);
+        if (dialogs == null) return;
+        for (Dialog dialog : new ArrayList<>(dialogs)) {
+            try { if (dialog.isShowing()) dialog.dismiss(); } catch (RuntimeException ignored) {}
         }
     }
+
     private static final class MaxScroll extends ScrollView {
         private final int max;
-        MaxScroll(Context context, int max) {super(context);this.max=max;setFillViewport(false);setClipToPadding(false);}
+        MaxScroll(Context context, int max) { super(context); this.max = max; setFillViewport(false); setClipToPadding(false); }
         @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(max, MeasureSpec.AT_MOST));
         }

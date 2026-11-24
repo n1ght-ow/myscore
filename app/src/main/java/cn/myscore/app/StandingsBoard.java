@@ -74,7 +74,10 @@ final class StandingsBoard {
         for (Standings.Row row : peersRows) rankWidth = Math.max(rankWidth, width(rankPaint, row.rank()));
         rankWidth += ui.dp(8);
 
+        int headerTint = ui.tonal;
+        int zebraTint = Ui.alpha(ui.tonal, ui.dark ? 85 : 65);
         LinearLayout labelRow = ui.row();
+        labelRow.setBackgroundColor(headerTint);
         for (int index = 0; index < order.size(); index++) {
             int column = order.get(index);
             String key = section.columns().get(column);
@@ -87,18 +90,27 @@ final class StandingsBoard {
             header.setAccessibilityHeading(true);
             labelRow.addView(header, new LinearLayout.LayoutParams(widths[index], -2));
         }
-        View nameHeader = identity(identity, rankLabel, "", crests, ranks, rankWidth, "", true, false);
+        View nameHeader = identity(identity, rankLabel, "", crests, ranks, rankWidth, "", true, false, ScoreFeedOrganizer.Zone.NONE);
+        nameHeader.setBackgroundColor(headerTint);
         addRow(names, nameRows, nameHeader);
         addRow(metrics, metricRows, labelRow);
         String lastStatus = "";
+        int totalRows = section.rows().size();
+        int rowIndex = 0;
+        java.util.LinkedHashSet<ScoreFeedOrganizer.Zone> seenZones = new java.util.LinkedHashSet<>();
         for (Standings.Row row : section.rows()) {
             if (!row.status().equals(lastStatus)) {
                 addRow(names, nameRows, zone(row.status()));
                 addRow(metrics, metricRows, zone(""));
             }
             lastStatus = row.status();
+            int parsedRank = parseRank(row.rank(), rowIndex + 1);
+            ScoreFeedOrganizer.Zone rowZone = ScoreFeedOrganizer.standingsZone(competition, section.title(), parsedRank, totalRows);
+            if (rowZone != ScoreFeedOrganizer.Zone.NONE) seenZones.add(rowZone);
+            boolean even = (rowIndex++ % 2 == 1);
             View name = identity(row.name(), row.rank(), row.logo(), crests, ranks, rankWidth, row.subtitle(), false,
-                row.opensTeam(competition));
+                row.opensTeam(competition), rowZone);
+            if (even) name.setBackgroundColor(zebraTint);
             boolean linked = teamLink(name, competition, row);
             List<String> announcement = new ArrayList<>();
             if (!row.rank().isBlank()) announcement.add(rankA11y + " " + row.rank());
@@ -106,6 +118,7 @@ final class StandingsBoard {
             if (!row.subtitle().isBlank()) announcement.add(StandingsEnglish.text(row.subtitle()));
             addRow(names, nameRows, name);
             LinearLayout numbers = ui.row();
+            if (even) numbers.setBackgroundColor(zebraTint);
             for (int index = 0; index < order.size(); index++) {
                 int column = order.get(index);
                 String value = value(row, column);
@@ -148,7 +161,7 @@ final class StandingsBoard {
                     horizontal.getLayoutParams().width = available - rail;
                     for (int index = 0; index < nameRows.size(); index++) {
                         View name = nameRows.get(index), number = metricRows.get(index);
-                        int minimum = "standings-zone".equals(name.getTag()) ? 0 : index == 0 ? 36 : 44;
+                        int minimum = "standings-zone".equals(name.getTag()) ? 0 : index == 0 ? 38 : 46;
                         int height = Math.max(ui.dp(minimum), Math.max(naturalHeight(name, rail), naturalHeight(number, metricsWidth)));
                         name.getLayoutParams().height = height;
                         number.getLayoutParams().height = height;
@@ -159,11 +172,84 @@ final class StandingsBoard {
         };
         grid.setGravity(Gravity.TOP);
         grid.setTag("standings-table");
-        grid.setBackground(ui.shape(ui.surface, Ui.CARD_RADIUS));
-        grid.setPaddingRelative(ui.dp(8), ui.dp(4), ui.dp(8), ui.dp(4));
+        grid.setBackground(ui.panel());
+        grid.setClipToOutline(true);
+        grid.setPaddingRelative(0, 0, ui.dp(6), ui.dp(4));
         grid.addView(names, new LinearLayout.LayoutParams(-2, -2));
         grid.addView(horizontal, new LinearLayout.LayoutParams(-2, -2));
-        return grid;
+
+        if (seenZones.isEmpty()) return grid;
+        LinearLayout wrapper = ui.column();
+        wrapper.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+        wrapper.addView(zoneLegend(competition, seenZones));
+        return wrapper;
+    }
+
+    private LinearLayout zoneLegend(String competition, java.util.Set<ScoreFeedOrganizer.Zone> zones) {
+        LinearLayout legend = ui.row();
+        legend.setPadding(ui.dp(4), ui.dp(10), ui.dp(4), ui.dp(2));
+        int count = 0;
+        for (ScoreFeedOrganizer.Zone z : zones) {
+            String label = zoneLabel(competition, z);
+            if (label.isBlank()) continue;
+            LinearLayout item = ui.row();
+            View dot = new View(ui.c);
+            dot.setBackground(ui.shape(ui.zoneColor(z), 4));
+            LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(ui.dp(8), ui.dp(8));
+            dp.setMarginEnd(ui.dp(5));
+            item.addView(dot, dp);
+            item.addView(ui.text(label, 11, ui.muted, false));
+            LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(-2, -2);
+            if (count++ > 0) ip.setMarginStart(ui.dp(12));
+            legend.addView(item, ip);
+        }
+        return legend;
+    }
+
+    private static String zoneLabel(String competition, ScoreFeedOrganizer.Zone z) {
+        return switch (competition) {
+            case "epl" -> switch (z) {
+                case CHAMPIONS -> "UCL";
+                case PLAY_IN -> "Europa";
+                case RELEGATION -> "Relegation";
+                default -> "";
+            };
+            case "ucl" -> switch (z) {
+                case QUALIFY -> "Top 8 · R16";
+                case CHAMPIONS -> "Playoffs";
+                case RELEGATION -> "Eliminated";
+                default -> "";
+            };
+            case "nba" -> switch (z) {
+                case QUALIFY -> "Playoffs";
+                case PLAY_IN -> "Play-In";
+                default -> "";
+            };
+            case "nfl" -> switch (z) {
+                case QUALIFY -> "Leader";
+                case CHAMPIONS -> "Playoffs";
+                default -> "";
+            };
+            case "f1" -> switch (z) {
+                case PODIUM_GOLD -> "1st";
+                case PODIUM_SILVER -> "2nd";
+                case PODIUM_BRONZE -> "3rd";
+                default -> "";
+            };
+            case "cs2" -> switch (z) {
+                case PODIUM_GOLD -> "Top 3";
+                case QUALIFY -> "Top 12";
+                default -> "";
+            };
+            default -> "";
+        };
+    }
+
+    private static int parseRank(String rank, int fallback) {
+        if (rank == null || rank.isBlank()) return fallback;
+        String digits = rank.replaceAll("[^0-9]", "");
+        if (digits.isEmpty()) return fallback;
+        try { return Integer.parseInt(digits); } catch (NumberFormatException e) { return fallback; }
     }
 
     static List<Integer> columnOrder(List<String> columns) {
@@ -188,12 +274,20 @@ final class StandingsBoard {
     }
 
     private View identity(String name, String rank, String logo, boolean crests, boolean ranks, int rankWidth,
-                          String subtitle, boolean header, boolean linked) {
+                          String subtitle, boolean header, boolean linked, ScoreFeedOrganizer.Zone rowZone) {
         LinearLayout row = ui.row();
-        row.setPaddingRelative(0, ui.dp(5), ui.dp(8), ui.dp(5));
+        row.setPaddingRelative(0, ui.dp(6), ui.dp(8), ui.dp(6));
+        View zoneBar = new View(ui.c);
+        int zColor = header ? android.graphics.Color.TRANSPARENT : ui.zoneColor(rowZone);
+        zoneBar.setBackground(ui.shape(zColor, 2));
+        LinearLayout.LayoutParams zbp = new LinearLayout.LayoutParams(ui.dp(3.5f), ui.dp(24));
+        zbp.setMarginEnd(ui.dp(4));
+        row.addView(zoneBar, zbp);
+
         String shownName = header ? name : StandingsEnglish.name(name);
         if (ranks) {
-            TextView number = ui.text(rank, header ? 11 : 12, ui.muted, true);
+            int rankColor = !header && zColor != android.graphics.Color.TRANSPARENT ? zColor : ui.muted;
+            TextView number = ui.text(rank, header ? 11 : 12, rankColor, true);
             number.setGravity(Gravity.CENTER);
             if (header) number.setAccessibilityHeading(true);
             row.addView(number, new LinearLayout.LayoutParams(rankWidth, -2));
@@ -207,7 +301,6 @@ final class StandingsBoard {
         LinearLayout words = ui.column();
         TextView title = ui.text(shownName, header ? 11 : 14, header ? ui.muted : ui.text, true);
         if (header) title.setAccessibilityHeading(true);
-        if (linked) title.setPaintFlags(title.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         words.addView(title);
         if (!subtitle.isBlank()) words.addView(ui.text(StandingsEnglish.text(subtitle), 11, ui.muted, false));
         row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
@@ -235,8 +328,8 @@ final class StandingsBoard {
     View round(Standings.Round round) {
         LinearLayout results = ui.column();
         results.setTag("standings-round");
-        results.setPaddingRelative(ui.dp(12), ui.dp(4), ui.dp(12), ui.dp(4));
-        results.setBackground(ui.shape(ui.surface, Ui.CARD_RADIUS));
+        results.setPaddingRelative(ui.dp(14), ui.dp(4), ui.dp(14), ui.dp(4));
+        results.setBackground(ui.panel());
         Paint scorePaint = ui.text("", 15, ui.text, true).getPaint();
         int scoreWidth = ui.dp(24);
         boolean crests = false;

@@ -74,6 +74,7 @@ public final class StandingsActivity extends Activity {
         board = new StandingsBoard(ui);
         store = new StandingsStore(getCacheDir());
         String competition = getIntent().getStringExtra(EXTRA_COMPETITION);
+        if (competition == null || competition.isBlank()) competition = getIntent().getStringExtra("league");
         String initial = competitionLinkLabel(competition).isBlank()
             ? initialSport(getIntent().getStringExtra("group")) : competition;
         if (saved != null) {
@@ -132,15 +133,25 @@ public final class StandingsActivity extends Activity {
         bar.addView(refresh);
         shell.addView(bar, new LinearLayout.LayoutParams(-1, -2));
 
-        HorizontalScrollView sports = tabs(LABELS, -1, index -> selectSport(SPORTS[index], true));
-        LinearLayout menu = (LinearLayout) sports.getChildAt(0);
-        for (int index = 0; index < SPORTS.length; index++) sportTabs.put(SPORTS[index], (TextView)menu.getChildAt(index));
+        HorizontalScrollView sports = new HorizontalScrollView(this);
+        sports.setHorizontalScrollBarEnabled(false);
+        LinearLayout menu = ui.row();
+        menu.setPadding(ui.dp(16), ui.dp(6), ui.dp(16), ui.dp(10));
+        for (int index = 0; index < SPORTS.length; index++) {
+            String sportId = SPORTS[index];
+            TextView chip = ui.chip(LABELS.get(index), false, () -> selectSport(sportId, true));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            if (index > 0) lp.setMarginStart(ui.dp(8));
+            menu.addView(chip, lp);
+            sportTabs.put(sportId, chip);
+        }
+        sports.addView(menu, new HorizontalScrollView.LayoutParams(-2, -2));
         shell.addView(sports, new LinearLayout.LayoutParams(-1, -2));
         shell.addView(ui.divider());
 
         scroll = new ScrollView(this);
         LinearLayout reading = ui.column();
-        reading.setPaddingRelative(ui.dp(16), ui.dp(12), ui.dp(16), ui.dp(24));
+        reading.setPaddingRelative(ui.dp(16), ui.dp(14), ui.dp(16), ui.dp(28));
         info = ui.text("", 12, ui.muted, false);
         info.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         content = ui.column();
@@ -171,11 +182,13 @@ public final class StandingsActivity extends Activity {
     private HorizontalScrollView tabs(List<String> labels, int selectedIndex, IntConsumer select) {
         HorizontalScrollView strip = new HorizontalScrollView(this);
         strip.setHorizontalScrollBarEnabled(false);
-        LinearLayout row = ui.row();
+        LinearLayout row = ui.segmentedTrack();
         for (int index = 0; index < labels.size(); index++) {
             int item = index;
             TextView tab = ui.tab(labels.get(index), index == selectedIndex, () -> select.accept(item));
-            row.addView(tab, new LinearLayout.LayoutParams(-2, -2));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            if (index > 0) lp.setMarginStart(ui.dp(4));
+            row.addView(tab, lp);
             if (index == selectedIndex) reveal(tab);
         }
         strip.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
@@ -199,7 +212,15 @@ public final class StandingsActivity extends Activity {
         long now = System.currentTimeMillis();
         shown = store.hot(sport, now);
         failed = false;
-        for (Map.Entry<String, TextView> entry : sportTabs.entrySet()) ui.selectTab(entry.getValue(), entry.getKey().equals(sport));
+        for (Map.Entry<String, TextView> entry : sportTabs.entrySet()) {
+            boolean on = entry.getKey().equals(sport);
+            TextView chip = entry.getValue();
+            int accent = ui.sportAccent(entry.getKey(), "");
+            chip.setSelected(on);
+            chip.setTextColor(on ? Color.WHITE : ui.muted);
+            chip.setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            ui.clickableDrawable(chip, on ? ui.shape(accent, Ui.PILL_RADIUS) : ui.outlined(ui.tonal, ui.border, Ui.PILL_RADIUS), Ui.PILL_RADIUS);
+        }
         reveal(sportTabs.get(sport));
         shell.requestLayout();
         if (shown == null || !shown.fresh(now)) load(false);
@@ -294,9 +315,23 @@ public final class StandingsActivity extends Activity {
         content.removeAllViews();
         if (resetScroll) restoredPosition = 0;
         if (selected.equals("cs2")) {
-            TextView tournaments = ui.textButton("Tournaments", () -> startActivity(new Intent(this, Cs2EventActivity.class)));
-            content.addView(tournaments, new LinearLayout.LayoutParams(-1, -2));
-            ui.gap(content, 8);
+            int accent = ui.sportAccent("cs2", "CS2");
+            LinearLayout banner = ui.row();
+            banner.setPadding(ui.dp(16), ui.dp(14), ui.dp(14), ui.dp(14));
+            ui.clickableDrawable(banner, ui.heroPanel(accent), Ui.CARD_RADIUS + 2);
+            banner.setFocusable(true);
+            banner.setOnClickListener(v -> startActivity(new Intent(this, Cs2EventActivity.class)));
+            banner.addView(ui.iconBadge("bracket", accent, Ui.alpha(accent, ui.dark ? 45 : 30), 42, 20));
+            LinearLayout words = ui.column();
+            words.addView(ui.text("CS2 Tournaments & Brackets", 15, ui.text, true));
+            ui.gap(words, 2);
+            words.addView(ui.text("Explore active Swiss stages, playoffs & matchups", 12, ui.muted, false));
+            LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(0, -2, 1f);
+            wp.setMarginStart(ui.dp(12));
+            banner.addView(words, wp);
+            banner.addView(new Ui.Icon(this, "chevron", ui.muted), new LinearLayout.LayoutParams(ui.dp(18), ui.dp(18)));
+            content.addView(banner, new LinearLayout.LayoutParams(-1, -2));
+            ui.gap(content, 14);
         }
         if (shown == null) {
             addStatus();

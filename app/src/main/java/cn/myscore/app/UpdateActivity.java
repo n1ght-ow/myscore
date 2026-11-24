@@ -58,12 +58,12 @@ public final class UpdateActivity extends Activity {
         if(isPad){int side=Math.max(ui.dp(24),(getResources().getDisplayMetrics().widthPixels-ui.dp(560))/2);body.setPadding(side,ui.dp(28),side,ui.dp(28));}
         scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
 
-        LinearLayout mainCard=ui.column();mainCard.setBackground(ui.panel());mainCard.setPadding(ui.dp(20),ui.dp(20),ui.dp(20),ui.dp(20));
+        LinearLayout mainCard=ui.column();mainCard.setBackground(ui.heroPanel(ui.primary));mainCard.setPadding(ui.dp(20),ui.dp(20),ui.dp(20),ui.dp(20));
         LinearLayout product=ui.row();
-        Ui.Icon mark=new Ui.Icon(this,"mark",ui.text);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(ui.dp(28),ui.dp(28));mp.setMarginEnd(ui.dp(10));product.addView(mark,mp);
-        product.addView(ui.text("N1ghtScore",20,ui.text,true),new LinearLayout.LayoutParams(0,-2,1));
-        TextView version=ui.text("Version "+BuildConfig.VERSION_NAME,12,ui.muted,false);
-        version.setBackground(ui.shape(ui.tonal,12));version.setPadding(ui.dp(10),ui.dp(4),ui.dp(10),ui.dp(4));
+        FrameLayout markBox=ui.iconBadge("mark",ui.text,ui.tonal,36,24);
+        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(ui.dp(36),ui.dp(36));mp.setMarginEnd(ui.dp(12));product.addView(markBox,mp);
+        product.addView(ui.display("N1ghtScore",20,ui.text),new LinearLayout.LayoutParams(0,-2,1));
+        TextView version=ui.badge("v"+BuildConfig.VERSION_NAME,ui.primarySoft,ui.primary);
         LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(-2,-2);vp.setMarginStart(ui.dp(8));product.addView(version,vp);
         mainCard.addView(product);ui.gap(mainCard,14);mainCard.addView(ui.divider());ui.gap(mainCard,16);
 

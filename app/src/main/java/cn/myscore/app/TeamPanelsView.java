@@ -88,32 +88,33 @@ final class TeamPanelsView {
         host.addView((View)section);
         LinearLayout header = this.ui.row();
         header.setTag((Object)"team-panel-header");
-        header.setPadding(0, 0, 0, 0);
+        header.setPadding(0, this.ui.dp(2), 0, this.ui.dp(2));
         String name = this.teamName(teamId);
-        header.addView((View)Logos.view(this.ui, this.teamLogo(teamId), name, 22), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(22.0f), this.ui.dp(22.0f)));
-        TextView title = this.ui.text(name, 14, this.ui.text, true);
+        header.addView((View)Logos.view(this.ui, this.teamLogo(teamId), name, 24), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(24.0f), this.ui.dp(24.0f)));
+        TextView title = this.ui.text(name, 15, this.ui.text, true);
         title.setPadding(this.ui.dp(8.0f), 0, 0, 0);
         header.addView((View)title, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        header.addView((View)this.ui.text(players(rows.size()), 11, this.ui.muted, false));
+        header.addView((View)this.ui.badge(players(rows.size()), this.ui.tonal, this.ui.muted));
         header.setContentDescription((CharSequence)EnglishDisplay.text(name + ", " + players(rows.size())));
         section.addView((View)header);
-        this.ui.gap(section, 6);
+        this.ui.gap(section, 8);
         if (score != null && !score.isEmpty()) {
             LinearLayout band = this.ui.row();
             band.setTag((Object)"team-map-score");
-            band.setBackground((Drawable)this.ui.shape(this.ui.tonal, 10));
-            band.setPadding(this.ui.dp(8.0f), this.ui.dp(6.0f), this.ui.dp(8.0f), this.ui.dp(6.0f));
+            band.setBackground((Drawable)this.ui.outlined(this.ui.tonal, this.ui.border, 12));
+            band.setPadding(this.ui.dp(8.0f), this.ui.dp(8.0f), this.ui.dp(8.0f), this.ui.dp(8.0f));
             StringBuilder description = new StringBuilder(name);
             for (Map.Entry<String, String> cell : score.entrySet()) {
                 LinearLayout item = this.ui.column();
                 item.setGravity(1);
                 String labelText = EnglishDisplay.text(cell.getKey());
-                TextView label2 = this.ui.text(labelText, 11, this.ui.muted, false);
+                TextView label2 = this.ui.text(labelText, 10, this.ui.muted, true);
                 label2.setGravity(17);
                 String valueText = EnglishDisplay.text(cell.getValue());
-                TextView value = this.ui.text(valueText, 13, this.ui.text, true);
+                boolean isTotal = cell.getKey().equals("总分");
+                TextView value = this.ui.text(valueText, 14, isTotal ? this.ui.primary : this.ui.text, true);
                 value.setGravity(17);
-                if (cell.getKey().equals("总分")) {
+                if (isTotal) {
                     value.setTag((Object)"team-map-score-total");
                 }
                 item.addView((View)label2);
@@ -123,7 +124,7 @@ final class TeamPanelsView {
             }
             band.setContentDescription((CharSequence)EnglishDisplay.text(description.toString()));
             section.addView((View)band);
-            this.ui.gap(section, 6);
+            this.ui.gap(section, 8);
         }
         ArrayList<HorizontalScrollView> scrollers = new ArrayList<HorizontalScrollView>();
         if (rows.isEmpty()) {
@@ -193,11 +194,13 @@ final class TeamPanelsView {
         }
         row.addView((View)words, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         if (!status.isBlank() && !status.equals("—")) {
-            TextView badge = this.ui.text(statusText, 11, this.ui.text, true);
+            String lower = statusText.toLowerCase(java.util.Locale.ROOT);
+            boolean out = lower.contains("out") || lower.contains("suspend") || lower.contains("缺阵");
+            boolean doubtful = lower.contains("question") || lower.contains("day") || lower.contains("doubt") || lower.contains("出战成疑");
+            int fill = out ? this.ui.errorSoft : doubtful ? this.ui.warnSoft : this.ui.tonal;
+            int ink = out ? this.ui.error : doubtful ? this.ui.warn : this.ui.text;
+            TextView badge = this.ui.badge(statusText, fill, ink);
             badge.setTag((Object)"team-panel-injury-status");
-            badge.setGravity(17);
-            badge.setPadding(this.ui.dp(6.0f), this.ui.dp(2.0f), this.ui.dp(6.0f), this.ui.dp(2.0f));
-            badge.setBackground((Drawable)this.ui.shape(this.ui.tonal, 4));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
             params.setMarginStart(this.ui.dp(8.0f));
             row.addView((View)badge, (ViewGroup.LayoutParams)params);

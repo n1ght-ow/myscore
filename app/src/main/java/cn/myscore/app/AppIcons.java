@@ -69,7 +69,7 @@ final class AppIcons {
                 p.moveTo(9.6f,9.2f);p.cubicTo(9.6f,6.2f,14.6f,6.2f,14.6f,9.2f);p.cubicTo(14.6f,11.0f,12.0f,11.4f,12.0f,13.4f);
                 p.addCircle(12f,16.7f,0.55f,Path.Direction.CW);
             }
-            case "matches" -> {
+            case "matches", "trophy" -> {
                 p.moveTo(6.5f,3.5f);p.lineTo(17.5f,3.5f);p.lineTo(17.5f,8.5f);
                 p.cubicTo(17.5f,12.2f,15.0f,14.5f,12.0f,14.5f);
                 p.cubicTo(9.0f,14.5f,6.5f,12.2f,6.5f,8.5f);p.close();
@@ -89,6 +89,35 @@ final class AppIcons {
             }
             case "chevron-down" -> {
                 p.moveTo(7f,9.5f);p.lineTo(12f,14.5f);p.lineTo(17f,9.5f);
+            }
+            case "layers" -> {
+                p.moveTo(12f,4f);p.lineTo(20f,8.5f);p.lineTo(12f,13f);p.lineTo(4f,8.5f);p.close();
+                p.moveTo(4f,12.5f);p.lineTo(12f,17f);p.lineTo(20f,12.5f);
+                p.moveTo(4f,16.5f);p.lineTo(12f,21f);p.lineTo(20f,16.5f);
+            }
+            case "broadcast" -> {
+                p.addCircle(12f,12f,2.2f,Path.Direction.CW);
+                p.arcTo(6.5f,6.5f,17.5f,17.5f,-45f,90f,true);
+                p.arcTo(6.5f,6.5f,17.5f,17.5f,135f,90f,true);
+                p.arcTo(3.5f,3.5f,20.5f,20.5f,-48f,96f,true);
+                p.arcTo(3.5f,3.5f,20.5f,20.5f,132f,96f,true);
+            }
+            case "arrow-up-right" -> {
+                p.moveTo(7f,17f);p.lineTo(17f,7f);
+                p.moveTo(9f,7f);p.lineTo(17f,7f);p.lineTo(17f,15f);
+            }
+            case "bell" -> {
+                p.moveTo(6.5f,16f);p.lineTo(17.5f,16f);
+                p.moveTo(18f,16f);p.lineTo(16.5f,13.5f);p.lineTo(16.5f,10f);
+                p.cubicTo(16.5f,6.8f,14.5f,4.5f,12f,4.5f);
+                p.cubicTo(9.5f,4.5f,7.5f,6.8f,7.5f,10f);
+                p.lineTo(7.5f,13.5f);p.lineTo(6f,16f);
+                p.moveTo(10f,18.5f);p.quadTo(12f,20.5f,14f,18.5f);
+            }
+            case "bracket" -> {
+                p.moveTo(4f,6f);p.lineTo(9f,6f);p.lineTo(9f,12f);p.lineTo(4f,12f);
+                p.moveTo(9f,9f);p.lineTo(14.5f,9f);p.lineTo(14.5f,15.5f);p.lineTo(20f,15.5f);
+                p.moveTo(4f,18f);p.lineTo(14.5f,18f);p.lineTo(14.5f,15.5f);
             }
             default -> {return null;}
         }

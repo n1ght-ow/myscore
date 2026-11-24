@@ -5,169 +5,273 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
-import android.graphics.Color;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Recycles schedule rows; a refresh only rewrites visible text until the section shape changes. */
+/** Modern fixture & result cards for Team Hub with form badges, Home/Away pills, and inline reminders. */
 final class TeamScheduleAdapter extends BaseAdapter {
     interface Host { void openMatch(Match match); void toggleSubscription(Match match); boolean isSubscribed(String id); boolean isBusy(); }
     private final Ui ui;
     private final Host host;
-    private final List<TeamScheduleRow> rows=new ArrayList<>();
+    private final List<TeamScheduleRow> rows = new ArrayList<>();
     private ListView list;
 
-    TeamScheduleAdapter(Ui ui,Host host){this.ui=ui;this.host=host;}
-    void attach(ListView list){this.list=list;}
-    void refreshSubscriptions(){notifyDataSetChanged();}
+    TeamScheduleAdapter(Ui ui, Host host) { this.ui = ui; this.host = host; }
+    void attach(ListView list) { this.list = list; }
+    void refreshSubscriptions() { notifyDataSetChanged(); }
 
     boolean updateRows(List<TeamScheduleRow> next) {
-        boolean same=next.size()==rows.size();
-        if(same)for(int i=0;i<next.size();i++)if(!next.get(i).key.equals(rows.get(i).key)){same=false;break;}
-        rows.clear();rows.addAll(next);
-        if(!same||(list!=null&&list.isLayoutRequested())){notifyDataSetChanged();return true;}
-        if(list==null)return false;
-        int first=list.getFirstVisiblePosition();
-        for(int i=0;i<list.getChildCount();i++){int position=first+i;if(position>=0&&position<rows.size())getView(position,list.getChildAt(i),list);}
+        boolean same = next.size() == rows.size();
+        if (same) for (int i = 0; i < next.size(); i++) if (!next.get(i).key.equals(rows.get(i).key)) { same = false; break; }
+        rows.clear();
+        rows.addAll(next);
+        if (!same || (list != null && list.isLayoutRequested())) { notifyDataSetChanged(); return true; }
+        if (list == null) return false;
+        int first = list.getFirstVisiblePosition();
+        for (int i = 0; i < list.getChildCount(); i++) {
+            int position = first + i;
+            if (position >= 0 && position < rows.size()) getView(position, list.getChildAt(i), list);
+        }
         return false;
     }
 
-    @Override public int getCount(){return rows.size();}
-    @Override public TeamScheduleRow getItem(int position){return rows.get(position);}
-    @Override public long getItemId(int position){return position;}
-    @Override public boolean hasStableIds(){return false;}
-    @Override public int getViewTypeCount(){return 3;}
-    @Override public int getItemViewType(int position){return rows.get(position).type;}
+    @Override public int getCount() { return rows.size(); }
+    @Override public TeamScheduleRow getItem(int position) { return rows.get(position); }
+    @Override public long getItemId(int position) { return position; }
+    @Override public boolean hasStableIds() { return false; }
+    @Override public int getViewTypeCount() { return 3; }
+    @Override public int getItemViewType(int position) { return rows.get(position).type; }
 
-    @Override public View getView(int position,View convertView,ViewGroup parent) {
-        TeamScheduleRow row=rows.get(position);
-        if(row.type==TeamScheduleRow.SECTION) {
-            TextView text=(TextView)convertView;
-            if(text==null) {
-                text=ui.text("",13,ui.text,true);
-                text.setPadding(ui.dp(4),ui.dp(12),0,ui.dp(6));
+    @Override public View getView(int position, View convertView, ViewGroup parent) {
+        TeamScheduleRow row = rows.get(position);
+        if (row.type == TeamScheduleRow.SECTION) {
+            TextView text = (TextView) convertView;
+            if (text == null) {
+                text = ui.eyebrow("", ui.muted);
+                text.setPadding(ui.dp(4), ui.dp(14), 0, ui.dp(8));
             }
             text.setText(row.title);
-            text.setTextColor(row.title.startsWith("Live")?ui.primary:ui.text);
+            text.setTextColor(row.title.startsWith("Live") ? ui.live : ui.muted);
             return text;
         }
-        if(row.type==TeamScheduleRow.NOTE) {
-            LinearLayout box=(LinearLayout)convertView;
-            if(box==null) {
-                box=ui.column();
+        if (row.type == TeamScheduleRow.NOTE) {
+            LinearLayout box = (LinearLayout) convertView;
+            if (box == null) {
+                box = ui.column();
                 box.setBackground(ui.panel());
-                box.setPadding(ui.dp(18),ui.dp(20),ui.dp(18),ui.dp(20));
-                TextView title=ui.text("",18,ui.text,true);
-                TextView message=ui.text("",14,ui.muted,false);
-                message.setLineSpacing(ui.dp(5),1);
-                message.setPadding(0,ui.dp(8),0,0);
-                box.addView(title);box.addView(message);
-                box.setTag(new NoteHolder(title,message));
+                box.setPadding(ui.dp(18), ui.dp(16), ui.dp(18), ui.dp(16));
+                TextView title = ui.text("", 15, ui.text, true);
+                TextView message = ui.text("", 13, ui.muted, false);
+                message.setLineSpacing(ui.dp(4), 1);
+                message.setPadding(0, ui.dp(6), 0, 0);
+                box.addView(title);
+                box.addView(message);
+                box.setTag(new NoteHolder(title, message));
             }
-            NoteHolder holder=(NoteHolder)box.getTag();
+            NoteHolder holder = (NoteHolder) box.getTag();
             holder.title.setText(row.title);
             holder.message.setText(row.message);
-            holder.message.setVisibility(row.message==null||row.message.isEmpty()?View.GONE:View.VISIBLE);
+            holder.message.setVisibility(row.message == null || row.message.isEmpty() ? View.GONE : View.VISIBLE);
             return box;
         }
-        Object tag=convertView==null?null:convertView.getTag();
-        MatchHolder holder=tag instanceof MatchHolder?(MatchHolder)tag:new MatchHolder();
+        Object tag = convertView == null ? null : convertView.getTag();
+        MatchHolder holder = tag instanceof MatchHolder ? (MatchHolder) tag : new MatchHolder();
         holder.root.setTag(holder);
         holder.bind(row);
         return holder.root;
     }
 
-    private void text(TextView view,String value){if(!value.contentEquals(view.getText()))view.setText(value);}
+    private void text(TextView view, String value) { if (!value.contentEquals(view.getText())) view.setText(value); }
 
     private static final class NoteHolder {
-        final TextView title,message;
-        NoteHolder(TextView title,TextView message){this.title=title;this.message=message;}
+        final TextView title, message;
+        NoteHolder(TextView title, TextView message) { this.title = title; this.message = message; }
     }
 
     private final class MatchHolder {
-        final LinearLayout root,card;
-        final LinearLayout numbers;
-        final TextView date,state,opponent,detail,result;
+        final LinearLayout root, card, numbers, livePill, footer, remindPill;
+        final TextView date, sidePill, state, liveText, opponent, detail, timeText, remindLabel, resultBadge;
         final Ui.ScoreText score;
-        final Ui.MatchTime foot;
-        final LinearLayout footer;
-        final FrameLayout action;
-        final Ui.Icon calendar;
+        final Ui.Icon remindIcon;
+        final FrameLayout crestWrap;
         final Logos.Crest crest;
+        final View footDivider;
         final int scoreWidth;
         TeamScheduleRow row;
 
         MatchHolder() {
-            root=ui.column();root.setPadding(0,0,0,ui.dp(8));
-            card=ui.column();card.setBackground(ui.panel());card.setPadding(ui.dp(16),ui.dp(11),ui.dp(14),ui.dp(6));
-            ui.clickable(card,ui.surface,Ui.CARD_RADIUS);card.setFocusable(true);
-            card.setOnClickListener(v->{if(row!=null&&row.match!=null)host.openMatch(row.match);});
-            card.setMinimumHeight(ui.dp(72));
-            LinearLayout top=ui.row();
-            date=ui.text("",12,ui.muted,false);top.addView(date,new LinearLayout.LayoutParams(0,-2,1));
-            state=ui.text("",12,ui.muted,true);state.setGravity(Gravity.END);state.setPadding(ui.dp(8),0,0,0);
-            top.addView(state,new LinearLayout.LayoutParams(-2,-2));
-            card.addView(top);ui.gap(card,8);
-            LinearLayout main=ui.row();
-            crest=Logos.crest(ui,24,false);main.addView(crest.box,new LinearLayout.LayoutParams(ui.dp(24),ui.dp(24)));
-            LinearLayout middle=ui.column();
-            opponent=ui.text("",15,ui.text,true);middle.addView(opponent);
-            detail=ui.text("",11,ui.muted,false);detail.setPadding(0,ui.dp(4),0,0);middle.addView(detail);
-            LinearLayout.LayoutParams middleParams=new LinearLayout.LayoutParams(0,-2,1);
-            middleParams.setMarginStart(ui.dp(10));main.addView(middle,middleParams);
-            scoreWidth=Math.max(ui.dp(60),ui.scoreColumnWidth(20));
-            numbers=ui.column();numbers.setGravity(Gravity.CENTER);
-            score=ui.score("","",false,20);numbers.addView(score,new LinearLayout.LayoutParams(-1,-2));
-            result=ui.text("",11,ui.primary,true);result.setGravity(Gravity.CENTER);result.setPadding(0,ui.dp(2),0,0);numbers.addView(result);
-            LinearLayout.LayoutParams numbersParams=new LinearLayout.LayoutParams(scoreWidth,-2);
-            numbersParams.setMarginStart(ui.dp(10));main.addView(numbers,numbersParams);
+            root = ui.column();
+            root.setPadding(0, 0, 0, ui.dp(10));
+            card = ui.column();
+            card.setPadding(ui.dp(16), ui.dp(13), ui.dp(16), ui.dp(12));
+            ui.clickableDrawable(card, ui.panel(), Ui.CARD_RADIUS);
+            card.setFocusable(true);
+            card.setOnClickListener(v -> { if (row != null && row.match != null) host.openMatch(row.match); });
+
+            // Top meta row: Date + Home/Away pill + Status/Live pill
+            LinearLayout top = ui.row();
+            date = ui.text("", 12, ui.muted, true);
+            top.addView(date, new LinearLayout.LayoutParams(-2, -2));
+            sidePill = ui.badge("", ui.tonal, ui.muted);
+            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, -2);
+            sp.setMarginStart(ui.dp(8));
+            top.addView(sidePill, sp);
+            top.addView(new View(ui.c), new LinearLayout.LayoutParams(0, 1, 1f));
+            livePill = ui.liveBadge("LIVE");
+            liveText = (TextView) livePill.getChildAt(1);
+            livePill.setVisibility(View.GONE);
+            top.addView(livePill);
+            state = ui.badge("", ui.tonal, ui.muted);
+            top.addView(state);
+            card.addView(top);
+            ui.gap(card, 11);
+
+            // Center row: Opponent crest + Name/Detail + Score + W/D/L pill
+            LinearLayout main = ui.row();
+            crestWrap = new FrameLayout(ui.c);
+            crestWrap.setBackground(ui.outlined(ui.tonal, ui.border, 12));
+            crest = Logos.crest(ui, 26, false);
+            crestWrap.addView(crest.box, new FrameLayout.LayoutParams(ui.dp(26), ui.dp(26), Gravity.CENTER));
+            main.addView(crestWrap, new LinearLayout.LayoutParams(ui.dp(38), ui.dp(38)));
+
+            LinearLayout middle = ui.column();
+            opponent = ui.text("", 15, ui.text, true);
+            middle.addView(opponent);
+            detail = ui.text("", 12, ui.muted, false);
+            detail.setPadding(0, ui.dp(2), 0, 0);
+            middle.addView(detail);
+            LinearLayout.LayoutParams middleParams = new LinearLayout.LayoutParams(0, -2, 1f);
+            middleParams.setMarginStart(ui.dp(12));
+            main.addView(middle, middleParams);
+
+            scoreWidth = Math.max(ui.dp(66), ui.scoreColumnWidth(20));
+            numbers = ui.row();
+            numbers.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+            score = ui.score("", "", false, 20);
+            numbers.addView(score, new LinearLayout.LayoutParams(-2, -2));
+            resultBadge = ui.formPill("W");
+            LinearLayout.LayoutParams rbp = (LinearLayout.LayoutParams) resultBadge.getLayoutParams();
+            rbp.setMarginStart(ui.dp(8));
+            numbers.addView(resultBadge, rbp);
+            LinearLayout.LayoutParams numbersParams = new LinearLayout.LayoutParams(-2, -2);
+            numbersParams.setMarginStart(ui.dp(10));
+            main.addView(numbers, numbersParams);
             card.addView(main);
-            ui.gap(card,8);card.addView(ui.divider());ui.gap(card,2);
-            footer=ui.column();
-            LinearLayout controls=ui.row();
-            foot=ui.new MatchTime();
-            controls.addView(foot,new LinearLayout.LayoutParams(0,-2,1));
-            action=new FrameLayout(ui.c);
-            calendar=new Ui.Icon(ui.c,"calendar-add",ui.muted);
-            action.addView(calendar,new FrameLayout.LayoutParams(ui.dp(24),ui.dp(24),Gravity.CENTER));
-            action.setFocusable(true);ui.clickable(action,Color.TRANSPARENT,24);
-            action.setOnClickListener(v->{if(row!=null)host.toggleSubscription(row.match);});
-            LinearLayout.LayoutParams actionParams=new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48));
-            actionParams.setMarginStart(ui.dp(8));controls.addView(action,actionParams);footer.addView(controls);card.addView(footer);
-            root.addView(card,new LinearLayout.LayoutParams(-1,-2));
+
+            // Clean footer row: kickoff time + Remind/Saved pill (hidden when no time/action needed)
+            footDivider = ui.divider();
+            LinearLayout.LayoutParams fdp = new LinearLayout.LayoutParams(-1, ui.dp(1));
+            fdp.topMargin = ui.dp(11);
+            fdp.bottomMargin = ui.dp(8);
+            card.addView(footDivider, fdp);
+
+            footer = ui.row();
+            Ui.Icon clockIcon = new Ui.Icon(ui.c, "clock", ui.dim);
+            LinearLayout.LayoutParams cip = new LinearLayout.LayoutParams(ui.dp(14), ui.dp(14));
+            cip.setMarginEnd(ui.dp(6));
+            footer.addView(clockIcon, cip);
+            timeText = ui.text("", 12, ui.muted, true);
+            footer.addView(timeText, new LinearLayout.LayoutParams(0, -2, 1f));
+
+            remindPill = ui.row();
+            remindPill.setGravity(Gravity.CENTER);
+            remindPill.setMinimumHeight(ui.dp(34));
+            remindPill.setPadding(ui.dp(11), ui.dp(5), ui.dp(12), ui.dp(5));
+            remindIcon = new Ui.Icon(ui.c, "bell", ui.text);
+            LinearLayout.LayoutParams rip = new LinearLayout.LayoutParams(ui.dp(14), ui.dp(14));
+            rip.setMarginEnd(ui.dp(5));
+            remindPill.addView(remindIcon, rip);
+            remindLabel = ui.text("Remind", 12, ui.text, true);
+            remindPill.addView(remindLabel);
+            remindPill.setFocusable(true);
+            remindPill.setOnClickListener(v -> { if (row != null) host.toggleSubscription(row.match); });
+            footer.addView(remindPill);
+            card.addView(footer);
+
+            root.addView(card, new LinearLayout.LayoutParams(-1, -2));
         }
 
         void bind(TeamScheduleRow value) {
-            row=value;
-            text(date,value.displayDate());
-            text(state,value.displayState());
-            state.setTextColor(value.match.live()?ui.primary:value.match.cancelled()||value.match.state.equals("delayed")?ui.error:ui.muted);
-            text(opponent,value.displayOpponent());
-            text(detail,value.side.isEmpty()?value.displayDetail():value.displaySide()+" · "+value.displayDetail());
-            boolean scored=!value.score.isEmpty();
-            numbers.setVisibility(scored||!value.result.isEmpty()?View.VISIBLE:View.GONE);
-            String own=value.match.displayScore(value.home),other=value.match.displayScore(!value.home);
-            score.setScore(own,other,scored);score.setResultColors(ui.scoreColor(value.match,value.home),ui.scoreColor(value.match,!value.home));
-            boolean subscribed=host.isSubscribed(value.match.id);
-            boolean eligible=value.match.scheduled()&&value.match.timeConfirmed&&value.match.start>System.currentTimeMillis();
-            action.setVisibility(eligible?View.VISIBLE:View.GONE);
-            int actionWidth=scored?scoreWidth:ui.dp(48);
-            if(action.getLayoutParams().width!=actionWidth){action.getLayoutParams().width=actionWidth;action.requestLayout();}
-            action.setEnabled(!host.isBusy());action.setAlpha(host.isBusy()?0.5f:subscribed?1f:Ui.ACTION_ICON_ALPHA);
-            foot.bind(value.displayTime(),value.match.source);
-            calendar.set(subscribed?"calendar-check":"calendar-add",subscribed?ui.primary:ui.muted);
-            action.setContentDescription((subscribed?"Remove match against ":"Add match against ")+value.displayOpponent()+(subscribed?" from calendar":" to calendar"));
-            score.setVisibility(scored?View.VISIBLE:View.GONE);
-            text(result,value.displayResult());
-            result.setVisibility(value.result.isEmpty()?View.GONE:View.VISIBLE);
-            result.setTextColor("胜".equals(value.result)?ui.primary:"平".equals(value.result)?ui.muted:ui.error);
-            Logos.bind(crest,value.home?value.match.awayLogo:value.match.homeLogo,value.opponent);
-            card.setContentDescription(value.displayDate()+", "+value.displayTime()
-                +(value.side.isEmpty()?"":", "+value.displaySide())+", vs "+value.displayOpponent()
-                +", "+value.displayState()+(scored?", score "+value.score:""));
+            row = value;
+            boolean live = value.match.live();
+            ui.clickableDrawable(card, live ? ui.liveCardBg() : ui.panel(), Ui.CARD_RADIUS);
+
+            text(date, value.displayDate());
+            String sideText = value.displaySide();
+            if (sideText.isEmpty()) {
+                sidePill.setVisibility(View.GONE);
+            } else {
+                sidePill.setVisibility(View.VISIBLE);
+                text(sidePill, sideText);
+                boolean isHome = "Home".equalsIgnoreCase(sideText);
+                sidePill.setBackground(ui.shape(isHome ? ui.infoSoft : ui.tonal, Ui.PILL_RADIUS));
+                sidePill.setTextColor(isHome ? ui.info : ui.muted);
+            }
+
+            if (live) {
+                livePill.setVisibility(View.VISIBLE);
+                state.setVisibility(View.GONE);
+                text(liveText, value.displayState().isBlank() ? "LIVE" : value.displayState());
+            } else {
+                livePill.setVisibility(View.GONE);
+                state.setVisibility(View.VISIBLE);
+                text(state, value.displayState());
+                boolean warn = value.match.cancelled() || value.match.state.equals("delayed");
+                state.setBackground(ui.shape(warn ? ui.errorSoft : ui.tonal, Ui.PILL_RADIUS));
+                state.setTextColor(warn ? ui.error : ui.muted);
+            }
+
+            text(opponent, value.displayOpponent());
+            String detailText = value.displayDetail();
+            text(detail, detailText);
+            detail.setVisibility(detailText.isBlank() ? View.GONE : View.VISIBLE);
+
+            boolean scored = !value.score.isEmpty();
+            String res = value.displayResult();
+            numbers.setVisibility(scored || !res.isEmpty() ? View.VISIBLE : View.GONE);
+            String own = value.match.displayScore(value.home), other = value.match.displayScore(!value.home);
+            score.setScore(own, other, scored);
+            score.setResultColors(ui.scoreColor(value.match, value.home), ui.scoreColor(value.match, !value.home));
+            score.setVisibility(scored ? View.VISIBLE : View.GONE);
+
+            if (res.isEmpty()) {
+                resultBadge.setVisibility(View.GONE);
+            } else {
+                resultBadge.setVisibility(View.VISIBLE);
+                text(resultBadge, res);
+                int fill = "W".equals(res) ? ui.primarySoft : "L".equals(res) ? ui.errorSoft : ui.warnSoft;
+                int ink = "W".equals(res) ? ui.primary : "L".equals(res) ? ui.error : ui.warn;
+                resultBadge.setTextColor(ink);
+                resultBadge.setBackground(ui.outlined(fill, Ui.alpha(ink, 65), 8));
+            }
+
+            boolean subscribed = host.isSubscribed(value.match.id);
+            boolean eligible = value.match.scheduled() && value.match.timeConfirmed && value.match.start > System.currentTimeMillis();
+            boolean showRemind = eligible || subscribed;
+            String startTime = value.displayTime();
+            boolean showFooter = showRemind || (!value.match.finalised() && !startTime.isBlank());
+            footDivider.setVisibility(showFooter ? View.VISIBLE : View.GONE);
+            footer.setVisibility(showFooter ? View.VISIBLE : View.GONE);
+            text(timeText, startTime);
+
+            remindPill.setVisibility(showRemind ? View.VISIBLE : View.GONE);
+            remindPill.setEnabled(!host.isBusy());
+            remindPill.setAlpha(host.isBusy() ? 0.5f : 1f);
+            remindIcon.set(subscribed ? "calendar-check" : "bell", subscribed ? ui.primary : ui.text);
+            text(remindLabel, subscribed ? "Saved" : "Remind");
+            remindLabel.setTextColor(subscribed ? ui.primary : ui.text);
+            ui.clickableDrawable(remindPill, subscribed
+                ? ui.outlined(ui.primarySoft, Ui.alpha(ui.primary, 100), Ui.PILL_RADIUS)
+                : ui.outlined(ui.tonal, ui.border, Ui.PILL_RADIUS), Ui.PILL_RADIUS);
+            remindPill.setContentDescription((subscribed ? "Remove match against " : "Add match against ") + value.displayOpponent() + (subscribed ? " from calendar" : " to calendar"));
+
+            Logos.bind(crest, value.home ? value.match.awayLogo : value.match.homeLogo, value.opponent);
+            card.setContentDescription(value.displayDate() + ", " + value.displayTime()
+                + (value.side.isEmpty() ? "" : ", " + value.displaySide()) + ", vs " + value.displayOpponent()
+                + ", " + value.displayState() + (scored ? ", score " + value.score : ""));
         }
     }
 }

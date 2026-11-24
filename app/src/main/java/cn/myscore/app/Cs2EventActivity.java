@@ -55,6 +55,7 @@ public final class Cs2EventActivity extends Activity {
     private Future<?> catalogRequest, graphRequest, relationsRequest;
     private int generation, stageIndex, groupIndex, restoreY;
     private String graphSelection = "";
+    private String requestedTournament = "";
     private boolean graphFailed, catalogFailed;
 
     @Override protected void onCreate(Bundle saved) {
@@ -66,6 +67,8 @@ public final class Cs2EventActivity extends Activity {
         catch (RuntimeException ignored) { day = LocalDate.now(Match.ZONE); }
         String id = saved == null ? getIntent().getStringExtra("event") : saved.getString("event");
         String name = saved == null ? getIntent().getStringExtra("name") : saved.getString("name");
+        String tournamentExtra = saved == null ? getIntent().getStringExtra("tournament") : saved.getString("tournament");
+        requestedTournament = tournamentExtra == null ? "" : tournamentExtra.trim();
         if (saved != null) {
             stageIndex = saved.getInt("stage");
             groupIndex = saved.getInt("group");
@@ -119,25 +122,36 @@ public final class Cs2EventActivity extends Activity {
             }
         };
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPaddingRelative(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(24));
-        LinearLayout picker = ui.row();
-        picker.setMinimumHeight(ui.dp(48));
-        eventPicker = ui.text("Choose a tournament", 26, ui.text, true);
-        eventPicker.setLetterSpacing(-.028f);
-        eventPicker.setAccessibilityHeading(true);
-        eventPicker.setPaddingRelative(0, ui.dp(8), ui.dp(8), ui.dp(8));
-        picker.addView(eventPicker, new LinearLayout.LayoutParams(0, -2, 1));
-        eventChevron = new Ui.Icon(this, "chevron", ui.muted);
-        eventChevron.setRotation(90);
-        picker.addView(eventChevron, new LinearLayout.LayoutParams(ui.dp(20), ui.dp(20)));
-        ui.clickable(picker, Color.TRANSPARENT, 12);
+        body.setPaddingRelative(ui.dp(16), ui.dp(10), ui.dp(16), ui.dp(28));
+        int accent = ui.sportAccent("cs2", "CS2");
+        LinearLayout picker = ui.column();
+        picker.setPadding(ui.dp(16), ui.dp(14), ui.dp(14), ui.dp(14));
+        ui.clickableDrawable(picker, ui.heroPanel(accent), Ui.CARD_RADIUS + 2);
         picker.setFocusable(true);
         picker.setOnClickListener(view -> pickEvent());
+        LinearLayout topBadgeRow = ui.row();
+        topBadgeRow.addView(ui.eyebrow("CS2 Tournament", accent), new LinearLayout.LayoutParams(0, -2, 1f));
+        LinearLayout switchPill = ui.row();
+        switchPill.setPadding(ui.dp(9), ui.dp(3), ui.dp(8), ui.dp(3));
+        switchPill.setBackground(ui.outlined(ui.tonal, ui.border, Ui.PILL_RADIUS));
+        switchPill.addView(ui.text("Switch", 11, ui.text, true));
+        eventChevron = new Ui.Icon(this, "chevron", ui.muted);
+        eventChevron.setRotation(90);
+        LinearLayout.LayoutParams ecp = new LinearLayout.LayoutParams(ui.dp(13), ui.dp(13));
+        ecp.setMarginStart(ui.dp(4));
+        switchPill.addView(eventChevron, ecp);
+        topBadgeRow.addView(switchPill);
+        picker.addView(topBadgeRow);
+        ui.gap(picker, 6);
+        eventPicker = ui.display("Choose a tournament", 22, ui.text);
+        eventPicker.setAccessibilityHeading(true);
+        picker.addView(eventPicker, new LinearLayout.LayoutParams(-1, -2));
+        ui.gap(picker, 4);
+        eventDates = ui.text("", 12, ui.muted, false);
+        picker.addView(eventDates);
         eventControl = picker;
         body.addView(picker, new LinearLayout.LayoutParams(-1, -2));
-        eventDates = ui.text("", 12, ui.muted, false);
-        body.addView(eventDates);
-        ui.gap(body, 12);
+        ui.gap(body, 14);
         phases = ui.column();
         body.addView(phases, new LinearLayout.LayoutParams(-1, -2));
         content = ui.column();
@@ -195,7 +209,20 @@ public final class Cs2EventActivity extends Activity {
             withCurrent.add(0, event);
             catalog = withCurrent;
         }
-        if (event == null && !catalog.isEmpty()) selectEvent(catalog.get(0));
+        if (event == null && !catalog.isEmpty()) {
+            Cs2Tournament.Event matched = catalog.get(0);
+            if (!requestedTournament.isBlank()) {
+                String want = EnglishDisplay.tournament(requestedTournament).toLowerCase(java.util.Locale.ROOT);
+                for (Cs2Tournament.Event entry : catalog) {
+                    String cand = EnglishDisplay.tournament(entry.name()).toLowerCase(java.util.Locale.ROOT);
+                    if (cand.equals(want) || cand.contains(want) || want.contains(cand)) {
+                        matched = entry;
+                        break;
+                    }
+                }
+            }
+            selectEvent(matched);
+        }
         else if (event != null) {
             for (Cs2Tournament.Event entry : catalog) if (entry.id().equals(event.id())) { event = entry; break; }
             header();
@@ -448,16 +475,18 @@ public final class Cs2EventActivity extends Activity {
     private void tabs(LinearLayout host, List<String> labels, int current, IntConsumer selection) {
         HorizontalScrollView bar = new HorizontalScrollView(this);
         bar.setHorizontalScrollBarEnabled(false);
-        LinearLayout row = ui.row();
+        LinearLayout row = ui.segmentedTrack();
         for (int index = 0; index < labels.size(); index++) {
             int item = index;
             TextView tab = ui.tab(labels.get(index), item == current, () -> { if (item != current) selection.accept(item); });
-            row.addView(tab, new LinearLayout.LayoutParams(-2, -2));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            if (index > 0) lp.setMarginStart(ui.dp(4));
+            row.addView(tab, lp);
             if (item == current) tab.post(() -> bar.scrollTo(Math.max(0, tab.getRight() - bar.getWidth()), 0));
         }
         bar.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
         host.addView(bar, new LinearLayout.LayoutParams(-1, -2));
-        ui.gap(host, 8);
+        ui.gap(host, 10);
     }
 
     private void message(String label) { content.addView(ui.text(label, 12, ui.muted, false)); }

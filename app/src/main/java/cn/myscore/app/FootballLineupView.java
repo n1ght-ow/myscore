@@ -44,7 +44,7 @@ final class FootballLineupView {
         Match match = this.detail.match;
         boolean home = !selected.equals(match.awayId);
         String teamId = home ? match.homeId : match.awayId;
-        LinearLayout selector = this.ui.row();
+        LinearLayout selector = this.ui.segmentedTrack();
         selector.setTag((Object)"football-team-filter");
         String[] ids = new String[]{match.homeId, match.awayId};
         String[] names = new String[]{match.home, match.away};
@@ -53,12 +53,16 @@ final class FootballLineupView {
             String id = ids[i];
             boolean on = i == 0 ? home : !home;
             LinearLayout choice = this.ui.row();
-            choice.setGravity(17);
-            choice.setPadding(this.ui.dp(8.0f), this.ui.dp(10.0f), this.ui.dp(8.0f), this.ui.dp(10.0f));
-            choice.setMinimumHeight(this.ui.dp(48.0f));
-            this.ui.clickable((View)choice, on ? this.ui.tonal : this.ui.surface, 24);
+            choice.setGravity(android.view.Gravity.CENTER);
+            choice.setPadding(this.ui.dp(10.0f), this.ui.dp(9.0f), this.ui.dp(10.0f), this.ui.dp(9.0f));
+            choice.setMinimumHeight(this.ui.dp(44.0f));
+            if (on) {
+                this.ui.clickableDrawable(choice, this.ui.outlined(this.ui.elevated, this.ui.borderStrong, Ui.CONTROL_RADIUS - 2), Ui.CONTROL_RADIUS - 2);
+            } else {
+                this.ui.clickable(choice, Color.TRANSPARENT, Ui.CONTROL_RADIUS - 2);
+            }
             choice.addView((View)Logos.view(this.ui, logos[i], names[i], 22));
-            TextView name = this.ui.text(names[i], 12, on ? this.ui.text : this.ui.muted, on);
+            TextView name = this.ui.text(names[i], 13, on ? this.ui.text : this.ui.muted, on);
             name.setPadding(this.ui.dp(8.0f), 0, 0, 0);
             choice.addView((View)name, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             choice.setContentDescription((CharSequence)EnglishDisplay.text(names[i] + (on ? ", selected" : ", view lineup")));
@@ -67,7 +71,7 @@ final class FootballLineupView {
             choice.setOnClickListener(v -> changed.accept(id));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1.0f);
             if (i > 0) {
-                params.setMarginStart(this.ui.dp(8.0f));
+                params.setMarginStart(this.ui.dp(4.0f));
             }
             selector.addView((View)choice, (ViewGroup.LayoutParams)params);
         }
@@ -77,14 +81,19 @@ final class FootballLineupView {
         String formation = this.detail.facts.stream().filter(f -> f.label().equals(team + " 阵型")).map(MatchDetail.Fact::value).findFirst().orElse("");
         MatchDetail.Table starters = this.find(teamId, "首发");
         LinearLayout title = this.ui.row();
-        title.addView((View)this.ui.text("Starting lineup", 16, this.ui.text, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        title.addView((View)this.ui.text(formation.isBlank() ? "Formation not available" : formation, 16, this.ui.text, true));
+        title.addView((View)this.ui.text("Starting XI", 16, this.ui.text, true), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+        if (!formation.isBlank()) {
+            title.addView(this.ui.badge(formation, this.ui.primarySoft, this.ui.primary));
+        } else {
+            title.addView((View)this.ui.text("Formation TBD", 12, this.ui.muted, false));
+        }
 
         List lines = starters == null ? List.of() : FootballLayout.lines(starters, formation);
         LinearLayout pitchHost = this.ui.column(), benchHost = this.ui.column();
-        title.setMinimumHeight(this.ui.dp(48));pitchHost.addView(title);
+        title.setMinimumHeight(this.ui.dp(44));
+        pitchHost.addView(title);
         title.setTag("football-starters-heading");
-        this.ui.gap(pitchHost, 12);
+        this.ui.gap(pitchHost, 10);
         this.body.addView(this.ui.columns(pitchHost, benchHost, 360, 24), new LinearLayout.LayoutParams(-1, -2));
         if (lines.isEmpty()) {
             pitchHost.addView((View)this.ui.text("Full starting positions are not available", 13, this.ui.muted, false));
@@ -92,43 +101,47 @@ final class FootballLineupView {
                 this.list(starters, pitchHost);
             }
         } else {
+            int grassA = this.ui.dark ? Color.parseColor("#0D3B2A") : Color.parseColor("#136443");
+            int grassB = this.ui.dark ? Color.parseColor("#114633") : Color.parseColor("#17744E");
             LinearLayout pitch = new LinearLayout(this.ui.c){
-                private final Paint ink;
-                {
-                    this.ink = new Paint(1);
-                }
+                private final Paint ink = new Paint(Paint.ANTI_ALIAS_FLAG);
+                private final Paint turf = new Paint(Paint.ANTI_ALIAS_FLAG);
 
                 protected void onDraw(Canvas canvas) {
                     super.onDraw(canvas);
-                    this.ink.setColor(FootballLineupView.this.ui.secondary);
-                    this.ink.setAlpha(48);
-                    this.ink.setStyle(Paint.Style.STROKE);
-                    this.ink.setStrokeWidth((float)FootballLineupView.this.ui.dp(1.0f));
                     float w = this.getWidth();
                     float h = this.getHeight();
-                    float m = FootballLineupView.this.ui.dp(8.0f);
-                    float box = w * 0.135f;
-                    float goal = w * 0.05f;
+                    int stripes = 8;
+                    float stripeH = h / (float)stripes;
+                    this.turf.setStyle(Paint.Style.FILL);
+                    for (int s = 0; s < stripes; s++) {
+                        this.turf.setColor((s & 1) == 0 ? grassA : grassB);
+                        canvas.drawRect(0f, s * stripeH, w, (s + 1) * stripeH + 1f, this.turf);
+                    }
+                    this.ink.setColor(Color.WHITE);
+                    this.ink.setAlpha(68);
+                    this.ink.setStyle(Paint.Style.STROKE);
+                    this.ink.setStrokeWidth((float)FootballLineupView.this.ui.dp(1.2f));
+                    float m = FootballLineupView.this.ui.dp(10.0f);
+                    float box = w * 0.14f;
+                    float goal = w * 0.055f;
                     canvas.drawRect(m, m, w - m, h - m, this.ink);
                     canvas.drawLine(m, h * 0.5f, w - m, h * 0.5f, this.ink);
-                    int lineAlpha = this.ink.getAlpha();
-                    this.ink.setAlpha(32);
-                    canvas.drawCircle(w / 2.0f, h * 0.5f, w * 0.15f, this.ink);
-                    this.ink.setAlpha(lineAlpha);
+                    canvas.drawCircle(w / 2.0f, h * 0.5f, w * 0.145f, this.ink);
                     this.ink.setStyle(Paint.Style.FILL);
-                    canvas.drawCircle(w / 2.0f, h * 0.5f, (float)FootballLineupView.this.ui.dp(1.4f), this.ink);
+                    canvas.drawCircle(w / 2.0f, h * 0.5f, (float)FootballLineupView.this.ui.dp(2.0f), this.ink);
                     this.ink.setStyle(Paint.Style.STROKE);
                     canvas.drawRect(w * 0.22f, m, w * 0.78f, m + box, this.ink);
                     canvas.drawRect(w * 0.35f, m, w * 0.65f, m + goal, this.ink);
                     canvas.drawRect(w * 0.22f, h - m - box, w * 0.78f, h - m, this.ink);
                     canvas.drawRect(w * 0.35f, h - m - goal, w * 0.65f, h - m, this.ink);
-                    float spot = FootballLineupView.this.ui.dp(1.2f);
+                    float spot = FootballLineupView.this.ui.dp(1.6f);
                     this.ink.setStyle(Paint.Style.FILL);
-                    canvas.drawCircle(w / 2.0f, m + box * 0.62f, spot, this.ink);
-                    canvas.drawCircle(w / 2.0f, h - m - box * 0.62f, spot, this.ink);
+                    canvas.drawCircle(w / 2.0f, m + box * 0.64f, spot, this.ink);
+                    canvas.drawCircle(w / 2.0f, h - m - box * 0.64f, spot, this.ink);
                     this.ink.setStyle(Paint.Style.STROKE);
-                    canvas.drawArc(w / 2.0f - w * 0.1f, m + box * 0.62f - w * 0.1f, w / 2.0f + w * 0.1f, m + box * 0.62f + w * 0.1f, 25.0f, 130.0f, false, this.ink);
-                    canvas.drawArc(w / 2.0f - w * 0.1f, h - m - box * 0.62f - w * 0.1f, w / 2.0f + w * 0.1f, h - m - box * 0.62f + w * 0.1f, 205.0f, 130.0f, false, this.ink);
+                    canvas.drawArc(w / 2.0f - w * 0.1f, m + box * 0.64f - w * 0.1f, w / 2.0f + w * 0.1f, m + box * 0.64f + w * 0.1f, 25.0f, 130.0f, false, this.ink);
+                    canvas.drawArc(w / 2.0f - w * 0.1f, h - m - box * 0.64f - w * 0.1f, w / 2.0f + w * 0.1f, h - m - box * 0.64f + w * 0.1f, 205.0f, 130.0f, false, this.ink);
                     float corner = FootballLineupView.this.ui.dp(10.0f);
                     canvas.drawArc(m, m, m + corner * 2.0f, m + corner * 2.0f, 0.0f, 90.0f, false, this.ink);
                     canvas.drawArc(w - m - corner * 2.0f, m, w - m, m + corner * 2.0f, 90.0f, 90.0f, false, this.ink);
@@ -138,12 +151,11 @@ final class FootballLineupView {
             };
             pitch.setOrientation(LinearLayout.VERTICAL);
             pitch.setWillNotDraw(false);
-            GradientDrawable background = this.ui.panel();
-            background.setCornerRadius((float)this.ui.dp(20.0f));
+            GradientDrawable background = this.ui.outlined(grassA, Ui.alpha(this.ui.primary, 90), 22);
             pitch.setBackground((Drawable)background);
             pitch.setClipToOutline(true);
             pitch.setTag((Object)"football-pitch");
-            pitch.setPadding(this.ui.dp(6.0f), this.ui.dp(8.0f), this.ui.dp(6.0f), this.ui.dp(8.0f));
+            pitch.setPadding(this.ui.dp(6.0f), this.ui.dp(12.0f), this.ui.dp(6.0f), this.ui.dp(12.0f));
             float font = this.ui.c.getResources().getConfiguration().fontScale;
             ArrayList display = new ArrayList(lines);
             Collections.reverse(display);
@@ -167,11 +179,16 @@ final class FootballLineupView {
             }
             pitchHost.addView((View)pitch, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
             this.ui.gap(pitchHost, 8);
-            pitchHost.addView((View)this.ui.text(font >= 1.5f ? "Lines follow the starting formation · Tap a player for details" : "Starting shape is a guide, not average positions · Tap a player for details", 11, this.ui.muted, false));
+            pitchHost.addView((View)this.ui.text(font >= 1.5f ? "Lines follow the starting formation · Tap a player for details" : "Tap any player on the pitch for match stats", 11, this.ui.muted, false));
         }
         this.ui.gap(pitchHost, 12);
         this.legend(pitchHost);
-        TextView benchHeading=this.ui.text("Bench",16,this.ui.text,true);benchHeading.setMinimumHeight(this.ui.dp(48));benchHeading.setGravity(android.view.Gravity.CENTER_VERTICAL);benchHeading.setTag("football-bench-heading");benchHost.addView(benchHeading);this.ui.gap(benchHost,12);
+        TextView benchHeading = this.ui.text("Substitutes", 16, this.ui.text, true);
+        benchHeading.setMinimumHeight(this.ui.dp(44));
+        benchHeading.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        benchHeading.setTag("football-bench-heading");
+        benchHost.addView(benchHeading);
+        this.ui.gap(benchHost, 10);
         MatchDetail.Table bench = this.find(teamId, "替补");
         if (bench == null) {
             benchHost.addView((View)this.ui.text("Bench list is not available", 13, this.ui.muted, false));
@@ -212,15 +229,18 @@ final class FootballLineupView {
     private View pitchPlayer(DetailRows.Entry entry) {
         MatchDetail.Person person = entry.person();
         LinearLayout player = this.ui.column();
-        player.setGravity(17);
-        player.setPadding(this.ui.dp(1.0f), this.ui.dp(1.0f), this.ui.dp(1.0f), this.ui.dp(1.0f));
+        player.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        player.setPadding(this.ui.dp(2.0f), this.ui.dp(2.0f), this.ui.dp(2.0f), this.ui.dp(2.0f));
         player.setTag((Object)"football-pitch-player");
         FrameLayout holder = new FrameLayout(this.ui.c);
-        holder.addView(this.jersey(person, 42, 46, 15), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(42.0f), this.ui.dp(46.0f), 17));
+        holder.addView(this.jersey(person, 42, 46, 15, true), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(42.0f), this.ui.dp(46.0f), android.view.Gravity.CENTER));
         player.addView((View)holder, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, this.ui.dp(48.0f)));
-        TextView name = this.ui.text(this.shortName(person), 11, this.ui.text, true);
-        name.setGravity(17);
-        player.addView((View)name, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
+        TextView name = this.ui.text(this.shortName(person), 11, Color.WHITE, true);
+        name.setGravity(android.view.Gravity.CENTER);
+        name.setPadding(this.ui.dp(5), this.ui.dp(1.5f), this.ui.dp(5), this.ui.dp(1.5f));
+        name.setBackground(this.ui.shape(Color.argb(115, 6, 14, 10), 8));
+        name.setMaxLines(1);
+        player.addView((View)name, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
         View stats = this.stats(entry, false);
         if (stats != null) {
             this.ui.gap(player, 3);
@@ -334,12 +354,17 @@ final class FootballLineupView {
     }
 
     private View jersey(MatchDetail.Person person, int width, int height, int numberSp) {
+        return this.jersey(person, width, height, numberSp, false);
+    }
+
+    private View jersey(MatchDetail.Person person, int width, int height, int numberSp, boolean onPitch) {
         FrameLayout token = new FrameLayout(this.ui.c);
         boolean keeper = person != null && DetailParsers.label(person.position()).equals("门将");
-        token.addView((View)new Jersey(keeper), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(-1, -1));
-        TextView number = this.ui.text(person == null || person.jersey().isBlank() ? "—" : person.jersey(), numberSp, keeper ? this.ui.primary : this.ui.text, true);
+        token.addView((View)new Jersey(keeper, onPitch), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(-1, -1));
+        int ink = onPitch ? (keeper ? Color.parseColor("#181205") : Color.parseColor("#0A1510")) : (keeper ? this.ui.warn : this.ui.text);
+        TextView number = this.ui.text(person == null || person.jersey().isBlank() ? "—" : person.jersey(), numberSp, ink, true);
         number.setTextSize(1, (float)numberSp);
-        number.setGravity(17);
+        number.setGravity(android.view.Gravity.CENTER);
         number.setIncludeFontPadding(false);
         token.addView((View)number, (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(-1, -1));
         token.setImportantForAccessibility(2);
@@ -546,16 +571,18 @@ final class FootballLineupView {
     private final class Jersey
     extends View {
         private final boolean keeper;
+        private final boolean onPitch;
         private final Paint ink;
         private final Path shirt;
         private final Path collar;
 
-        Jersey(boolean keeper) {
+        Jersey(boolean keeper, boolean onPitch) {
             super(FootballLineupView.this.ui.c);
             this.ink = new Paint(1);
             this.shirt = new Path();
             this.collar = new Path();
             this.keeper = keeper;
+            this.onPitch = onPitch;
             this.setImportantForAccessibility(2);
         }
 
@@ -584,13 +611,17 @@ final class FootballLineupView {
             this.collar.moveTo(w * 0.37f, pad + h * 0.01f);
             this.collar.cubicTo(w * 0.43f, h * 0.17f, w * 0.57f, h * 0.17f, w * 0.63f, pad + h * 0.01f);
             this.ink.setStyle(Paint.Style.FILL);
-            this.ink.setColor(this.keeper ? FootballLineupView.this.blend(FootballLineupView.this.ui.tonal, FootballLineupView.this.ui.primary, 0.2f) : FootballLineupView.this.ui.tonal);
+            if (this.onPitch) {
+                this.ink.setColor(this.keeper ? Color.parseColor("#FBBF24") : Color.parseColor("#F4F8FA"));
+            } else {
+                this.ink.setColor(this.keeper ? FootballLineupView.this.ui.warnSoft : FootballLineupView.this.ui.tonal);
+            }
             canvas.drawPath(this.shirt, this.ink);
             this.ink.setStyle(Paint.Style.STROKE);
             this.ink.setStrokeJoin(Paint.Join.ROUND);
             this.ink.setStrokeCap(Paint.Cap.ROUND);
-            this.ink.setStrokeWidth((float)FootballLineupView.this.ui.dp(1.0f));
-            this.ink.setColor(this.keeper ? FootballLineupView.this.ui.primary : FootballLineupView.this.ui.line);
+            this.ink.setStrokeWidth((float)FootballLineupView.this.ui.dp(1.2f));
+            this.ink.setColor(this.onPitch ? (this.keeper ? Color.parseColor("#D97706") : Color.parseColor("#D5E5DE")) : (this.keeper ? FootballLineupView.this.ui.warn : FootballLineupView.this.ui.borderStrong));
             canvas.drawPath(this.shirt, this.ink);
             this.ink.setStrokeWidth((float)FootballLineupView.this.ui.dp(0.8f));
             this.ink.setAlpha(140);

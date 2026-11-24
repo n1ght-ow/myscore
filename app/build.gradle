@@ -7,8 +7,8 @@ android {
         applicationId 'cn.myscore.app'
         minSdk 28
         targetSdk 35
-        versionCode 63
-        versionName '4.14.0'
+        versionCode 64
+        versionName '4.15.0'
         testInstrumentationRunner providers.gradleProperty('instrumentationRunner').getOrElse('cn.myscore.app.SmokeInstrumentation')
     }
     compileOptions {

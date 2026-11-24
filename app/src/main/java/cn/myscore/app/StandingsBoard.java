@@ -1,5 +1,7 @@
 package cn.myscore.app;
 
+import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Paint;
 import android.view.Gravity;
 import android.view.View;
@@ -85,7 +87,7 @@ final class StandingsBoard {
             header.setAccessibilityHeading(true);
             labelRow.addView(header, new LinearLayout.LayoutParams(widths[index], -2));
         }
-        View nameHeader = identity(identity, rankLabel, "", crests, ranks, rankWidth, "", true);
+        View nameHeader = identity(identity, rankLabel, "", crests, ranks, rankWidth, "", true, false);
         addRow(names, nameRows, nameHeader);
         addRow(metrics, metricRows, labelRow);
         String lastStatus = "";
@@ -95,7 +97,9 @@ final class StandingsBoard {
                 addRow(metrics, metricRows, zone(""));
             }
             lastStatus = row.status();
-            View name = identity(row.name(), row.rank(), row.logo(), crests, ranks, rankWidth, row.subtitle(), false);
+            View name = identity(row.name(), row.rank(), row.logo(), crests, ranks, rankWidth, row.subtitle(), false,
+                row.opensTeam(competition));
+            boolean linked = teamLink(name, competition, row);
             List<String> announcement = new ArrayList<>();
             if (!row.rank().isBlank()) announcement.add(rankA11y + " " + row.rank());
             announcement.add(StandingsEnglish.name(row.name()));
@@ -113,7 +117,7 @@ final class StandingsBoard {
                 numbers.addView(cell, new LinearLayout.LayoutParams(widths[index], -2));
             }
             name.setScreenReaderFocusable(true);
-            name.setContentDescription(String.join(", ", announcement));
+            name.setContentDescription(String.join(", ", announcement) + (linked ? ", open team schedule" : ""));
             numbers.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
             addRow(metrics, metricRows, numbers);
         }
@@ -184,7 +188,7 @@ final class StandingsBoard {
     }
 
     private View identity(String name, String rank, String logo, boolean crests, boolean ranks, int rankWidth,
-                          String subtitle, boolean header) {
+                          String subtitle, boolean header, boolean linked) {
         LinearLayout row = ui.row();
         row.setPaddingRelative(0, ui.dp(5), ui.dp(8), ui.dp(5));
         String shownName = header ? name : StandingsEnglish.name(name);
@@ -203,10 +207,29 @@ final class StandingsBoard {
         LinearLayout words = ui.column();
         TextView title = ui.text(shownName, header ? 11 : 14, header ? ui.muted : ui.text, true);
         if (header) title.setAccessibilityHeading(true);
+        if (linked) title.setPaintFlags(title.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         words.addView(title);
         if (!subtitle.isBlank()) words.addView(ui.text(StandingsEnglish.text(subtitle), 11, ui.muted, false));
         row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         return row;
+    }
+
+    private boolean teamLink(View row, String competition, Standings.Row data) {
+        if (!data.opensTeam(competition) || !(ui.c instanceof Activity)) return false;
+        Team team = new Team();
+        team.league = competition;
+        team.id = data.teamId();
+        team.name = data.name();
+        team.logo = data.logo();
+        if (!team.usable()) return false;
+        ui.clickable(row, android.graphics.Color.TRANSPARENT, 0);
+        row.setMinimumWidth(ui.dp(48));
+        row.setMinimumHeight(ui.dp(48));
+        row.setFocusable(true);
+        row.setTooltipText("Open team schedule");
+        row.setOnClickListener(view -> ui.c.startActivity(new Intent(ui.c, TeamActivity.class)
+            .putExtra("team", team.json().toString())));
+        return true;
     }
 
     View round(Standings.Round round) {

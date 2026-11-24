@@ -16,9 +16,12 @@ import java.util.Set;
 final class LeagueStandings {
     private static final String API = "https://site.api.espn.com/apis/v2/sports/";
     private static final String SOURCE = "ESPN";
-    private static final List<String> SOCCER_COLUMNS = List.of("场", "胜", "平", "负", "净胜", "积分");
+    private static final List<String> SOCCER_COLUMNS = List.of("场", "胜", "平", "负", "净胜");
     private static final List<String> NBA_COLUMNS = List.of("胜", "负", "胜率", "胜差");
     private static final List<String> NFL_COLUMNS = List.of("胜", "负", "平", "胜率", "净胜");
+    private static final String GOALS_FOR = "进球", GOALS_AGAINST = "失球";
+    private static final String HOME = "主场", AWAY = "客场", LAST_TEN = "近10场", STREAK = "走势";
+    private static final String POINTS_FOR = "得分", POINTS_AGAINST = "失分";
 
     private LeagueStandings() {}
 
@@ -52,7 +55,7 @@ final class LeagueStandings {
         JSONObject standings = standings(holder);
         JSONArray entries = entries(standings);
         List<String> columns = soccerColumns(entries);
-        List<Standings.Row> rows = soccerRows("epl", entries, columns.size() > SOCCER_COLUMNS.size());
+        List<Standings.Row> rows = soccerRows("epl", entries, columns);
         sortByRank(rows);
         return new Standings(SOURCE, season(root, standings),
             List.of(new Standings.Section("积分榜", columns, rows)), List.of());
@@ -63,7 +66,7 @@ final class LeagueStandings {
         JSONObject standings = standings(holder);
         JSONArray entries = entries(standings);
         List<String> columns = soccerColumns(entries);
-        List<Standings.Row> rows = soccerRows("ucl", entries, columns.size() > SOCCER_COLUMNS.size());
+        List<Standings.Row> rows = soccerRows("ucl", entries, columns);
         sortByRank(rows);
         return new Standings(SOURCE, season(root, standings),
             List.of(new Standings.Section("联赛阶段", columns, rows)), List.of());
@@ -81,9 +84,10 @@ final class LeagueStandings {
             if (entries == null || entries.length() == 0) continue;
             String title = nbaTitle(child);
             if (title.isEmpty()) continue;
-            List<Standings.Row> rows = nbaRows(entries);
+            List<String> columns = nbaColumns(entries);
+            List<Standings.Row> rows = nbaRows(entries, columns);
             sortByRank(rows);
-            sections.add(new Standings.Section(title, NBA_COLUMNS, rows));
+            sections.add(new Standings.Section(title, columns, rows));
             if (season.isEmpty()) season = season(root, standings);
             east |= title.equals("东部");
             west |= title.equals("西部");
@@ -104,7 +108,8 @@ final class LeagueStandings {
                 if (standings == null) continue;
                 JSONArray entries = entries(standings);
                 String title = code + " " + divisionTitle(code, division);
-                sections.add(new Standings.Section(title, NFL_COLUMNS, nflRows(entries)));
+                List<String> columns = nflColumns(entries);
+                sections.add(new Standings.Section(title, columns, nflRows(entries, columns)));
                 conferences.add(code);
                 if (season.isEmpty()) season = season(root, standings);
             }
@@ -117,12 +122,17 @@ final class LeagueStandings {
 
     private static List<String> soccerColumns(JSONArray entries) {
         List<String> columns = new ArrayList<>(SOCCER_COLUMNS);
+        if (publishes(entries, "pointsFor", "pointsAgainst")) {
+            columns.add(GOALS_FOR);
+            columns.add(GOALS_AGAINST);
+        }
+        columns.add("积分");
         if (hasDeductions(entries)) columns.add("扣分");
         return columns;
     }
 
     private static List<Standings.Row> soccerRows(String league, JSONArray entries,
-                                                   boolean includeDeductions) throws Exception {
+                                                   List<String> columns) throws Exception {
         List<Standings.Row> rows = new ArrayList<>();
         for (JSONObject entry : objects(entries)) {
             JSONObject team = entry.optJSONObject("team");
@@ -135,54 +145,92 @@ final class LeagueStandings {
             values.add(display(stats, "ties"));
             values.add(display(stats, "losses"));
             values.add(display(stats, "pointDifferential"));
+            if (columns.contains(GOALS_FOR)) values.add(display(stats, "pointsFor"));
+            if (columns.contains(GOALS_AGAINST)) values.add(display(stats, "pointsAgainst"));
             values.add(display(stats, "points"));
-            if (includeDeductions) values.add(deduction(stats));
+            if (columns.contains("扣分")) values.add(deduction(stats));
             String status = noteStatus(league, entry.optJSONObject("note"));
-            rows.add(new Standings.Row(positiveRank(stats, "rank"), name, "", logo(team), values, status));
+            rows.add(new Standings.Row(positiveRank(stats, "rank"), name, "", logo(team), values, status,
+                text(team, "id")));
         }
         if (rows.isEmpty()) throw new Exception("积分榜缺少球队");
         return rows;
     }
 
-    private static List<Standings.Row> nbaRows(JSONArray entries) throws Exception {
+    private static List<String> nbaColumns(JSONArray entries) {
+        List<String> columns = new ArrayList<>(NBA_COLUMNS);
+        if (publishes(entries, "Home", "Road", "Last Ten Games", "streak")) {
+            columns.add(HOME);
+            columns.add(AWAY);
+            columns.add(LAST_TEN);
+            columns.add(STREAK);
+        }
+        return columns;
+    }
+
+    private static List<Standings.Row> nbaRows(JSONArray entries, List<String> columns) throws Exception {
         List<Standings.Row> rows = new ArrayList<>();
         for (JSONObject entry : objects(entries)) {
             JSONObject team = entry.optJSONObject("team");
             String name = teamName("nba", team);
             if (name.isEmpty()) continue;
             Map<String, JSONObject> stats = stats(entry);
-            List<String> values = List.of(
-                display(stats, "wins"),
-                display(stats, "losses"),
-                display(stats, "winPercent"),
-                display(stats, "gamesBehind")
-            );
+            List<String> values = new ArrayList<>();
+            values.add(display(stats, "wins"));
+            values.add(display(stats, "losses"));
+            values.add(display(stats, "winPercent"));
+            values.add(display(stats, "gamesBehind"));
+            if (columns.contains(HOME)) values.add(display(stats, "Home"));
+            if (columns.contains(AWAY)) values.add(display(stats, "Road"));
+            if (columns.contains(LAST_TEN)) values.add(display(stats, "Last Ten Games"));
+            if (columns.contains(STREAK)) values.add(display(stats, "streak"));
             String rank = positiveRank(stats, "playoffSeed");
             if (rank.isEmpty()) rank = positiveRank(stats, "rank");
-            rows.add(new Standings.Row(rank, name, "", logo(team), values, ""));
+            rows.add(new Standings.Row(rank, name, "", logo(team), values, "", text(team, "id")));
         }
         if (rows.isEmpty()) throw new Exception("NBA 积分榜缺少球队");
         return rows;
     }
 
-    private static List<Standings.Row> nflRows(JSONArray entries) throws Exception {
+    private static List<String> nflColumns(JSONArray entries) {
+        List<String> columns = new ArrayList<>(NFL_COLUMNS);
+        if (publishes(entries, "pointsFor", "pointsAgainst")) {
+            columns.add(POINTS_FOR);
+            columns.add(POINTS_AGAINST);
+        }
+        return columns;
+    }
+
+    private static List<Standings.Row> nflRows(JSONArray entries, List<String> columns) throws Exception {
         List<Standings.Row> rows = new ArrayList<>();
         for (JSONObject entry : objects(entries)) {
             JSONObject team = entry.optJSONObject("team");
             String name = teamName("nfl", team);
             if (name.isEmpty()) continue;
             Map<String, JSONObject> stats = stats(entry);
-            List<String> values = List.of(
-                display(stats, "wins"),
-                display(stats, "losses"),
-                display(stats, "ties"),
-                display(stats, "winPercent"),
-                firstDisplay(stats, "pointDifferential", "differential")
-            );
-            rows.add(new Standings.Row(positiveRank(stats, "playoffSeed"), name, "", logo(team), values, ""));
+            List<String> values = new ArrayList<>();
+            values.add(display(stats, "wins"));
+            values.add(display(stats, "losses"));
+            values.add(display(stats, "ties"));
+            values.add(display(stats, "winPercent"));
+            values.add(firstDisplay(stats, "pointDifferential", "differential"));
+            if (columns.contains(POINTS_FOR)) values.add(display(stats, "pointsFor"));
+            if (columns.contains(POINTS_AGAINST)) values.add(display(stats, "pointsAgainst"));
+            rows.add(new Standings.Row(positiveRank(stats, "playoffSeed"), name, "", logo(team), values, "",
+                text(team, "id")));
         }
         if (rows.isEmpty()) throw new Exception("NFL 分区缺少球队");
         return rows;
+    }
+
+    private static boolean publishes(JSONArray entries, String... names) {
+        List<JSONObject> all = objects(entries);
+        if (all.isEmpty()) return false;
+        for (JSONObject entry : all) {
+            Map<String, JSONObject> stats = stats(entry);
+            for (String name : names) if (!stats.containsKey(name)) return false;
+        }
+        return true;
     }
 
     private static void sortByRank(List<Standings.Row> rows) {

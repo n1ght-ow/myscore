@@ -22,6 +22,43 @@ public final class DetailParsers {
         if(value instanceof JSONObject){JSONObject o=(JSONObject)value;for(String key:new String[]{"displayValue","displayName","name","value"}){Object v=o.opt(key);if(v!=null&&v!=JSONObject.NULL&&!(v instanceof JSONObject)&&!(v instanceof JSONArray))return String.valueOf(v);}return "";}
         String text=String.valueOf(value);if(text.trim().startsWith("{"))try{return plain(new JSONObject(text));}catch(JSONException ignored){return text;}return text;
     }
+    static String venueLocation(JSONObject venue){
+        JSONObject address=obj(venue,"address");
+        Map<String,String> parts=new LinkedHashMap<>();
+        for(String key:new String[]{"city","region","state","country"}){
+            String value=text(address,key).strip();
+            if(!value.isEmpty())parts.putIfAbsent(value.toLowerCase(Locale.ROOT),value);
+        }
+        return String.join(" · ",parts.values());
+    }
+    static void venueFacts(MatchDetail detail,String label,JSONObject venue){
+        detail.fact(label,text(venue,"fullName").strip());
+        detail.fact("地点",venueLocation(venue));
+        if(Boolean.TRUE.equals(venue.opt("grass")))detail.fact("场地类型","草地");
+    }
+    static String cleanOfficialText(String value){
+        String clean=value==null?"":value.strip();
+        if(clean.isEmpty()||clean.equalsIgnoreCase("null")||clean.startsWith("{")||clean.startsWith("["))return "";
+        return clean;
+    }
+    static String officialRole(JSONObject official){
+        Object raw=official.opt("position");
+        String role="";
+        if(raw instanceof JSONObject){
+            JSONObject position=(JSONObject)raw;
+            role=text(position,"displayName");
+            if(role.isBlank())role=text(position,"name");
+            if(role.isBlank())role=text(position,"value");
+        }else role=plain(raw);
+        role=cleanOfficialText(role);
+        return role.isEmpty()?"Referee":role;
+    }
+    static String officialName(JSONObject official){
+        String name=cleanOfficialText(plain(text(official,"displayName")));
+        if(name.isEmpty())name=cleanOfficialText(plain(text(official,"fullName")));
+        if(name.isEmpty())name=cleanOfficialText(plain(text(official,"name")));
+        return name.isEmpty()?"Official":name;
+    }
     static String show(String s){return s.isBlank()?"—":s;}
     public static MatchDetail espn(JSONObject root,Match previous,long now)throws Exception {
         Competition c=Competition.find(previous.league);if(c==null)throw new Exception("未知赛事");
@@ -29,9 +66,12 @@ public final class DetailParsers {
         for(Match m:ms)if(m.id.equals(previous.id))actual=m;if(actual==null)throw new Exception("比赛详情身份不匹配");
         if(actual.event.isBlank())actual.event=previous.event;
         MatchDetail d=new MatchDetail(actual);d.fetched=now;
-        JSONObject gi=obj(root,"gameInfo");d.fact("场地",obj(gi,"venue").optString("fullName"));d.fact("观众",val(gi,"attendance"));d.fact("赛事",MatchLabel.of(actual));
-        JSONArray officials=arr(gi,"officials");for(int i=0;i<officials.length();i++){JSONObject o=officials.optJSONObject(i);if(o!=null){String role=val(o,"position");d.fact(role.isBlank()?"裁判":label(role),val(o,"displayName").isBlank()?val(o,"fullName"):val(o,"displayName"));}}
-        JSONArray comp=arr(header,"competitions");JSONObject co=comp.optJSONObject(0);if(co!=null){JSONArray notes=arr(co,"notes");for(int i=0;i<notes.length();i++)d.fact("说明",objAt(notes,i).optString("headline"));lineScores(d,co);}
+        JSONObject gi=obj(root,"gameInfo");venueFacts(d,"场地",obj(gi,"venue"));
+        JSONArray comp=arr(header,"competitions");JSONObject co=comp.optJSONObject(0);
+        if(co!=null&&Boolean.TRUE.equals(co.opt("neutralSite")))d.fact("中立场地","是");
+        d.fact("观众",val(gi,"attendance"));d.fact("赛事",MatchLabel.of(actual));
+        JSONArray officials=arr(gi,"officials");for(int i=0;i<officials.length();i++){JSONObject o=officials.optJSONObject(i);if(o!=null)d.fact(label(officialRole(o)),officialName(o));}
+        if(co!=null){JSONArray notes=arr(co,"notes");for(int i=0;i<notes.length();i++)d.fact("说明",objAt(notes,i).optString("headline"));lineScores(d,co);}
         teamStats(d,arr(obj(root,"boxscore"),"teams"));
         if(c.group.equals("足球"))d.stats.sort(Comparator.comparingInt(s->switch(s.label()){case "控球率 %"->0;case "射门"->1;case "射正"->2;case "角球"->3;case "成功传球"->4;case "传球"->5;default->6;}));
         if(c.group.equals("足球"))soccerRoster(d,arr(root,"rosters"),arr(root,"keyEvents"));else players(d,arr(obj(root,"boxscore"),"players"));
@@ -95,7 +135,10 @@ public final class DetailParsers {
     static JSONObject objAt(JSONArray a,int i){JSONObject o=a.optJSONObject(i);return o==null?new JSONObject():o;}
     public static MatchDetail f1(JSONObject event,JSONObject session,JSONObject core,Map<String,JSONObject> statistics,Match previous,long now)throws Exception {
         List<Match> all=Parsers.espn(new JSONObject().put("events",new JSONArray().put(event)),Competition.find("f1"),now);Match actual=null;for(Match m:all)if(m.id.equals(previous.id))actual=m;if(actual==null||!core.optString("id").equals(session.optString("id")))throw new Exception("F1 场次身份不匹配");
-        MatchDetail d=new MatchDetail(actual);d.fetched=now;d.fact("大奖赛",event.optString("name"));d.fact("场次",obj(session,"type").optString("abbreviation"));d.fact("赛道",obj(core,"venue").optString("fullName"));
+        MatchDetail d=new MatchDetail(actual);d.fetched=now;d.fact("大奖赛",event.optString("name"));d.fact("场次",obj(session,"type").optString("abbreviation"));
+        JSONObject circuit=obj(event,"circuit"),coreVenue=obj(core,"venue"),track=text(coreVenue,"fullName").isBlank()?circuit:coreVenue;
+        venueFacts(d,"赛道",track);
+        if(venueLocation(track).isBlank()&&track!=circuit)d.fact("地点",venueLocation(circuit));
         Map<String,String> names=new HashMap<>();JSONArray boardDrivers=arr(session,"competitors");for(int i=0;i<boardDrivers.length();i++){JSONObject p=objAt(boardDrivers,i);names.put(p.optString("id"),obj(p,"athlete").optString("displayName"));}
         List<JSONObject> drivers=new ArrayList<>();JSONArray cs=arr(core,"competitors");for(int i=0;i<cs.length();i++)drivers.add(objAt(cs,i));drivers.sort(Comparator.comparingInt(p->p.optInt("order",999)));
         MatchDetail.Table lineup=new MatchDetail.Table("lineup","本场车手与车队","车手","车队","车号");MatchDetail.Table results=new MatchDetail.Table("stats","场次成绩","车手","名次","车队","圈数","成绩 / 用时","积分","Q1","Q2","Q3");
@@ -115,7 +158,7 @@ public final class DetailParsers {
         for(String[] p:pairs)LABELS.put(p[0],p[1]);
         LABELS.put("Attacking Midfielder","前腰");LABELS.put("Defensive Midfielder","后腰");LABELS.put("Center Forward","中锋");LABELS.put("Left Forward","左边锋");LABELS.put("Right Forward","右边锋");LABELS.put("Center Midfielder","中前卫");
         LABELS.put("Forward","前锋");LABELS.put("Midfielder","中场");LABELS.put("Defender","后卫");LABELS.put("Winger","边锋");LABELS.put("Left Wing","左边锋");LABELS.put("Right Wing","右边锋");LABELS.put("Left Winger","左边锋");LABELS.put("Right Winger","右边锋");LABELS.put("Second Striker","影锋");LABELS.put("Sweeper","清道夫");LABELS.put("Left Wing Back","左翼卫");LABELS.put("Right Wing Back","右翼卫");
-        LABELS.put("Referee","裁判");LABELS.put("Head Referee","主裁判");LABELS.put("Assistant Referee","助理裁判");LABELS.put("Umpire","裁判");LABELS.put("FG","投篮");LABELS.put("3PT","三分");LABELS.put("FT","罚球");LABELS.put("OREB","前场板");LABELS.put("DREB","后场板");LABELS.put("+/-","正负值");
+        LABELS.put("Referee","裁判");LABELS.put("Head Referee","主裁判");LABELS.put("Assistant Referee","助理裁判");LABELS.put("Official","裁判");LABELS.put("FG","投篮");LABELS.put("3PT","三分");LABELS.put("FT","罚球");LABELS.put("OREB","前场板");LABELS.put("DREB","后场板");LABELS.put("+/-","正负值");
         LABELS.put("Offensive Rebounds","进攻篮板");LABELS.put("Defensive Rebounds","防守篮板");LABELS.put("interceptions","抄截");
         LABELS.put("Attacking Midfielder Left","左前腰");LABELS.put("Attacking Midfielder Right","右前腰");LABELS.put("Attacking Midfielder Center","前腰");LABELS.put("Left Attacking Midfielder","左前腰");LABELS.put("Right Attacking Midfielder","右前腰");
         LABELS.put("Defensive Midfielder Left","左后腰");LABELS.put("Defensive Midfielder Right","右后腰");LABELS.put("Left Defensive Midfielder","左后腰");LABELS.put("Right Defensive Midfielder","右后腰");LABELS.put("Left Center Back","左中卫");LABELS.put("Right Center Back","右中卫");

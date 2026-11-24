@@ -14,6 +14,11 @@ public final class EnglishDisplayTest {
         assertEquals("Nov 23 18:00", EnglishDisplay.text("11月23日 18:00"));
         assertEquals("World Cup qualifying · Europe", EnglishDisplay.text("世预赛 · 欧洲区"));
         assertEquals("PGL Singapore Major 2026 Stage 1", EnglishDisplay.tournament("PGL 新加坡 Major 2026 第1阶段"));
+        assertEquals("Location", EnglishDisplay.text("地点"));
+        assertEquals("Neutral site", EnglishDisplay.text("中立场地"));
+        assertEquals("Surface", EnglishDisplay.text("场地类型"));
+        assertEquals("Grass", EnglishDisplay.text("草地"));
+        assertEquals("Yes", EnglishDisplay.text("是"));
     }
 
     @Test public void watchCopyDoesNotExposeProviderSearchVocabulary() {

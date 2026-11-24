@@ -126,7 +126,12 @@ public final class Cs2EventInstrumentation extends Instrumentation {
             detail = waitForMonitorWithTimeout(monitor, 5000);
             check(detail != null, "match detail opens from diagram");
         } finally { removeMonitor(monitor); }
-        runOnMainSync(detail::finish);
+        runOnMainSync(() -> {
+            check(detail.getIntent().hasExtra(DetailActivity.EXTRA_PARENT_TOURNAMENT), "match carries its parent tournament");
+            check(detail.getWindow().getDecorView().findViewWithTag("cs2-tournament-overview") == null,
+                "a tournament child does not reopen its parent on top of itself");
+            detail.finish();
+        });
     }
 
     private void await(String tag) {

@@ -1,6 +1,8 @@
 package cn.myscore.app;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
@@ -31,6 +33,20 @@ public final class StandingsActivity extends Activity {
     private static final List<String> LABELS = List.of(
         "Premier League", "Champions League", "FA Cup", "Carabao Cup", "NBA", "NFL", "F1", "CS2");
     private static final int CS2_PAGE_SIZE = 30;
+    private static final String EXTRA_COMPETITION = "competition";
+
+    static String competitionLinkLabel(String competition) {
+        if ("fa".equals(competition) || "efl".equals(competition)) return "Current cup rounds";
+        if ("cs2".equals(competition)) return "Valve rankings";
+        for (String sport : SPORTS) {
+            if (sport.equals(competition)) return "Current standings";
+        }
+        return "";
+    }
+
+    static Intent forCompetition(Context context, String competition) {
+        return new Intent(context, StandingsActivity.class).putExtra(EXTRA_COMPETITION, competition);
+    }
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newFixedThreadPool(2);
@@ -57,7 +73,9 @@ public final class StandingsActivity extends Activity {
         ui = new Ui(this, dark);
         board = new StandingsBoard(ui);
         store = new StandingsStore(getCacheDir());
-        String initial = initialSport(getIntent().getStringExtra("group"));
+        String competition = getIntent().getStringExtra(EXTRA_COMPETITION);
+        String initial = competitionLinkLabel(competition).isBlank()
+            ? initialSport(getIntent().getStringExtra("group")) : competition;
         if (saved != null) {
             initial = saved.getString("sport", initial);
             Bundle savedScopes = saved.getBundle("scopes");
@@ -275,6 +293,11 @@ public final class StandingsActivity extends Activity {
         updateInfo();
         content.removeAllViews();
         if (resetScroll) restoredPosition = 0;
+        if (selected.equals("cs2")) {
+            TextView tournaments = ui.textButton("Tournaments", () -> startActivity(new Intent(this, Cs2EventActivity.class)));
+            content.addView(tournaments, new LinearLayout.LayoutParams(-1, -2));
+            ui.gap(content, 8);
+        }
         if (shown == null) {
             addStatus();
             return;

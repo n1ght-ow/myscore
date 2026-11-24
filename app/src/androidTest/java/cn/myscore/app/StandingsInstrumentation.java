@@ -65,6 +65,7 @@ public final class StandingsInstrumentation extends Instrumentation {
                 waitForData(label);
                 inspect();
                 capture(label);
+                if (label.equals("Premier League")) openLeagueTeam();
                 String other = switch (label) { case "NBA" -> "West"; case "NFL" -> "NFC"; case "F1" -> "Constructors"; default -> ""; };
                 if (!other.isEmpty() && !existsTag("adaptive-columns")) {
                     click(activity, other);
@@ -84,6 +85,45 @@ public final class StandingsInstrumentation extends Instrumentation {
             settings.edit().putString("theme", original).commit();
         }
         finish(outcome, result);
+    }
+
+    private void openLeagueTeam() throws Exception {
+        ActivityMonitor monitor = addMonitor(TeamActivity.class.getName(), null, false);
+        Activity team;
+        try {
+            long deadline = SystemClock.uptimeMillis() + 45_000;
+            if (!hasTeamLink()) click(activity, "Refresh standings");
+            while (!hasTeamLink() && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(150);
+            runOnMainSync(() -> {
+                View row = linkedTeamOnMain();
+                check(row != null, "ESPN standings expose a team with a source ID");
+                check(row.getHeight() >= new Ui(activity, Ui.isDark(activity)).dp(48), "team link hit target is at least 48dp");
+                check(row.performClick(), "open team from standings");
+            });
+            team = waitForMonitorWithTimeout(monitor, 5000);
+        } finally { removeMonitor(monitor); }
+        check(team != null, "standings open the team destination");
+        Team identity = Team.fromJson(new org.json.JSONObject(team.getIntent().getStringExtra("team")));
+        check(identity.usable() && identity.id.matches("[0-9]+") && identity.league.equals("epl"), "team source identity survives navigation");
+        runOnMainSync(team::finish);
+        waitForIdleSync();
+        check(selected("Premier League"), "standings retain the competition on return");
+    }
+
+    private boolean hasTeamLink() {
+        boolean[] found = new boolean[1];
+        runOnMainSync(() -> found[0] = linkedTeamOnMain() != null);
+        return found[0];
+    }
+
+    private View linkedTeamOnMain() {
+        LinearLayout table = activity.getWindow().getDecorView().findViewWithTag("standings-table");
+        if (table == null || !(table.getChildAt(0) instanceof ViewGroup identities)) return null;
+        for (int index = 1; index < identities.getChildCount(); index++) {
+            View row = identities.getChildAt(index);
+            if (row.isClickable() && row.getHeight() > 0) return row;
+        }
+        return null;
     }
 
     private void chooseCs2OnHome(Activity home) {

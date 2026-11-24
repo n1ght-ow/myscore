@@ -1,6 +1,7 @@
 package cn.myscore.app;
 
 import java.util.List;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -32,5 +33,36 @@ public final class StandingsStoreTest {
         assertTrue(snapshot.usable(FETCHED + 600_000));
         assertFalse(snapshot.usable(FETCHED - 1));
         assertFalse(snapshot.usable(FETCHED + 30 * 86_400_000L));
+    }
+
+    @Test public void teamIdentityRoundTripsWithoutBreakingLegacyCache() throws Exception {
+        Standings.Section linked = new Standings.Section("积分榜", List.of("场", "积分"),
+            List.of(new Standings.Row("1", "阿森纳", "", "", List.of("11", "28"), "欧冠区", "359")));
+        StandingsStore.Snapshot snapshot = new StandingsStore.Snapshot(
+            new Standings("ESPN", "2026-27", List.of(linked), List.of()), FETCHED);
+
+        StandingsStore.Snapshot roundTrip = StandingsStore.decode("epl",
+            new JSONObject(StandingsStore.encode("epl", snapshot).toString()));
+        assertEquals(snapshot, roundTrip);
+        assertEquals("359", roundTrip.data().sections().get(0).rows().get(0).teamId());
+
+        JSONObject legacy = new JSONObject()
+            .put("sport", "epl")
+            .put("fetched", FETCHED)
+            .put("source", "ESPN")
+            .put("season", "2026-27")
+            .put("sections", new JSONArray().put(new JSONArray()
+                .put("积分榜")
+                .put(new JSONArray().put("场").put("积分"))
+                .put(new JSONArray().put(new JSONArray()
+                    .put("1").put("阿森纳").put("").put("")
+                    .put(new JSONArray().put("11").put("28"))
+                    .put("欧冠区")))))
+            .put("rounds", new JSONArray());
+
+        StandingsStore.Snapshot decoded = StandingsStore.decode("epl", legacy);
+        assertEquals("", decoded.data().sections().get(0).rows().get(0).teamId());
+        assertEquals("阿森纳", decoded.data().sections().get(0).rows().get(0).name());
+        assertTrue(decoded.usable(FETCHED + 600_000));
     }
 }

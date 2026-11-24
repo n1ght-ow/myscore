@@ -79,7 +79,7 @@ final class StandingsStore {
             JSONArray rows = new JSONArray();
             for (Standings.Row row : section.rows()) {
                 rows.put(new JSONArray().put(row.rank()).put(row.name()).put(row.subtitle()).put(row.logo())
-                    .put(new JSONArray(row.values())).put(row.status()));
+                    .put(new JSONArray(row.values())).put(row.status()).put(row.teamId()));
             }
             sections.put(new JSONArray().put(section.title()).put(new JSONArray(section.columns())).put(rows));
         }
@@ -104,7 +104,7 @@ final class StandingsStore {
             for (int item = 0; item < rowData.length(); item++) {
                 JSONArray row = rowData.getJSONArray(item);
                 rows.add(new Standings.Row(row.getString(0), row.getString(1), row.getString(2), row.getString(3),
-                    strings(row.getJSONArray(4)), row.getString(5)));
+                    strings(row.getJSONArray(4)), row.getString(5), row.length() > 6 ? row.optString(6) : ""));
             }
             sections.add(new Standings.Section(section.getString(0), strings(section.getJSONArray(1)), rows));
         }

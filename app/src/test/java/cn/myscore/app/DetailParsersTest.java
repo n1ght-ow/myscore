@@ -30,10 +30,49 @@ public class DetailParsersTest {
     @Test public void statisticsUseTeamIdentityWhenSourceOrderIsAwayFirst()throws Exception {Match m=espnMatch("nba");MatchDetail d=DetailParsers.espn(fixture("nba"),m,100);MatchDetail.Stat rebounds=d.stats.stream().filter(s->s.label().equals("篮板")).findFirst().orElseThrow();assertEquals("44",rebounds.home());assertEquals("44",rebounds.away());MatchDetail.Stat steals=d.stats.stream().filter(s->s.label().equals("抢断")).findFirst().orElseThrow();assertEquals("5",steals.home());assertEquals("10",steals.away());}
     @Test public void nbaContainsPlayerMinutesAndQuarterScores()throws Exception {MatchDetail d=DetailParsers.espn(fixture("nba"),espnMatch("nba"),100);assertTrue(d.tables.stream().anyMatch(t->t.tab.equals("lineup")&&t.columns.contains("得分")));assertTrue(d.tables.stream().anyMatch(t->t.title.equals("分节比分")&&t.rows.size()==2));assertFalse(d.events.isEmpty());}
     @Test public void nflContainsPassingRushingAndScoringPlays()throws Exception {MatchDetail d=DetailParsers.espn(fixture("nfl"),espnMatch("nfl"),100);assertTrue(d.tables.stream().anyMatch(t->t.title.contains("传球")));assertTrue(d.tables.stream().anyMatch(t->t.title.contains("冲球")));assertFalse(d.events.isEmpty());}
+    @Test public void nflKeepsRefereeAndUmpireDistinct()throws Exception {
+        MatchDetail detail=DetailParsers.espn(fixture("nfl"),espnMatch("nfl"),100);
+        assertEquals("Shawn Hochuli",fact(detail,"裁判"));
+        assertEquals("Larry Smith",fact(detail,"Umpire"));
+    }
+    @Test public void venueFactsUseOnlyPublishedAddressAndTruthyFlags()throws Exception {MatchDetail nfl=DetailParsers.espn(fixture("nfl"),espnMatch("nfl"),100);assertEquals("London · England",fact(nfl,"地点"));assertEquals("草地",fact(nfl,"场地类型"));assertEquals("是",fact(nfl,"中立场地"));MatchDetail nba=DetailParsers.espn(fixture("nba"),espnMatch("nba"),100);assertEquals("Milwaukee · WI",fact(nba,"地点"));assertEquals("",fact(nba,"场地类型"));assertEquals("",fact(nba,"中立场地"));}
+    @Test public void venueLocationDeduplicatesPartsAndDropsNulls()throws Exception {
+        JSONObject root=fixture("nfl"),venue=root.getJSONObject("gameInfo").getJSONObject("venue"),address=venue.getJSONObject("address");
+        address.put("region","England").put("state","England").put("country","England");
+        assertEquals("London · England",fact(DetailParsers.espn(root,espnMatch("nfl"),100),"地点"));
+        address.put("region","Greater London").put("state",JSONObject.NULL);
+        assertEquals("London · Greater London · England",fact(DetailParsers.espn(root,espnMatch("nfl"),100),"地点"));
+        address.put("city",JSONObject.NULL).put("region",JSONObject.NULL).put("state",JSONObject.NULL).put("country",JSONObject.NULL);
+        venue.put("grass",JSONObject.NULL);
+        root.getJSONObject("header").getJSONArray("competitions").getJSONObject(0).put("neutralSite",JSONObject.NULL);
+        MatchDetail empty=DetailParsers.espn(root,espnMatch("nfl"),100);
+        assertEquals("Wembley Stadium",fact(empty,"场地"));assertEquals("",fact(empty,"地点"));assertEquals("",fact(empty,"场地类型"));assertEquals("",fact(empty,"中立场地"));
+        address.put("city"," ").put("country","");
+        assertEquals("",fact(DetailParsers.espn(root,espnMatch("nfl"),100),"地点"));
+        root.getJSONObject("gameInfo").put("venue",JSONObject.NULL);
+        MatchDetail missing=DetailParsers.espn(root,espnMatch("nfl"),100);
+        assertEquals("",fact(missing,"场地"));assertEquals("",fact(missing,"地点"));
+    }
+    @Test public void officialRolesPreferDisplayNameThenNameAndFallBackSafely()throws Exception {
+        JSONObject root=fixture("nfl");JSONArray officials=root.getJSONObject("gameInfo").getJSONArray("officials");
+        JSONObject first=officials.getJSONObject(0).getJSONObject("position");first.put("displayName",JSONObject.NULL).put("name","Side Judge");
+        officials.getJSONObject(1).put("position",new JSONObject().put("displayName","Crew Chief").put("name","Referee"));
+        JSONObject unnamed=officials.getJSONObject(2);unnamed.remove("position");unnamed.put("displayName"," ").put("fullName","").put("name",JSONObject.NULL);
+        MatchDetail d=DetailParsers.espn(root,espnMatch("nfl"),100);
+        assertTrue(d.facts.stream().anyMatch(f->f.label().equals("Side Judge")&&f.value().equals("Carl Johnson")));
+        assertTrue(d.facts.stream().anyMatch(f->f.label().equals("Crew Chief")&&f.value().equals("Shawn Hochuli")));
+        assertTrue(d.facts.stream().anyMatch(f->f.label().equals("裁判")&&f.value().equals("Official")));
+        assertTrue(d.facts.stream().noneMatch(f->f.label().contains("{")||f.value().contains("{")||f.label().contains("displayName")||f.value().contains("displayName")));
+        MatchDetail nba=DetailParsers.espn(fixture("nba"),espnMatch("nba"),100);
+        assertEquals(3,nba.facts.stream().filter(f->f.label().equals("裁判")).count());
+        JSONObject noOfficials=fixture("nba");noOfficials.getJSONObject("gameInfo").put("officials",JSONObject.NULL);
+        assertTrue(DetailParsers.espn(noOfficials,espnMatch("nba"),100).facts.stream().noneMatch(f->f.label().equals("裁判")));
+    }
     @Test(expected=Exception.class) public void mismatchingEventCannotEnterCache()throws Exception {Match m=espnMatch("epl");m.id="espn:epl:999999:999999";DetailParsers.espn(fixture("epl"),m,100);}
     @Test public void cs2HasFinishedMapsAndActualPlayerRatings()throws Exception {Match m=new Match();m.id="five:cs2:csgo_mc_2398756";MatchDetail d=DetailParsers.five(fixture("cs2"),m,100);assertEquals("Spirit",d.match.away);assertEquals("csgo_tm_7020",d.match.awayId);assertTrue(d.facts.stream().anyMatch(f->f.label().equals("级别")&&f.value().equals("S+赛事")));assertTrue(d.tables.stream().anyMatch(t->t.title.equals("地图比分")&&t.rows.get(0).get(1).equals("13")&&t.rows.get(0).get(2).equals("9")));assertTrue(d.tables.stream().anyMatch(t->t.columns.contains("ADR")&&!t.rows.isEmpty()));}
     @Test public void cs2MapsExposeTSideAndCtSideScores()throws Exception {Match m=new Match();m.id="five:cs2:csgo_mc_2398756";MatchDetail d=DetailParsers.five(fixture("cs2"),m,100);MatchDetail.Table mirage=d.tables.stream().filter(t->t.title.equals("Mirage · T / CT")).findFirst().orElseThrow();assertEquals(List.of("球队","首开方","T 方","CT 方","加时","总分"),mirage.columns);assertEquals(List.of("Aurora","CT","6","7","—","13"),mirage.rows.get(0));assertEquals(List.of("Spirit","T","5","4","—","9"),mirage.rows.get(1));MatchDetail.Table anubis=d.tables.stream().filter(t->t.title.equals("Anubis · T / CT")).findFirst().orElseThrow();assertEquals(List.of("Aurora","CT","4","9","—","13"),anubis.rows.get(0));assertEquals(List.of("Spirit","T","3","3","—","6"),anubis.rows.get(1));}
-    @Test public void f1SeparatesQualifyingSessionAndKeepsUnknownStatsBlank()throws Exception {JSONObject e=fixture("f1-board").getJSONArray("events").getJSONObject(0);Match m=Parsers.espn(fixture("f1-board"),Competition.find("f1"),1).get(0);JSONObject core=fixture("f1-core");MatchDetail d=DetailParsers.f1(e,e.getJSONArray("competitions").getJSONObject(0),core,Map.of("5503",fixture("f1-stats")),m,100);MatchDetail.Table result=d.tables.stream().filter(t->t.title.equals("场次成绩")).findFirst().orElseThrow();assertEquals("George Russell",result.rows.get(0).get(0));assertEquals("1:18.518",result.rows.get(0).get(4));assertEquals("—",result.rows.get(1).get(4));assertTrue(d.tables.stream().anyMatch(t->t.title.contains("比赛周末")));}
+    @Test public void f1SeparatesQualifyingSessionAndKeepsUnknownStatsBlank()throws Exception {JSONObject board=fixture("f1-board"),e=board.getJSONArray("events").getJSONObject(0);Match m=Parsers.espn(board,Competition.find("f1"),1).get(0);JSONObject core=fixture("f1-core");MatchDetail d=DetailParsers.f1(e,e.getJSONArray("competitions").getJSONObject(0),core,Map.of("5503",fixture("f1-stats")),m,100);MatchDetail.Table result=d.tables.stream().filter(t->t.title.equals("场次成绩")).findFirst().orElseThrow();assertEquals("George Russell",result.rows.get(0).get(0));assertEquals("1:18.518",result.rows.get(0).get(4));assertEquals("—",result.rows.get(1).get(4));assertTrue(d.tables.stream().anyMatch(t->t.title.contains("比赛周末")));assertEquals("Melbourne Grand Prix Circuit",fact(d,"赛道"));assertEquals("Melbourne · Australia",fact(d,"地点"));}
     @Test public void detailCacheRoundTripKeepsLogoStatsAndIdentity()throws Exception {MatchDetail d=DetailParsers.espn(fixture("nba"),espnMatch("nba"),123);MatchDetail restored=MatchDetail.fromJson(d.json());assertEquals(d.match.id,restored.match.id);assertEquals(d.match.homeLogo,restored.match.homeLogo);assertEquals(d.stats,restored.stats);assertEquals(d.tables.get(0).rows,restored.tables.get(0).rows);assertEquals(123,restored.fetched);}
     @Test public void sourceZeroRemainsARealZero()throws Exception {MatchDetail d=DetailParsers.espn(fixture("epl"),espnMatch("epl"),100);assertTrue(d.stats.stream().anyMatch(s->s.home().equals("0")||s.away().equals("0")));}
+    private static String fact(MatchDetail detail,String label){return detail.facts.stream().filter(f->f.label().equals(label)).map(MatchDetail.Fact::value).findFirst().orElse("");}
 }

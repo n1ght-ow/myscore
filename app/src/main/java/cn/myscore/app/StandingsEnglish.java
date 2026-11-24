@@ -195,6 +195,14 @@ final class StandingsEnglish {
             case "胜率" -> "Win %";
             case "胜差" -> "GB";
             case "净胜" -> "nfl".equals(competition) ? "Diff" : "GD";
+            case "进球" -> "GF";
+            case "失球" -> "GA";
+            case "主场" -> "Home";
+            case "客场" -> "Away";
+            case "近10场" -> "L10";
+            case "走势" -> "Streak";
+            case "得分" -> "PF";
+            case "失分" -> "PA";
             case "胜场" -> "W";
             case "扣分" -> "Ded";
             default -> text(value);

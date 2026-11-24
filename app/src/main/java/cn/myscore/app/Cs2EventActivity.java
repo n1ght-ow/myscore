@@ -484,7 +484,8 @@ public final class Cs2EventActivity extends Activity {
             case "未开始", "待开赛", "即将开始" -> "scheduled";
             default -> "unknown";
         };
-        startActivity(new Intent(this, DetailActivity.class).putExtra("match", match.json().toString()));
+        startActivity(new Intent(this, DetailActivity.class).putExtra("match", match.json().toString())
+            .putExtra(DetailActivity.EXTRA_PARENT_TOURNAMENT, event.id()));
     }
 
     @Override protected void onSaveInstanceState(Bundle saved) {

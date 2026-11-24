@@ -151,6 +151,10 @@ final class EnglishDisplay {
         名次=Rank
         位置=Position
         场地=Venue
+        地点=Location
+        中立场地=Neutral site
+        场地类型=Surface
+        草地=Grass
         观众=Attendance
         开始时间=Start time
         裁判=Referee
@@ -273,6 +277,7 @@ final class EnglishDisplay {
         下半场=Second half
         总分=Total
         获胜=won
+        是=Yes
         控球率 %=Possession %
         控球率 / 时间=Possession
         控球时间=Time of possession

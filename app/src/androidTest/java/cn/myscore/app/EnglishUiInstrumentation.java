@@ -102,6 +102,9 @@ public final class EnglishUiInstrumentation extends Instrumentation {
             waitFor(screen, "Overview", 5000);
             SystemClock.sleep(250);
             checkAndCapture(screen, request.league + "-overview");
+            if (request.league.equals("nba") || request.league.equals("nfl")) {
+                checkCompetitionRoute(screen, request.league, request.group);
+            }
             List<String> tabs = switch (request.league) {
                 case "epl" -> List.of("Lineup", "Stats", "Events");
                 case "nba", "nfl" -> List.of("Players", "Stats", "Events");
@@ -115,6 +118,23 @@ public final class EnglishUiInstrumentation extends Instrumentation {
             }
             end(screen);
         }
+    }
+
+    private void checkCompetitionRoute(Activity detail, String competition, String label) {
+        ActivityMonitor monitor = addMonitor(StandingsActivity.class.getName(), null, false);
+        Activity standings;
+        try {
+            click(detail, "Current standings", false);
+            standings = waitForMonitorWithTimeout(monitor, 5000);
+        } finally { removeMonitor(monitor); }
+        check(standings != null, "match opens the standings destination");
+        check(competition.equals(standings.getIntent().getStringExtra("competition")), "exact competition carried from the match");
+        runOnMainSync(() -> {
+            View tab = find(standings.getWindow().getDecorView(), label, false);
+            check(tab != null && tab.isSelected(), "selected standings competition " + label);
+        });
+        click(standings, "Back", false);
+        check(standings.isFinishing() && !detail.isFinishing(), "back returns to the originating match");
     }
 
     private Activity launch(Intent intent) { return startActivitySync(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }

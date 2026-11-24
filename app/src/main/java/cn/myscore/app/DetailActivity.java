@@ -45,7 +45,6 @@ import cn.myscore.app.TeamActivity;
 import cn.myscore.app.TeamPanelsView;
 import cn.myscore.app.Ui;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -59,6 +58,7 @@ import org.json.JSONObject;
 
 public final class DetailActivity
 extends Activity {
+    static final String EXTRA_PARENT_TOURNAMENT = "parentTournament";
     private Ui ui;
     private Match match;
     private MatchDetail detail;
@@ -429,7 +429,7 @@ extends Activity {
         this.root.removeAllViews();
         LinearLayout bar = this.ui.row();
         bar.setPadding(this.ui.dp(10.0f), this.ui.dp(6.0f), this.ui.dp(14.0f), this.ui.dp(6.0f));
-        bar.addView((View)this.iconButton("back", "Back to matches", () -> ((DetailActivity)this).finish()));
+        bar.addView((View)this.iconButton("back", "Back", this::finish));
         LinearLayout titles = this.ui.column();
         this.padTitle = this.ui.text("", 19, this.ui.text, true);
         this.padTitle.setLetterSpacing(-0.02f);
@@ -608,19 +608,13 @@ extends Activity {
         int y = this.padLeftScroll == null ? 0 : this.padLeftScroll.getScrollY();
         this.padLeftHost.removeAllViews();
         this.padLeftHost.addView((View)this.padScoreCard());
+        this.competitionLink(this.padLeftHost);
         if (this.detail != null) {
-            if (!this.detail.facts.isEmpty()) {
+            Map<String, List<String>> facts = this.matchFacts();
+            if (!facts.isEmpty()) {
                 this.padLeftHeading("Match information");
-                this.padLeftHost.addView((View)this.padFactsCard(9));
-                this.ui.gap(this.padLeftHost, 20);
+                this.padLeftHost.addView(this.padFactsCard(facts));
             }
-            if (!this.detail.warning.isBlank() && !this.match.group.equals("CS2")) {
-                TextView note = this.ui.text(displayText(this.detail.warning), 11, this.ui.muted, false);
-                note.setLineSpacing((float)this.ui.dp(3.0f), 1.0f);
-                this.padLeftHost.addView((View)note);
-                this.ui.gap(this.padLeftHost, 16);
-            }
-            this.cs2EventLink(this.padLeftHost);
             this.padLeftHeading("Source");
             LinearLayout source = this.ui.column();
             source.addView((View)this.ui.text(displayText(this.detail.source), 12, this.ui.text, true));
@@ -748,35 +742,23 @@ extends Activity {
         return card;
     }
 
-    private LinearLayout padFactsCard(int limit) {
+    private LinearLayout padFactsCard(Map<String, List<String>> facts) {
         LinearLayout card = this.ui.column();
         card.setBackground((Drawable)this.ui.panel());
         card.setPadding(this.ui.dp(16.0f), this.ui.dp(10.0f), this.ui.dp(16.0f), this.ui.dp(10.0f));
-        LinkedHashMap<String, List> facts = new LinkedHashMap<String, List>();
-        for (MatchDetail.Fact f : this.detail.facts) {
-            String label = DetailParsers.label(DetailParsers.plain(f.label()));
-            if (label.equals("阵容资料版本")) continue;
-            String value = DetailParsers.plain(f.value());
-            if (value.isBlank()) continue;
-            facts.computeIfAbsent(label.isBlank() ? "Information" : label, k -> new ArrayList()).add(value);
-        }
         int index = 0;
-        for (Map.Entry fact : facts.entrySet()) {
-            if (index >= limit) break;
+        for (Map.Entry<String, List<String>> fact : facts.entrySet()) {
             if (index++ > 0) {
                 card.addView(this.ui.divider());
             }
             LinearLayout row = this.ui.row();
             row.setGravity(48);
             row.setPadding(0, this.ui.dp(9.0f), 0, this.ui.dp(9.0f));
-            row.addView((View)this.ui.text(displayText((String)fact.getKey()), 10, this.ui.muted, false), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-            TextView value = this.ui.text(displayText(String.join((CharSequence)"\n", new LinkedHashSet((Collection)fact.getValue()))), 12, this.ui.text, false);
+            row.addView((View)this.ui.text(fact.getKey(), 10, this.ui.muted, false), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            TextView value = this.ui.text(String.join("\n", new LinkedHashSet<>(fact.getValue())), 12, this.ui.text, false);
             value.setLineSpacing((float)this.ui.dp(2.0f), 1.0f);
             row.addView((View)value, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.35f));
             card.addView((View)row);
-        }
-        if (index == 0) {
-            card.addView((View)this.ui.text("The source did not provide more match information", 12, this.ui.muted, false));
         }
         return card;
     }
@@ -989,7 +971,7 @@ extends Activity {
         this.root.removeAllViews();
         LinearLayout appbar = this.ui.row();
         appbar.setPadding(this.ui.dp(4.0f), this.ui.dp(2.0f), this.ui.dp(4.0f), 0);
-        appbar.addView((View)this.iconButton("back", "Back to matches", () -> ((DetailActivity)this).finish()));
+        appbar.addView((View)this.iconButton("back", "Back", this::finish));
         TextView title = this.ui.text(displayText(MatchLabel.of(this.match)), 16, this.ui.text, true);
         title.setGravity(17);
         appbar.addView((View)title, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -1157,6 +1139,7 @@ extends Activity {
 
     private String bodyKey() {
         StringBuilder key = new StringBuilder(96).append(this.tab).append(':').append(this.teamFilter).append(':').append(this.categoryFilter).append(':').append(this.mapFilter).append(':').append(this.sortColumn).append(':').append(this.descending).append(':').append(this.eventsLimit).append(':').append(this.playerLimit).append(':').append(this.error).append(':').append(this.match.group);
+        key.append(':').append(this.match.eventId);
         if (this.detail == null) {
             key.append(":empty:").append(this.busy);
         } else {
@@ -1184,6 +1167,7 @@ extends Activity {
             this.ui.gap(this.body, 14);
         }
         if (this.detail == null) {
+            if (this.tab.equals("overview")) this.competitionLink(this.body);
             this.empty(this.busy ? "Loading match data" : "Match details are unavailable", this.busy ? "Connecting to this match's source." : "Check your connection and reload. The match list keeps its last record.");
         } else if (this.tab.equals("overview")) {
             this.overview();
@@ -1388,6 +1372,7 @@ extends Activity {
 
     private void overview() {
         int i;
+        this.competitionLink(this.body);
         if (!this.match.group.equals("CS2")) {
             this.tables("overview");
         }
@@ -1410,53 +1395,65 @@ extends Activity {
             this.body.addView((View)timeline);
         }
         this.information();
-        this.cs2EventLink(this.body);
         this.sourceLink();
     }
 
-    private void cs2EventLink(LinearLayout into) {
-        if (!this.match.group.equals("CS2") || !this.match.eventId.matches("csgo_tt_[0-9]+")) return;
-        if (into.findViewWithTag("cs2-tournament-overview") != null) return;
-        this.ui.gap(into, 8);
-        TextView link = this.ui.textButton("Tournament overview", () -> this.startActivity(new Intent(this, Cs2EventActivity.class)
-            .putExtra("event", this.match.eventId).putExtra("name", this.match.event)
-            .putExtra("day", this.match.day() == null ? "" : this.match.day().toString())));
-        link.setTag("cs2-tournament-overview");
-        into.addView(link);
+    private void competitionLink(LinearLayout into) {
+        boolean tournament = "cs2".equals(this.match.league) && this.match.eventId.matches("csgo_tt_[0-9]+");
+        if (tournament && this.match.eventId.equals(this.getIntent().getStringExtra(EXTRA_PARENT_TOURNAMENT))) return;
+        String label = tournament ? "Tournament overview" : StandingsActivity.competitionLinkLabel(this.match.league);
+        if (label.isBlank()) return;
+        TextView link = this.ui.textButton(label, () -> {
+            if (tournament) {
+                this.startActivity(new Intent(this, Cs2EventActivity.class).putExtra("event", this.match.eventId)
+                    .putExtra("name", this.match.event).putExtra("day", this.match.day() == null ? "" : this.match.day().toString()));
+            } else {
+                this.startActivity(StandingsActivity.forCompetition(this, this.match.league));
+            }
+        });
+        link.setPaintFlags(link.getPaintFlags() | android.graphics.Paint.UNDERLINE_TEXT_FLAG);
+        link.setTag(tournament ? "cs2-tournament-overview" : "match-competition");
+        into.addView(link, new LinearLayout.LayoutParams(-1, -2));
     }
 
-    private void information() {
-        LinearLayout card = this.panel();
-        LinkedHashMap<String, List<String>> facts = new LinkedHashMap<String, List<String>>();
+    private Map<String, List<String>> matchFacts() {
+        Map<String, List<String>> facts = new LinkedHashMap<>();
+        String competition = displayText(MatchLabel.of(this.match));
         for (MatchDetail.Fact f : this.detail.facts) {
             String label = DetailParsers.label(DetailParsers.plain(f.label()));
             if (label.equals("阵容资料版本")) continue;
-            String value = DetailParsers.plain(f.value());
+            label = displayText(label);
+            String value = displayText(DetailParsers.plain(f.value()));
             if (value.isBlank()) continue;
+            if ("Competition".equals(label) && value.equals(competition)) continue;
             facts.computeIfAbsent(label.isBlank() ? "Information" : label, k -> new ArrayList()).add(value);
         }
-        if (facts.isEmpty() && !this.match.detail.isBlank()) {
-            facts.put("Competition", List.of(this.match.detail));
+        if (!this.match.group.equals("F1") && !this.match.group.equals("CS2") && !facts.containsKey("Venue")) {
+            String venue = displayText(DetailParsers.plain(this.match.detail));
+            if (!venue.isBlank()) facts.put("Venue", List.of(venue));
         }
+        return facts;
+    }
+
+    private void information() {
+        Map<String, List<String>> facts = this.matchFacts();
         if (facts.isEmpty()) return;
+        LinearLayout card = this.panel();
         this.heading("Match information");
         int index = 0;
-        for (Map.Entry fact : facts.entrySet()) {
+        for (Map.Entry<String, List<String>> fact : facts.entrySet()) {
             if (index++ > 0) {
                 card.addView(this.ui.divider());
             }
             LinearLayout row = this.ui.row();
             row.setGravity(48);
             row.setPadding(0, this.ui.dp(10.0f), 0, this.ui.dp(10.0f));
-            TextView label = this.ui.text(displayText((String)fact.getKey()), 12, this.ui.muted, false);
-            TextView value = this.ui.text(displayText(String.join((CharSequence)"\n", new LinkedHashSet((Collection)fact.getValue()))), 13, this.ui.text, false);
+            TextView label = this.ui.text(fact.getKey(), 12, this.ui.muted, false);
+            TextView value = this.ui.text(String.join("\n", new LinkedHashSet<>(fact.getValue())), 13, this.ui.text, false);
             value.setLineSpacing((float)this.ui.dp(4.0f), 1.0f);
             row.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             row.addView((View)value, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 2.0f));
             card.addView((View)row);
-        }
-        if (index == 0) {
-            card.addView((View)this.ui.text("The source did not provide more match information", 13, this.ui.muted, false));
         }
         this.body.addView((View)card);
     }
@@ -1838,7 +1835,9 @@ extends Activity {
         row.setGravity(48);
         row.setPadding(0, this.ui.dp(9.0f), 0, this.ui.dp(9.0f));
         TextView clock = this.ui.text(displayText(event.time()), 11, this.ui.muted, true);
-        row.addView((View)clock, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(50.0f), -2));
+        LinearLayout.LayoutParams clockSlot = new LinearLayout.LayoutParams(this.ui.dp(50.0f), -2);
+        clockSlot.setMarginEnd(this.ui.dp(8.0f));
+        row.addView(clock, clockSlot);
         LinearLayout words = this.ui.column();
         String title = displayText(DetailParsers.plain(event.title()));
         String text = displayText(DetailParsers.plain(event.text()));

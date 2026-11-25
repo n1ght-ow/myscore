@@ -2,6 +2,7 @@
 
 - 版本 `4.16.0` / versionCode `65`，包名 `cn.myscore.app`。沿用 `4.15.0` 的个人安装 debug 签名，证书 SHA-256 为 `e363b1a345efd722269f345ef515f36ad8fc02919134ad08c6d2e79899c35646`。
 - `MyScore-4.16.0.apk` 共 1,493,715 字节，SHA-256 为 `0cc22a4295d342fe130ea3b971746326bf9996d2ea436eb00ef9a5e50e547272`。APK 和 `SHA256SUMS-4.16.0.txt` 存放在忽略目录 `artifacts/release-4.16.0/`。
+- 发布入口：[v4.16.0](https://github.com/n1ght-ow/myscore/releases/tag/v4.16.0)。远端 APK 大小与 digest `sha256:0cc22a4295d342fe130ea3b971746326bf9996d2ea436eb00ef9a5e50e547272` 与本地交付包及 `SHA256SUMS-4.16.0.txt` 一致。
 - 293 项 JVM 单测（0 失败、错误或跳过）、Lint（0 错误 / 45 条警告）与 clean 调试 APK 构建通过；面向 `EnglishUiInstrumentation` 的测试 APK 也能编译。该旧 runner 的 `Choose date` 选择器在 4.15 已改版后不再匹配，运行止于 9 项，不将该结果计为界面通过。
 - API 35 手机模拟器（1080 × 2400 / 420 dpi）实测浅色主列表、NBA 与足球战绩、按赛事分组的 CS2 赛程、F1 前三名、足球进球者 / 点球 / 红牌条、CS2 世界排名与地点 / 奖金字段；2560 × 1600 / 320 dpi 平板模拟器实测按赛事分组的 NBA、F1 列表与足球阅读区的战绩和进球条。截图在 `artifacts/release-4.16.0/`。
 - 手机 2 倍系统字号可冷启动、滚动和操作，卡片仍保持列对齐；应用名、部分队名和同步摘要以省略号收束，未扩为多行。未验收物理设备、深色主题逐路由、2 倍字号详情 / 弹层、日历写入、第三方播放和系统安装确认。

@@ -52,12 +52,20 @@ final class Sheet {
             row.setFocusable(true);
             row.setContentDescription(item.title + (item.detail.isEmpty() ? "" : ", " + item.detail) + (on ? ", selected" : ""));
             LinearLayout texts = ui.column();
-            texts.addView(ui.text(item.title, 15, on ? ui.primary : ui.text, true));
+            TextView itemTitle = ui.text(item.title, 15, on ? ui.primary : ui.text, true);
+            itemTitle.setMaxLines(2);
+            itemTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            texts.addView(itemTitle);
             if (!item.detail.isEmpty()) {
                 ui.gap(texts, 3);
-                texts.addView(ui.text(item.detail, 12, ui.muted, false));
+                TextView itemDetail = ui.text(item.detail, 12, ui.muted, false);
+                itemDetail.setMaxLines(2);
+                itemDetail.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                texts.addView(itemDetail);
             }
-            row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+            LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0, -2, 1);
+            if (on) tp.setMarginEnd(ui.dp(8));
+            row.addView(texts, tp);
             if (on) {
                 FrameLayout tick = new FrameLayout(activity);
                 tick.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -95,7 +103,7 @@ final class Sheet {
         prev.setContentDescription("Previous month");
         nav.addView(prev, new LinearLayout.LayoutParams(ui.dp(44), ui.dp(44)));
 
-        TextView title = ui.text("", 16, ui.text, true);
+        TextView title = Ui.singleLine(ui.text("", 16, ui.text, true));
         title.setGravity(Gravity.CENTER);
         nav.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 

@@ -37,12 +37,10 @@ final class PadScoreAdapter extends BaseAdapter {
     private List<ScoreRow> rows = new ArrayList<>();
     private String selectedId = "";
     private ListView list;
-    private boolean groupedByCompetition;
 
     PadScoreAdapter(Ui ui, Host host) { this(ui, host, false); }
     PadScoreAdapter(Ui ui, Host host, boolean listOnly) { this.ui = ui; this.host = host; this.listOnly = listOnly; }
     void attach(ListView list) { this.list = list; }
-    void setGroupedByCompetition(boolean grouped) { this.groupedByCompetition = grouped; }
 
     void updateRows(List<ScoreRow> next) {
         boolean same = next.size() == rows.size();
@@ -120,14 +118,14 @@ final class PadScoreAdapter extends BaseAdapter {
                 Object tag = convertView == null ? null : convertView.getTag();
                 F1Holder holder = tag instanceof F1Holder ? (F1Holder) tag : new F1Holder();
                 holder.root.setTag(holder);
-                holder.bind(row.match);
+                holder.bind(row);
                 return holder.root;
             }
             default: {
                 Object tag = convertView == null ? null : convertView.getTag();
                 MatchHolder holder = tag instanceof MatchHolder ? (MatchHolder) tag : new MatchHolder();
                 holder.root.setTag(holder);
-                holder.bind(row.match);
+                holder.bind(row);
                 return holder.root;
             }
         }
@@ -183,7 +181,7 @@ final class PadScoreAdapter extends BaseAdapter {
 
     private final class F1Holder {
         final LinearLayout root, card;
-        final TextView title, state, time;
+        final TextView title, state, time, leader;
         Match match;
         int styleState = -1;
 
@@ -195,14 +193,21 @@ final class PadScoreAdapter extends BaseAdapter {
             ui.clickableDrawable(card, ui.panel(), Ui.CARD_RADIUS);
             card.setFocusable(true);
             LinearLayout top = ui.row();
-            time = ui.text("", 12, ui.muted, true);
+            time = Ui.singleLine(ui.text("", 11, ui.muted, true));
             top.addView(time, new LinearLayout.LayoutParams(0, -2, 1f));
-            state = ui.text("", 11, ui.primary, true);
-            top.addView(state);
+            state = Ui.singleLine(ui.text("", 11, ui.primary, true));
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-2, -2);
+            slp.setMarginStart(ui.dp(6));
+            top.addView(state, slp);
             card.addView(top);
             ui.gap(card, 6);
             title = ui.text("", 14, ui.text, true);
+            title.setMaxLines(2);
+            title.setEllipsize(TextUtils.TruncateAt.END);
             card.addView(title);
+            leader = Ui.singleLine(ui.text("", 11, ui.muted, false));
+            leader.setPadding(0, ui.dp(4), 0, 0);
+            card.addView(leader);
             card.setOnClickListener(v -> {
                 if (match == null) return;
                 if (selectedId.equals(match.id)) host.openMatch(match);
@@ -211,13 +216,30 @@ final class PadScoreAdapter extends BaseAdapter {
             root.addView(card);
         }
 
-        void bind(Match value) {
+        void bind(ScoreRow row) {
+            Match value = row.match;
             match = value;
             boolean active = !listOnly && value.id.equals(selectedId);
-            time.setText(value.timeConfirmed ? value.time() : "Time TBD");
-            state.setText(EnglishDisplay.text(Rules.stateLabel(value.state)));
+            String rawTitle = value.displayTitle();
+            String gpTitle = rawTitle;
+            String session = "";
+            int sep = rawTitle.lastIndexOf(" · ");
+            if (sep > 0 && sep + 3 < rawTitle.length()) {
+                gpTitle = rawTitle.substring(0, sep).trim();
+                session = rawTitle.substring(sep + 3).trim();
+            }
+            time.setText(EnglishDisplay.text(session.isEmpty() ? (value.timeConfirmed ? value.time() : "Time TBD") : session));
+            state.setText(EnglishDisplay.text(value.live() && !value.status.isBlank() ? value.status : value.scheduled() && value.timeConfirmed ? value.time() : Rules.stateLabel(value.state)));
             state.setTextColor(value.live() ? ui.live : ui.muted);
-            title.setText(EnglishDisplay.text(value.displayTitle()));
+            title.setText(EnglishDisplay.text(gpTitle));
+            if (!value.results.isEmpty()) {
+                StringBuilder pod = new StringBuilder("P1 ").append(ScoreAdapter.cleanDriver(value.results.get(0)));
+                if (value.results.size() > 1) pod.append("  ·  P2 ").append(ScoreAdapter.cleanDriver(value.results.get(1)));
+                leader.setText(pod.toString());
+                leader.setVisibility(View.VISIBLE);
+            } else {
+                leader.setVisibility(View.GONE);
+            }
             styleState = applyCardStyle(card, active, value.live(), styleState);
         }
     }
@@ -225,7 +247,7 @@ final class PadScoreAdapter extends BaseAdapter {
     private final class MatchHolder {
         final LinearLayout root, card, actionRow;
         final View accentDot;
-        final TextView state, league, home, away, homeScore, awayScore;
+        final TextView state, league, home, away, homeRecord, awayRecord, homeScore, awayScore;
         final Logos.Crest homeCrest, awayCrest;
         final FrameLayout homeSlot, awaySlot, calendar;
         final Ui.WatchPill watch;
@@ -252,11 +274,9 @@ final class PadScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(ui.dp(6), ui.dp(6));
             dlp.setMarginEnd(ui.dp(6));
             meta.addView(accentDot, dlp);
-            league = ui.text("", 11, ui.muted, true);
-            league.setSingleLine(true);
-            league.setEllipsize(TextUtils.TruncateAt.END);
+            league = Ui.singleLine(ui.text("", 11, ui.muted, true));
             meta.addView(league, new LinearLayout.LayoutParams(0, -2, 1f));
-            state = ui.text("", 11, ui.primary, true);
+            state = Ui.singleLine(ui.text("", 11, ui.primary, true));
             LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-2, -2);
             slp.setMarginStart(ui.dp(6));
             meta.addView(state, slp);
@@ -267,16 +287,18 @@ final class PadScoreAdapter extends BaseAdapter {
             homeCrest = Logos.crest(ui, 22, false);
             homeSlot = crestSlot(homeCrest);
             homeRow.addView(homeSlot, new LinearLayout.LayoutParams(ui.dp(34), ui.dp(34)));
-            home = ui.text("", 14, ui.text, true);
-            home.setMaxLines(1);
-            home.setEllipsize(TextUtils.TruncateAt.END);
+            home = Ui.singleLine(ui.text("", 14, ui.text, true));
             LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(0, -2, 1f);
             hp.setMarginStart(ui.dp(8));
             homeRow.addView(home, hp);
-            homeScore = ui.display("–", 18, ui.text);
+            homeRecord = Ui.singleLine(ui.text("", 10, ui.dim, false));
+            LinearLayout.LayoutParams hrp = new LinearLayout.LayoutParams(-2, -2);
+            hrp.setMarginStart(ui.dp(6));
+            homeRow.addView(homeRecord, hrp);
+            homeScore = Ui.singleLine(ui.display("–", 18, ui.text));
             homeScore.setGravity(Gravity.END);
             LinearLayout.LayoutParams hsp = new LinearLayout.LayoutParams(-2, -2);
-            hsp.setMarginStart(ui.dp(10));
+            hsp.setMarginStart(ui.dp(8));
             homeRow.addView(homeScore, hsp);
             card.addView(homeRow);
             ui.gap(card, 4);
@@ -285,16 +307,18 @@ final class PadScoreAdapter extends BaseAdapter {
             awayCrest = Logos.crest(ui, 22, false);
             awaySlot = crestSlot(awayCrest);
             awayRow.addView(awaySlot, new LinearLayout.LayoutParams(ui.dp(34), ui.dp(34)));
-            away = ui.text("", 14, ui.text, true);
-            away.setMaxLines(1);
-            away.setEllipsize(TextUtils.TruncateAt.END);
+            away = Ui.singleLine(ui.text("", 14, ui.text, true));
             LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(0, -2, 1f);
             ap.setMarginStart(ui.dp(8));
             awayRow.addView(away, ap);
-            awayScore = ui.display("–", 18, ui.text);
+            awayRecord = Ui.singleLine(ui.text("", 10, ui.dim, false));
+            LinearLayout.LayoutParams arp = new LinearLayout.LayoutParams(-2, -2);
+            arp.setMarginStart(ui.dp(6));
+            awayRow.addView(awayRecord, arp);
+            awayScore = Ui.singleLine(ui.display("–", 18, ui.text));
             awayScore.setGravity(Gravity.END);
             LinearLayout.LayoutParams asp = new LinearLayout.LayoutParams(-2, -2);
-            asp.setMarginStart(ui.dp(10));
+            asp.setMarginStart(ui.dp(8));
             awayRow.addView(awayScore, asp);
             card.addView(awayRow);
 
@@ -323,14 +347,15 @@ final class PadScoreAdapter extends BaseAdapter {
             return frame;
         }
 
-        void bind(Match value) {
+        void bind(ScoreRow row) {
+            Match value = row.match;
             match = value;
             boolean active = !listOnly && value.id.equals(selectedId);
             boolean live = value.live();
             accentDot.setBackground(ui.shape(ui.sportAccent(value.league, value.group), Ui.PILL_RADIUS));
-            accentDot.setVisibility(groupedByCompetition ? View.GONE : View.VISIBLE);
-            league.setVisibility(groupedByCompetition ? View.INVISIBLE : View.VISIBLE);
-            league.setText(EnglishDisplay.text(MatchLabel.of(value)));
+            String meta = ScoreAdapter.cardContext(value, row.hideCompetition);
+            league.setText(EnglishDisplay.text(meta));
+            accentDot.setVisibility(row.hideCompetition && meta.isEmpty() ? View.GONE : View.VISIBLE);
             String st = live && !value.status.isBlank() ? value.status
                 : value.scheduled() && value.timeConfirmed ? value.time()
                 : Rules.stateLabel(value.state);
@@ -339,6 +364,11 @@ final class PadScoreAdapter extends BaseAdapter {
 
             home.setText(EnglishDisplay.text(value.home));
             away.setText(EnglishDisplay.text(value.away));
+            boolean hasRecords = !value.homeRecord.isEmpty() || !value.awayRecord.isEmpty();
+            homeRecord.setText(value.homeRecord);
+            awayRecord.setText(value.awayRecord);
+            homeRecord.setVisibility(hasRecords ? View.VISIBLE : View.GONE);
+            awayRecord.setVisibility(hasRecords ? View.VISIBLE : View.GONE);
             int ho = value.outcome(true), ao = value.outcome(false);
             home.setTextColor(value.finalised() && ho < 0 ? ui.muted : ui.text);
             away.setTextColor(value.finalised() && ao < 0 ? ui.muted : ui.text);

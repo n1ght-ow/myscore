@@ -105,7 +105,7 @@ public final class Cs2EventActivity extends Activity {
         LinearLayout bar = ui.row();
         bar.setPaddingRelative(ui.dp(4), 0, ui.dp(4), 0);
         bar.addView(action("back", "Back", this::finish));
-        TextView title = ui.text("Tournaments", 15, ui.muted, true);
+        TextView title = Ui.singleLine(ui.text("Tournaments", 15, ui.muted, true));
         bar.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         refresh = action("refresh", "Refresh tournament", () -> {
             if (event == null) loadCatalog();
@@ -134,7 +134,7 @@ public final class Cs2EventActivity extends Activity {
         LinearLayout switchPill = ui.row();
         switchPill.setPadding(ui.dp(9), ui.dp(3), ui.dp(8), ui.dp(3));
         switchPill.setBackground(ui.outlined(ui.tonal, ui.border, Ui.PILL_RADIUS));
-        switchPill.addView(ui.text("Switch", 11, ui.text, true));
+        switchPill.addView(Ui.singleLine(ui.text("Switch", 11, ui.text, true)));
         eventChevron = new Ui.Icon(this, "chevron", ui.muted);
         eventChevron.setRotation(90);
         LinearLayout.LayoutParams ecp = new LinearLayout.LayoutParams(ui.dp(13), ui.dp(13));
@@ -144,10 +144,12 @@ public final class Cs2EventActivity extends Activity {
         picker.addView(topBadgeRow);
         ui.gap(picker, 6);
         eventPicker = ui.display("Choose a tournament", 22, ui.text);
+        eventPicker.setMaxLines(2);
+        eventPicker.setEllipsize(android.text.TextUtils.TruncateAt.END);
         eventPicker.setAccessibilityHeading(true);
         picker.addView(eventPicker, new LinearLayout.LayoutParams(-1, -2));
         ui.gap(picker, 4);
-        eventDates = ui.text("", 12, ui.muted, false);
+        eventDates = Ui.singleLine(ui.text("", 12, ui.muted, false));
         picker.addView(eventDates);
         eventControl = picker;
         body.addView(picker, new LinearLayout.LayoutParams(-1, -2));
@@ -157,7 +159,7 @@ public final class Cs2EventActivity extends Activity {
         content = ui.column();
         body.addView(content, new LinearLayout.LayoutParams(-1, -2));
         ui.gap(body, 20);
-        source = ui.text("", 12, ui.muted, false);
+        source = Ui.singleLine(ui.text("", 11, ui.dim, false));
         source.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         body.addView(source);
         reading.addView(body, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL));
@@ -395,8 +397,8 @@ public final class Cs2EventActivity extends Activity {
             source.setText(graphFailed ? "Could not load the tournament. Try refreshing." : "Loading tournament…");
         } else {
             String updated = Formats.instant(displayed.fetched(), "MMM d, HH:mm", "");
-            String meta = "5EPlay · Retrieved " + updated + " (Beijing time)"
-                + (graphFailed ? " · Refresh failed; showing last result" : busy ? " · Refreshing" : "");
+            String meta = "5EPlay · Updated " + updated
+                + (graphFailed ? " · Refresh failed" : busy ? " · Refreshing" : "");
             source.setText(meta);
         }
     }

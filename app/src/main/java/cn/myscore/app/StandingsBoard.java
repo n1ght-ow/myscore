@@ -185,7 +185,9 @@ final class StandingsBoard {
         return wrapper;
     }
 
-    private LinearLayout zoneLegend(String competition, java.util.Set<ScoreFeedOrganizer.Zone> zones) {
+    private View zoneLegend(String competition, java.util.Set<ScoreFeedOrganizer.Zone> zones) {
+        HorizontalScrollView scroll = new HorizontalScrollView(ui.c);
+        scroll.setHorizontalScrollBarEnabled(false);
         LinearLayout legend = ui.row();
         legend.setPadding(ui.dp(4), ui.dp(10), ui.dp(4), ui.dp(2));
         int count = 0;
@@ -198,12 +200,13 @@ final class StandingsBoard {
             LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(ui.dp(8), ui.dp(8));
             dp.setMarginEnd(ui.dp(5));
             item.addView(dot, dp);
-            item.addView(ui.text(label, 11, ui.muted, false));
+            item.addView(Ui.singleLine(ui.text(label, 11, ui.muted, false)));
             LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(-2, -2);
             if (count++ > 0) ip.setMarginStart(ui.dp(12));
             legend.addView(item, ip);
         }
-        return legend;
+        scroll.addView(legend, new HorizontalScrollView.LayoutParams(-2, -2));
+        return scroll;
     }
 
     private static String zoneLabel(String competition, ScoreFeedOrganizer.Zone z) {
@@ -287,7 +290,7 @@ final class StandingsBoard {
         String shownName = header ? name : StandingsEnglish.name(name);
         if (ranks) {
             int rankColor = !header && zColor != android.graphics.Color.TRANSPARENT ? zColor : ui.muted;
-            TextView number = ui.text(rank, header ? 11 : 12, rankColor, true);
+            TextView number = Ui.singleLine(ui.text(rank, header ? 11 : 12, rankColor, true));
             number.setGravity(Gravity.CENTER);
             if (header) number.setAccessibilityHeading(true);
             row.addView(number, new LinearLayout.LayoutParams(rankWidth, -2));
@@ -299,10 +302,10 @@ final class StandingsBoard {
             row.addView(crest, slot);
         }
         LinearLayout words = ui.column();
-        TextView title = ui.text(shownName, header ? 11 : 14, header ? ui.muted : ui.text, true);
+        TextView title = Ui.singleLine(ui.text(shownName, header ? 11 : 14, header ? ui.muted : ui.text, true));
         if (header) title.setAccessibilityHeading(true);
         words.addView(title);
-        if (!subtitle.isBlank()) words.addView(ui.text(StandingsEnglish.text(subtitle), 11, ui.muted, false));
+        if (!subtitle.isBlank()) words.addView(Ui.singleLine(ui.text(StandingsEnglish.text(subtitle), 11, ui.muted, false)));
         row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         return row;
     }
@@ -344,7 +347,7 @@ final class StandingsBoard {
             String label = String.join(" · ", java.util.stream.Stream.of(
                     StandingsEnglish.text(tie.date()), StandingsEnglish.text(tie.stage()), StandingsEnglish.text(tie.result()))
                 .filter(text -> !text.isBlank()).collect(Collectors.toList()));
-            if (!label.isEmpty()) fixture.addView(ui.text(label, 12, ui.muted, false));
+            if (!label.isEmpty()) fixture.addView(Ui.singleLine(ui.text(label, 12, ui.muted, false)));
             fixture.addView(side(tie.first(), scoreWidth, crests));
             fixture.addView(side(tie.second(), scoreWidth, crests));
             results.addView(fixture, new LinearLayout.LayoutParams(-1, -2));
@@ -362,9 +365,9 @@ final class StandingsBoard {
             slot.setMarginEnd(ui.dp(8));
             row.addView(crest, slot);
         }
-        row.addView(ui.text(name, 14, ui.text, side.winner()), new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(Ui.singleLine(ui.text(name, 14, ui.text, side.winner())), new LinearLayout.LayoutParams(0, -2, 1));
         String score = score(side);
-        TextView number = ui.text(score, 15, side.winner() ? ui.primary : score.equals("—") ? ui.muted : ui.text, true);
+        TextView number = Ui.singleLine(ui.text(score, 15, side.winner() ? ui.primary : score.equals("—") ? ui.muted : ui.text, true));
         number.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         number.setContentDescription(score.equals("—") ? "No score" : side.winner() ? score + ", winner" : score);
         LinearLayout.LayoutParams end = new LinearLayout.LayoutParams(scoreWidth, -2);
@@ -383,7 +386,7 @@ final class StandingsBoard {
     }
 
     private TextView metric(String value, int size, int color, boolean bold) {
-        TextView text = ui.text(value, size, color, bold);
+        TextView text = Ui.singleLine(ui.text(value, size, color, bold));
         text.setTag("standings-metric");
         text.setPaddingRelative(ui.dp(4), ui.dp(5), ui.dp(6), ui.dp(5));
         text.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);

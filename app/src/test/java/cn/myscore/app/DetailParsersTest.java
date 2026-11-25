@@ -74,5 +74,38 @@ public class DetailParsersTest {
     @Test public void f1SeparatesQualifyingSessionAndKeepsUnknownStatsBlank()throws Exception {JSONObject board=fixture("f1-board"),e=board.getJSONArray("events").getJSONObject(0);Match m=Parsers.espn(board,Competition.find("f1"),1).get(0);JSONObject core=fixture("f1-core");MatchDetail d=DetailParsers.f1(e,e.getJSONArray("competitions").getJSONObject(0),core,Map.of("5503",fixture("f1-stats")),m,100);MatchDetail.Table result=d.tables.stream().filter(t->t.title.equals("场次成绩")).findFirst().orElseThrow();assertEquals("George Russell",result.rows.get(0).get(0));assertEquals("1:18.518",result.rows.get(0).get(4));assertEquals("—",result.rows.get(1).get(4));assertTrue(d.tables.stream().anyMatch(t->t.title.contains("比赛周末")));assertEquals("Melbourne Grand Prix Circuit",fact(d,"赛道"));assertEquals("Melbourne · Australia",fact(d,"地点"));}
     @Test public void detailCacheRoundTripKeepsLogoStatsAndIdentity()throws Exception {MatchDetail d=DetailParsers.espn(fixture("nba"),espnMatch("nba"),123);MatchDetail restored=MatchDetail.fromJson(d.json());assertEquals(d.match.id,restored.match.id);assertEquals(d.match.homeLogo,restored.match.homeLogo);assertEquals(d.stats,restored.stats);assertEquals(d.tables.get(0).rows,restored.tables.get(0).rows);assertEquals(123,restored.fetched);}
     @Test public void sourceZeroRemainsARealZero()throws Exception {MatchDetail d=DetailParsers.espn(fixture("epl"),espnMatch("epl"),100);assertTrue(d.stats.stream().anyMatch(s->s.home().equals("0")||s.away().equals("0")));}
+    @Test public void recordsAndWorldRankingsRoundTripThroughJson()throws Exception {
+        Match epl=espnMatch("epl");
+        assertEquals("2-2-3",epl.homeRecord);assertEquals("7-0-0",epl.awayRecord);
+        Match restored=Match.fromJson(epl.json());
+        assertEquals("2-2-3",restored.homeRecord);assertEquals("7-0-0",restored.awayRecord);
+        Match nba=espnMatch("nba");assertEquals("0-2",nba.homeRecord);assertEquals("1-1",nba.awayRecord);
+        Match nfl=espnMatch("nfl");assertEquals("4-2",nfl.homeRecord);assertEquals("2-4",nfl.awayRecord);
+        Match cs=new Match();cs.id="five:cs2:csgo_mc_2398756";
+        MatchDetail csDetail=DetailParsers.five(fixture("cs2"),cs,100);
+        assertEquals("#5",csDetail.match.homeRecord);assertEquals("#1",csDetail.match.awayRecord);
+    }
+    @Test public void footballGoalsExtractScorersAndRoundTripAndClearOnPregame()throws Exception {
+        MatchDetail epl=DetailParsers.espn(fixture("epl"),espnMatch("epl"),100);
+        assertFalse(epl.goals.isEmpty());
+        assertTrue(epl.goals.stream().anyMatch(g->g.player().contains("Haaland")&&g.clock().equals("52'")));
+        MatchDetail restored=MatchDetail.fromJson(epl.json());
+        assertEquals(epl.goals,restored.goals);
+        epl.match.state="scheduled";
+        DetailParsers.restrictPregame(epl);
+        assertTrue(epl.goals.isEmpty());
+    }
+    @Test public void seriesBroadcastAndCs2TournamentMetaExtractedAndTranslated()throws Exception {
+        MatchDetail nba=DetailParsers.espn(fixture("nba"),espnMatch("nba"),100);
+        assertEquals("CHI leads series 1-0",fact(nba,"系列赛"));
+        assertTrue(fact(nba,"转播").contains("NBA League Pass"));
+        Match cs=new Match();cs.id="five:cs2:csgo_mc_2398756";
+        MatchDetail csDetail=DetailParsers.five(fixture("cs2"),cs,100);
+        assertEquals("Katowice, Poland",fact(csDetail,"地点"));
+        assertEquals("$1,000,000",fact(csDetail,"奖金"));
+        assertEquals("Series",EnglishDisplay.text("系列赛"));
+        assertEquals("Broadcast",EnglishDisplay.text("转播"));
+        assertEquals("Prize pool",EnglishDisplay.text("奖金"));
+    }
     private static String fact(MatchDetail detail,String label){return detail.facts.stream().filter(f->f.label().equals(label)).map(MatchDetail.Fact::value).findFirst().orElse("");}
 }

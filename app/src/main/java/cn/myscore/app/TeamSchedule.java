@@ -153,6 +153,7 @@ final class TeamSchedule {
             m.home=DomesticEsports.teamName(home);m.away=DomesticEsports.teamName(away);
             m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");
             m.homeLogo=DomesticEsports.crest(home);m.awayLogo=DomesticEsports.crest(away);
+            m.homeRecord=DomesticEsports.rankTag(home);m.awayRecord=DomesticEsports.rankTag(away);
             m.start=seconds(mc.optString("ts"));if(m.start==0)m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
             String status=mc.optString("match_status");
             m.state=switch(status) {

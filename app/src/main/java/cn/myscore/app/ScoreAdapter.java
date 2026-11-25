@@ -36,11 +36,9 @@ final class ScoreAdapter extends BaseAdapter {
     private final Host host;
     private List<ScoreRow> rows = new ArrayList<>();
     private ScoreList list;
-    private boolean groupedByCompetition;
 
     ScoreAdapter(Ui ui, Host host) { this.ui = ui; this.host = host; }
     void attach(ScoreList list) { this.list = list; }
-    void setGroupedByCompetition(boolean grouped) { this.groupedByCompetition = grouped; }
 
     boolean updateRows(List<ScoreRow> next) {
         boolean same = next.size() == rows.size();
@@ -124,14 +122,14 @@ final class ScoreAdapter extends BaseAdapter {
                 Object tag = convertView == null ? null : convertView.getTag();
                 F1Holder holder = tag instanceof F1Holder ? (F1Holder) tag : new F1Holder();
                 holder.root.setTag(holder);
-                holder.bind(row.match);
+                holder.bind(row);
                 return holder.root;
             }
             default: {
                 Object tag = convertView == null ? null : convertView.getTag();
                 MatchHolder holder = tag instanceof MatchHolder ? (MatchHolder) tag : new MatchHolder();
                 holder.root.setTag(holder);
-                holder.bind(row.match);
+                holder.bind(row);
                 return holder.root;
             }
         }
@@ -265,7 +263,7 @@ final class ScoreAdapter extends BaseAdapter {
             actionPill = ui.row();
             actionPill.setPadding(ui.dp(10), ui.dp(5), ui.dp(8), ui.dp(5));
             ui.clickableDrawable(actionPill, ui.outlined(ui.tonal, ui.border, Ui.PILL_RADIUS), Ui.PILL_RADIUS);
-            actionText = ui.text("", 11, ui.text, true);
+            actionText = Ui.singleLine(ui.text("", 11, ui.text, true));
             actionPill.addView(actionText);
             Ui.Icon chev = new Ui.Icon(ui.c, "chevron", ui.muted);
             LinearLayout.LayoutParams chevLp = new LinearLayout.LayoutParams(ui.dp(13), ui.dp(13));
@@ -309,7 +307,7 @@ final class ScoreAdapter extends BaseAdapter {
     private final class MatchHolder {
         final LinearLayout root, card, statusPill, actionBar, watchBtn, remindBtn;
         final View accentDot, statusDot;
-        final TextView contextLabel, statusLabel, home, away, homeScore, awayScore, stale, watchLabel, remindLabel;
+        final TextView contextLabel, statusLabel, home, away, homeRecord, awayRecord, homeScore, awayScore, stale, watchLabel, remindLabel;
         final Logos.Crest homeCrest, awayCrest;
         final FrameLayout homeSlot, awaySlot;
         final Ui.Icon watchIcon, remindIcon;
@@ -326,16 +324,14 @@ final class ScoreAdapter extends BaseAdapter {
             card.setFocusable(true);
             card.setOnClickListener(v -> { if (match != null) host.openMatch(match); });
 
-            // Top context strip: competition/stage on left, status pill on right
+            // Top context strip: non-redundant context on left, status pill on right
             LinearLayout metaRow = ui.row();
             accentDot = new View(ui.c);
             LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(ui.dp(7), ui.dp(7));
             dotLp.setMarginEnd(ui.dp(7));
             metaRow.addView(accentDot, dotLp);
 
-            contextLabel = ui.text("", 12, ui.muted, true);
-            contextLabel.setSingleLine(true);
-            contextLabel.setEllipsize(TextUtils.TruncateAt.END);
+            contextLabel = Ui.singleLine(ui.text("", 12, ui.muted, true));
             metaRow.addView(contextLabel, new LinearLayout.LayoutParams(0, -2, 1f));
 
             statusPill = ui.row();
@@ -344,7 +340,7 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams sdLp = new LinearLayout.LayoutParams(ui.dp(6), ui.dp(6));
             sdLp.setMarginEnd(ui.dp(5));
             statusPill.addView(statusDot, sdLp);
-            statusLabel = ui.text("", 11, ui.text, true);
+            statusLabel = Ui.singleLine(ui.text("", 11, ui.text, true));
             statusPill.addView(statusLabel);
             LinearLayout.LayoutParams pillLp = new LinearLayout.LayoutParams(-2, -2);
             pillLp.setMarginStart(ui.dp(8));
@@ -357,16 +353,19 @@ final class ScoreAdapter extends BaseAdapter {
             homeCrest = Logos.crest(ui, 24, false);
             homeSlot = crestSlot(homeCrest);
             homeRow.addView(homeSlot, new LinearLayout.LayoutParams(ui.dp(42), ui.dp(42)));
-            home = ui.text("", 15, ui.text, true);
-            home.setMaxLines(1);
-            home.setEllipsize(TextUtils.TruncateAt.END);
+            home = Ui.singleLine(ui.text("", 15, ui.text, true));
             LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(0, -2, 1f);
             hp.setMarginStart(ui.dp(6));
             homeRow.addView(home, hp);
-            homeScore = ui.display("—", 20, ui.text);
+            homeRecord = Ui.singleLine(ui.text("", 11, ui.dim, false));
+            homeRecord.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams hrp = new LinearLayout.LayoutParams(-2, -2);
+            hrp.setMarginStart(ui.dp(8));
+            homeRow.addView(homeRecord, hrp);
+            homeScore = Ui.singleLine(ui.display("—", 20, ui.text));
             homeScore.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
             LinearLayout.LayoutParams hsp = new LinearLayout.LayoutParams(-2, -2);
-            hsp.setMarginStart(ui.dp(12));
+            hsp.setMarginStart(ui.dp(10));
             homeRow.addView(homeScore, hsp);
             card.addView(homeRow);
             ui.gap(card, 4);
@@ -376,16 +375,19 @@ final class ScoreAdapter extends BaseAdapter {
             awayCrest = Logos.crest(ui, 24, false);
             awaySlot = crestSlot(awayCrest);
             awayRow.addView(awaySlot, new LinearLayout.LayoutParams(ui.dp(42), ui.dp(42)));
-            away = ui.text("", 15, ui.text, true);
-            away.setMaxLines(1);
-            away.setEllipsize(TextUtils.TruncateAt.END);
+            away = Ui.singleLine(ui.text("", 15, ui.text, true));
             LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(0, -2, 1f);
             ap.setMarginStart(ui.dp(6));
             awayRow.addView(away, ap);
-            awayScore = ui.display("—", 20, ui.text);
+            awayRecord = Ui.singleLine(ui.text("", 11, ui.dim, false));
+            awayRecord.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams arp = new LinearLayout.LayoutParams(-2, -2);
+            arp.setMarginStart(ui.dp(8));
+            awayRow.addView(awayRecord, arp);
+            awayScore = Ui.singleLine(ui.display("—", 20, ui.text));
             awayScore.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
             LinearLayout.LayoutParams asp = new LinearLayout.LayoutParams(-2, -2);
-            asp.setMarginStart(ui.dp(12));
+            asp.setMarginStart(ui.dp(10));
             awayRow.addView(awayScore, asp);
             card.addView(awayRow);
 
@@ -400,7 +402,7 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams wiLp = new LinearLayout.LayoutParams(ui.dp(14), ui.dp(14));
             wiLp.setMarginEnd(ui.dp(6));
             watchBtn.addView(watchIcon, wiLp);
-            watchLabel = ui.text("", 12, ui.primary, true);
+            watchLabel = Ui.singleLine(ui.text("", 12, ui.primary, true));
             watchBtn.addView(watchLabel);
             LinearLayout.LayoutParams wbLp = new LinearLayout.LayoutParams(-2, -2);
             wbLp.setMarginEnd(ui.dp(8));
@@ -414,12 +416,12 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams riLp = new LinearLayout.LayoutParams(ui.dp(14), ui.dp(14));
             riLp.setMarginEnd(ui.dp(6));
             remindBtn.addView(remindIcon, riLp);
-            remindLabel = ui.text("Remind", 12, ui.text, true);
+            remindLabel = Ui.singleLine(ui.text("Remind", 12, ui.text, true));
             remindBtn.addView(remindLabel);
             actionBar.addView(remindBtn, new LinearLayout.LayoutParams(-2, -2));
             card.addView(actionBar);
 
-            stale = ui.text("Live signal delayed · pull to refresh", 11, ui.warn, false);
+            stale = Ui.singleLine(ui.text("Live signal delayed · pull to refresh", 11, ui.warn, false));
             stale.setPadding(0, ui.dp(6), 0, 0);
             stale.setVisibility(View.GONE);
             card.addView(stale);
@@ -427,7 +429,8 @@ final class ScoreAdapter extends BaseAdapter {
             root.addView(card);
         }
 
-        void bind(Match m) {
+        void bind(ScoreRow row) {
+            Match m = row.match;
             match = m;
             boolean live = m.live();
             if (live != liveStyled) {
@@ -435,17 +438,19 @@ final class ScoreAdapter extends BaseAdapter {
                 ui.clickableDrawable(card, live ? ui.liveCardBg() : ui.panel(), Ui.CARD_RADIUS);
             }
             accentDot.setBackground(ui.shape(ui.sportAccent(m.league, m.group), Ui.PILL_RADIUS));
-            accentDot.setVisibility(groupedByCompetition ? View.GONE : View.VISIBLE);
-            contextLabel.setVisibility(groupedByCompetition ? View.INVISIBLE : View.VISIBLE);
-            String meta = MatchLabel.of(m);
-            if (!m.scheduled() && m.timeConfirmed && !m.time().isBlank()) {
-                meta = meta + " · " + m.time();
-            }
+            String meta = cardContext(m, row.hideCompetition);
             text(contextLabel, meta);
+            accentDot.setVisibility(row.hideCompetition && meta.isEmpty() ? View.GONE : View.VISIBLE);
             bindStatusPill(statusPill, statusDot, statusLabel, m);
 
             text(home, m.home);
             text(away, m.away);
+
+            boolean hasRecords = !m.homeRecord.isEmpty() || !m.awayRecord.isEmpty();
+            text(homeRecord, m.homeRecord);
+            text(awayRecord, m.awayRecord);
+            homeRecord.setVisibility(hasRecords ? View.VISIBLE : View.GONE);
+            awayRecord.setVisibility(hasRecords ? View.VISIBLE : View.GONE);
 
             int homeOutcome = m.outcome(true);
             int awayOutcome = m.outcome(false);
@@ -470,10 +475,40 @@ final class ScoreAdapter extends BaseAdapter {
         }
     }
 
+    static String cardContext(Match m, boolean hideCompetition) {
+        if (!hideCompetition) {
+            String meta = MatchLabel.of(m);
+            if (!m.scheduled() && m.timeConfirmed && !m.time().isBlank()) {
+                meta = meta + " · " + m.time();
+            }
+            return meta;
+        }
+        String extra = "";
+        if ("CS2".equals(m.group)) {
+            extra = m.detail == null ? "" : m.detail.trim();
+            if (!m.event.isEmpty() && extra.startsWith(m.event)) {
+                extra = extra.substring(m.event.length()).replaceFirst("^\\s*·\\s*", "").trim();
+            }
+        } else if (!"F1".equals(m.group)) {
+            extra = m.detail == null ? "" : m.detail.trim();
+        }
+        if (!m.scheduled() && m.timeConfirmed && !m.time().isBlank()) {
+            return extra.isEmpty() ? m.time() : m.time() + " · " + extra;
+        }
+        return extra;
+    }
+
+    static String cleanDriver(String raw) {
+        if (raw == null) return "";
+        return raw.replaceFirst("^\\d+\\.\\s*", "").trim();
+    }
+
     private final class F1Holder {
-        final LinearLayout root, card, statusPill, actionBar, watchBtn, remindBtn;
+        final LinearLayout root, card, statusPill, podiumBox, actionBar, watchBtn, remindBtn;
+        final LinearLayout[] podiumRows = new LinearLayout[3];
+        final TextView[] podiumNames = new TextView[3];
         final View accentDot, statusDot;
-        final TextView league, statusLabel, title, first, second, stale, watchLabel, remindLabel;
+        final TextView sessionLabel, statusLabel, title, stale, watchLabel, remindLabel;
         final Ui.Icon watchIcon, remindIcon;
         Match match;
         boolean liveStyled;
@@ -494,8 +529,8 @@ final class ScoreAdapter extends BaseAdapter {
             dotLp.setMarginEnd(ui.dp(7));
             metaRow.addView(accentDot, dotLp);
 
-            league = ui.text("", 12, ui.muted, true);
-            metaRow.addView(league, new LinearLayout.LayoutParams(0, -2, 1f));
+            sessionLabel = Ui.singleLine(ui.text("", 12, ui.muted, true));
+            metaRow.addView(sessionLabel, new LinearLayout.LayoutParams(0, -2, 1f));
 
             statusPill = ui.row();
             statusPill.setPadding(ui.dp(9), ui.dp(3), ui.dp(9), ui.dp(3));
@@ -503,27 +538,46 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams sdLp = new LinearLayout.LayoutParams(ui.dp(6), ui.dp(6));
             sdLp.setMarginEnd(ui.dp(5));
             statusPill.addView(statusDot, sdLp);
-            statusLabel = ui.text("", 11, ui.text, true);
+            statusLabel = Ui.singleLine(ui.text("", 11, ui.text, true));
             statusPill.addView(statusLabel);
-            metaRow.addView(statusPill);
+            LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(-2, -2);
+            spLp.setMarginStart(ui.dp(8));
+            metaRow.addView(statusPill, spLp);
             card.addView(metaRow);
             ui.gap(card, 8);
 
             title = ui.display("", 16, ui.text);
+            title.setMaxLines(2);
+            title.setEllipsize(TextUtils.TruncateAt.END);
             card.addView(title);
-            first = ui.text("", 13, ui.primary, true);
-            first.setPadding(0, ui.dp(6), 0, 0);
-            card.addView(first);
-            second = ui.text("", 12, ui.muted, false);
-            second.setPadding(0, ui.dp(3), 0, 0);
-            card.addView(second);
+
+            podiumBox = ui.column();
+            podiumBox.setPadding(0, ui.dp(8), 0, 0);
+            int[] medalColors = {0xFFF5B82E, 0xFFB0BEC5, 0xFFD98A54};
+            for (int i = 0; i < 3; i++) {
+                LinearLayout pRow = ui.row();
+                pRow.setPadding(0, ui.dp(i == 0 ? 0 : 4), 0, 0);
+                TextView pos = Ui.singleLine(ui.text("P" + (i + 1), 10, medalColors[i], true));
+                pos.setGravity(Gravity.CENTER);
+                pos.setBackground(ui.outlined(Ui.alpha(medalColors[i], ui.dark ? 34 : 26), Ui.alpha(medalColors[i], 90), 6));
+                pos.setPadding(ui.dp(6), ui.dp(2), ui.dp(6), ui.dp(2));
+                LinearLayout.LayoutParams posLp = new LinearLayout.LayoutParams(ui.dp(30), -2);
+                posLp.setMarginEnd(ui.dp(8));
+                pRow.addView(pos, posLp);
+                TextView driver = Ui.singleLine(ui.text("", 13, i == 0 ? ui.text : ui.muted, i == 0));
+                pRow.addView(driver, new LinearLayout.LayoutParams(0, -2, 1f));
+                podiumRows[i] = pRow;
+                podiumNames[i] = driver;
+                podiumBox.addView(pRow);
+            }
+            card.addView(podiumBox);
 
             actionBar = ui.row();
             actionBar.setPadding(0, ui.dp(10), 0, 0);
             watchBtn = ui.row();
             watchBtn.setVisibility(View.GONE);
             watchIcon = new Ui.Icon(ui.c, "play", ui.primary);
-            watchLabel = ui.text("", 12, ui.primary, true);
+            watchLabel = Ui.singleLine(ui.text("", 12, ui.primary, true));
             watchBtn.addView(watchIcon);
             watchBtn.addView(watchLabel);
             actionBar.addView(watchBtn);
@@ -536,34 +590,46 @@ final class ScoreAdapter extends BaseAdapter {
             LinearLayout.LayoutParams riLp = new LinearLayout.LayoutParams(ui.dp(14), ui.dp(14));
             riLp.setMarginEnd(ui.dp(6));
             remindBtn.addView(remindIcon, riLp);
-            remindLabel = ui.text("Remind", 12, ui.text, true);
+            remindLabel = Ui.singleLine(ui.text("Remind", 12, ui.text, true));
             remindBtn.addView(remindLabel);
             actionBar.addView(remindBtn);
             card.addView(actionBar);
 
-            stale = ui.text("Live signal delayed · pull to refresh", 11, ui.warn, false);
+            stale = Ui.singleLine(ui.text("Live signal delayed · pull to refresh", 11, ui.warn, false));
             stale.setPadding(0, ui.dp(6), 0, 0);
             stale.setVisibility(View.GONE);
             card.addView(stale);
             root.addView(card);
         }
 
-        void bind(Match m) {
+        void bind(ScoreRow row) {
+            Match m = row.match;
             match = m;
             boolean live = m.live();
             if (live != liveStyled) {
                 liveStyled = live;
                 ui.clickableDrawable(card, live ? ui.liveCardBg() : ui.panel(), Ui.CARD_RADIUS);
             }
-            accentDot.setVisibility(groupedByCompetition ? View.GONE : View.VISIBLE);
-            league.setVisibility(groupedByCompetition ? View.INVISIBLE : View.VISIBLE);
-            text(league, MatchLabel.of(m));
+            String rawTitle = m.displayTitle();
+            String gpTitle = rawTitle;
+            String session = "";
+            int sep = rawTitle.lastIndexOf(" · ");
+            if (sep > 0 && sep + 3 < rawTitle.length()) {
+                gpTitle = rawTitle.substring(0, sep).trim();
+                session = rawTitle.substring(sep + 3).trim();
+            }
+            String top = row.hideCompetition ? (session.isEmpty() ? (m.timeConfirmed ? m.time() : "Formula 1") : session)
+                : (session.isEmpty() ? MatchLabel.of(m) : "F1 · " + session);
+            text(sessionLabel, top);
             bindStatusPill(statusPill, statusDot, statusLabel, m);
-            text(title, m.displayTitle());
-            text(first, m.results.size() > 0 ? m.results.get(0) : "");
-            first.setVisibility(m.results.size() > 0 ? View.VISIBLE : View.GONE);
-            text(second, m.results.size() > 1 ? m.results.get(1) : "");
-            second.setVisibility(m.results.size() > 1 ? View.VISIBLE : View.GONE);
+            text(title, gpTitle);
+            boolean anyPodium = !m.results.isEmpty();
+            podiumBox.setVisibility(anyPodium ? View.VISIBLE : View.GONE);
+            for (int i = 0; i < 3; i++) {
+                boolean has = i < m.results.size();
+                podiumRows[i].setVisibility(has ? View.VISIBLE : View.GONE);
+                if (has) text(podiumNames[i], cleanDriver(m.results.get(i)));
+            }
             stale.setVisibility(live && System.currentTimeMillis() - m.updated > 120_000 ? View.VISIBLE : View.GONE);
             bindActionPills(actionBar, watchBtn, watchIcon, watchLabel, remindBtn, remindIcon, remindLabel, m);
         }

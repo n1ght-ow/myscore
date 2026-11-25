@@ -50,7 +50,7 @@ public final class UpdateActivity extends Activity {
         LinearLayout header=ui.row();header.setMinimumHeight(ui.dp(48));header.setPadding(ui.dp(4),ui.dp(2),ui.dp(16),ui.dp(2));
         FrameLayout back=new FrameLayout(this);back.addView(new Ui.Icon(this,"back",ui.text),new FrameLayout.LayoutParams(ui.dp(22),ui.dp(22),Gravity.CENTER));
         ui.clickable(back,android.graphics.Color.TRANSPARENT,Ui.CONTROL_RADIUS);back.setContentDescription("Back to settings");back.setFocusable(true);back.setOnClickListener(v->finish());
-        header.addView(back,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));header.addView(ui.text("Update",17,ui.text,true));
+        header.addView(back,new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));header.addView(Ui.singleLine(ui.text("Update",17,ui.text,true)));
         root.addView(header);root.addView(ui.divider());
         boolean isPad=Ui.isPad(this);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
@@ -62,7 +62,7 @@ public final class UpdateActivity extends Activity {
         LinearLayout product=ui.row();
         FrameLayout markBox=ui.iconBadge("mark",ui.text,ui.tonal,36,24);
         LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(ui.dp(36),ui.dp(36));mp.setMarginEnd(ui.dp(12));product.addView(markBox,mp);
-        product.addView(ui.display("N1ghtScore",20,ui.text),new LinearLayout.LayoutParams(0,-2,1));
+        product.addView(Ui.singleLine(ui.display("N1ghtScore",20,ui.text)),new LinearLayout.LayoutParams(0,-2,1));
         TextView version=ui.badge("v"+BuildConfig.VERSION_NAME,ui.primarySoft,ui.primary);
         LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(-2,-2);vp.setMarginStart(ui.dp(8));product.addView(version,vp);
         mainCard.addView(product);ui.gap(mainCard,14);mainCard.addView(ui.divider());ui.gap(mainCard,16);
@@ -100,7 +100,7 @@ public final class UpdateActivity extends Activity {
         TextView link=ui.button("Open release page",false,()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(UpdateRelease.REPOSITORY+"/releases/latest")));}catch(android.content.ActivityNotFoundException e){Sheet.message(this,"Couldn't open release page","No browser is available. Try the in-app update check again later.");}});
         if(isPad){link.setMinWidth(ui.dp(180));body.addView(link,new LinearLayout.LayoutParams(-2,-2));}
         else body.addView(link,new LinearLayout.LayoutParams(-1,-2));
-        ui.gap(body,12);body.addView(ui.text("Installing over the current app keeps settings and calendar links. No uninstall needed.",12,ui.muted,false));
+        ui.gap(body,12);body.addView(ui.text("In-place updates preserve your settings and calendar reminders.",12,ui.dim,false));
     }
     private <T> void run(Callable<T> task,Consumer<T> complete){
         long ticket=++operation;working=true;

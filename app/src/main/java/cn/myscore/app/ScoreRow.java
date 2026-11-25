@@ -8,10 +8,11 @@ final class ScoreRow {
     final String text, title, message;
     final String leagueId, sportGroup, actionLabel, tournamentName;
     final int count, liveCount;
+    final boolean hideCompetition;
 
     private ScoreRow(int type, Match match, String text, String title, String message,
                      String leagueId, String sportGroup, int count, int liveCount,
-                     String actionLabel, String tournamentName) {
+                     String actionLabel, String tournamentName, boolean hideCompetition) {
         this.type = type;
         this.match = match;
         this.text = text;
@@ -23,18 +24,19 @@ final class ScoreRow {
         this.liveCount = liveCount;
         this.actionLabel = actionLabel;
         this.tournamentName = tournamentName;
+        this.hideCompetition = hideCompetition;
     }
 
     static ScoreRow loading(String text) {
-        return new ScoreRow(LOADING, null, text, null, null, "", "", 0, 0, "", "");
+        return new ScoreRow(LOADING, null, text, null, null, "", "", 0, 0, "", "", false);
     }
 
     static ScoreRow failure(String text) {
-        return new ScoreRow(FAILURE, null, text, null, null, "", "", 0, 0, "", "");
+        return new ScoreRow(FAILURE, null, text, null, null, "", "", 0, 0, "", "", false);
     }
 
     static ScoreRow section(String text) {
-        return new ScoreRow(SECTION, null, text, null, null, "", "", 0, 0, "", "");
+        return new ScoreRow(SECTION, null, text, null, null, "", "", 0, 0, "", "", false);
     }
 
     static ScoreRow competitionSection(ScoreFeedOrganizer.CompetitionGroup group) {
@@ -44,31 +46,35 @@ final class ScoreRow {
             ? group.matches().get(0).event : "";
         return new ScoreRow(SECTION, null, group.title(), null, null,
             group.leagueId(), group.sportGroup(), group.matches().size(), group.liveCount(),
-            action, tournament);
+            action, tournament, false);
     }
 
     static ScoreRow statusSection(String title, int count, int liveCount) {
-        return new ScoreRow(SECTION, null, title, null, null, "", "", count, liveCount, "", "");
+        return new ScoreRow(SECTION, null, title, null, null, "", "", count, liveCount, "", "", false);
     }
 
     static ScoreRow match(Match match) {
-        return new ScoreRow(match.group.equals("F1") ? F1 : MATCH, match, null, null, null, "", "", 0, 0, "", "");
+        return match(match, false);
+    }
+
+    static ScoreRow match(Match match, boolean hideCompetition) {
+        return new ScoreRow(match.group.equals("F1") ? F1 : MATCH, match, null, null, null, "", "", 0, 0, "", "", hideCompetition);
     }
 
     static ScoreRow empty(String title, String message) {
-        return new ScoreRow(EMPTY, null, null, title, message, "", "", 0, 0, "", "");
+        return new ScoreRow(EMPTY, null, null, title, message, "", "", 0, 0, "", "", false);
     }
 
     static ScoreRow empty(String title, String message, String action) {
-        return new ScoreRow(EMPTY, null, action, title, message, "", "", 0, 0, "", "");
+        return new ScoreRow(EMPTY, null, action, title, message, "", "", 0, 0, "", "", false);
     }
 
     /** Identity of the row's shape: equal keys let the adapter rebind text without a relayout. */
     String key() {
         if (type == MATCH || type == F1) {
             boolean stale = match.live() && System.currentTimeMillis() - match.updated > 120_000;
-            return "m" + type + ":" + match.id + ":" + match.state + ":"
-                + (match.group.equals("F1") ? Math.min(2, match.results.size()) : 0) + ":" + stale;
+            return "m" + type + ":" + match.id + ":" + match.state + ":" + hideCompetition + ":"
+                + (match.group.equals("F1") ? Math.min(3, match.results.size()) : 0) + ":" + stale;
         }
         if (type == SECTION) return "s:" + text + ":" + leagueId + ":" + actionLabel + ":" + count + ":" + liveCount;
         if (type == FAILURE) return "f";

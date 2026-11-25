@@ -123,14 +123,14 @@ final class Cs2EventGraph {
         for (int index = 0; index < columns.size(); index++) {
             Cs2Tournament.Lane column = columns.get(index);
             String round = index < 5 ? "Round " + (index + 1) : "Outcome";
-            TextView label = ui.text(index < 5 ? "R" + (index + 1) : "End", 11, ui.muted, true);
+            TextView label = Ui.singleLine(ui.text(index < 5 ? "R" + (index + 1) : "End", 11, ui.muted, true));
             label.setGravity(Gravity.CENTER);
             label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             labels.add(label);
             map.addView(label);
             for (int slot = 0; slot < column.buckets().size(); slot++) {
                 Cs2Tournament.Bucket bucket = column.buckets().get(slot);
-                TextView record = ui.text(record(bucket.label()), 13, ui.text, true);
+                TextView record = Ui.singleLine(ui.text(record(bucket.label()), 13, ui.text, true));
                 record.setGravity(Gravity.CENTER);
                 record.setMinHeight(ui.dp(48));
                 record.setContentDescription(round + ", " + record(bucket.label()) + (result(bucket.label()) == 1 ? ", advances"
@@ -230,7 +230,7 @@ final class Cs2EventGraph {
         List<Feed> feeds = new ArrayList<>();
         for (Cs2Tournament.Bucket round : lane.buckets()) {
             LinearLayout column = ui.column();
-            column.addView(ui.text(EnglishDisplay.text(round.label()), 13, ui.muted, true));
+            column.addView(Ui.singleLine(ui.text(EnglishDisplay.text(round.label()), 13, ui.muted, true)));
             ui.gap(column, 8);
             for (Cs2Tournament.Game game : round.games()) {
                 View slot = game(game, false);
@@ -318,7 +318,7 @@ final class Cs2EventGraph {
         } else item.addView(note("Matchup TBD"));
         String status = EnglishDisplay.text(game.status());
         String meta = ledger ? join(game.time(), game.bestOf(), status) : join(game.bestOf(), status.equals("Final") ? "" : status);
-        if (!meta.isBlank()) item.addView(note(meta));
+        if (!meta.isBlank()) item.addView(Ui.singleLine(note(meta)));
         if (game.id().matches("(?:five:cs2:)?csgo_mc_[0-9]+")) {
             item.setMinimumHeight(ui.dp(48));
             if (ledger) ui.clickable(item, Color.TRANSPARENT, 0);
@@ -337,9 +337,9 @@ final class Cs2EventGraph {
         row.setMinimumHeight(ui.dp(26));
         String name = unknown(side) ? "TBD" : EnglishDisplay.text(side.name());
         addCrest(row, side.logo(), name);
-        row.addView(ui.text(name, 13, unknown(side) ? ui.muted : ui.text, side.winner()), new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(Ui.singleLine(ui.text(name, 13, unknown(side) ? ui.muted : ui.text, side.winner())), new LinearLayout.LayoutParams(0, -2, 1));
         if (!side.score().isBlank()) {
-            TextView score = ui.text(side.score(), 13, side.winner() ? ui.primary : ui.text, true);
+            TextView score = Ui.singleLine(ui.text(side.score(), 13, side.winner() ? ui.primary : ui.text, true));
             score.setPaddingRelative(ui.dp(8), 0, 0, 0);
             row.addView(score);
         }
@@ -355,7 +355,7 @@ final class Cs2EventGraph {
             LinearLayout row = ui.row();
             row.setMinimumHeight(ui.dp(42));
             addCrest(row, team.logo(), team.name());
-            row.addView(ui.text(team.name(), 14, ui.text, true), new LinearLayout.LayoutParams(0, -2, 1));
+            row.addView(Ui.singleLine(ui.text(team.name(), 14, ui.text, true)), new LinearLayout.LayoutParams(0, -2, 1));
             panel.addView(row);
         }
         if (panel.getChildCount() == 0) into.addView(note("No teams confirmed for this record yet."));

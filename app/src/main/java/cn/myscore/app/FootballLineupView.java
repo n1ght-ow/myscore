@@ -62,7 +62,7 @@ final class FootballLineupView {
                 this.ui.clickable(choice, Color.TRANSPARENT, Ui.CONTROL_RADIUS - 2);
             }
             choice.addView((View)Logos.view(this.ui, logos[i], names[i], 22));
-            TextView name = this.ui.text(names[i], 13, on ? this.ui.text : this.ui.muted, on);
+            TextView name = Ui.singleLine(this.ui.text(names[i], 13, on ? this.ui.text : this.ui.muted, on));
             name.setPadding(this.ui.dp(8.0f), 0, 0, 0);
             choice.addView((View)name, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             choice.setContentDescription((CharSequence)EnglishDisplay.text(names[i] + (on ? ", selected" : ", view lineup")));
@@ -173,13 +173,15 @@ final class FootballLineupView {
                 ArrayList across = new ArrayList(line);
                 Collections.reverse(across);
                 for (Object playerObj : across) {
-                    row.addView(this.pitchPlayer((DetailRows.Entry)playerObj), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+                    row.addView(this.pitchPlayer((DetailRows.Entry)playerObj, across.size()), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
                 }
                 pitch.addView((View)row);
             }
             pitchHost.addView((View)pitch, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
-            this.ui.gap(pitchHost, 8);
-            pitchHost.addView((View)this.ui.text(font >= 1.5f ? "Lines follow the starting formation · Tap a player for details" : "Tap any player on the pitch for match stats", 11, this.ui.muted, false));
+            if (font >= 1.5f) {
+                this.ui.gap(pitchHost, 8);
+                pitchHost.addView((View)this.ui.text("Lines follow the starting formation · Tap a player for details", 11, this.ui.muted, false));
+            }
         }
         this.ui.gap(pitchHost, 12);
         this.legend(pitchHost);
@@ -226,7 +228,7 @@ final class FootballLineupView {
         host.addView((View)list);
     }
 
-    private View pitchPlayer(DetailRows.Entry entry) {
+    private View pitchPlayer(DetailRows.Entry entry, int rowSize) {
         MatchDetail.Person person = entry.person();
         LinearLayout player = this.ui.column();
         player.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
@@ -235,11 +237,11 @@ final class FootballLineupView {
         FrameLayout holder = new FrameLayout(this.ui.c);
         holder.addView(this.jersey(person, 42, 46, 15, true), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(42.0f), this.ui.dp(46.0f), android.view.Gravity.CENTER));
         player.addView((View)holder, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, this.ui.dp(48.0f)));
-        TextView name = this.ui.text(this.shortName(person), 11, Color.WHITE, true);
+        TextView name = Ui.singleLine(this.ui.text(this.shortName(person), rowSize >= 5 ? 10 : 11, Color.WHITE, true));
         name.setGravity(android.view.Gravity.CENTER);
-        name.setPadding(this.ui.dp(5), this.ui.dp(1.5f), this.ui.dp(5), this.ui.dp(1.5f));
+        int hPad = this.ui.dp(rowSize >= 5 ? 3 : 5);
+        name.setPadding(hPad, this.ui.dp(1.5f), hPad, this.ui.dp(1.5f));
         name.setBackground(this.ui.shape(Color.argb(115, 6, 14, 10), 8));
-        name.setMaxLines(1);
         player.addView((View)name, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-2, -2));
         View stats = this.stats(entry, false);
         if (stats != null) {
@@ -260,7 +262,7 @@ final class FootballLineupView {
         LinearLayout words = this.ui.column();
         LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(0, -2, 1.0f);
         wp.setMarginStart(this.ui.dp(10.0f));
-        words.addView((View)this.ui.text(person == null ? DetailRows.cell(entry.values(), 0) : person.name(), 14, this.ui.text, true));
+        words.addView((View)Ui.singleLine(this.ui.text(person == null ? DetailRows.cell(entry.values(), 0) : person.name(), 14, this.ui.text, true)));
         View meta = this.stats(entry, true);
         if (meta != null) {
             this.ui.gap(words, 4);

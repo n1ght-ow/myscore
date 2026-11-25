@@ -71,7 +71,13 @@ public final class DetailParsers {
         if(co!=null&&Boolean.TRUE.equals(co.opt("neutralSite")))d.fact("中立场地","是");
         d.fact("观众",val(gi,"attendance"));d.fact("赛事",MatchLabel.of(actual));
         JSONArray officials=arr(gi,"officials");for(int i=0;i<officials.length();i++){JSONObject o=officials.optJSONObject(i);if(o!=null)d.fact(label(officialRole(o)),officialName(o));}
-        if(co!=null){JSONArray notes=arr(co,"notes");for(int i=0;i<notes.length();i++)d.fact("说明",objAt(notes,i).optString("headline"));lineScores(d,co);}
+        if(co!=null){
+            JSONArray notes=arr(co,"notes");for(int i=0;i<notes.length();i++)d.fact("说明",objAt(notes,i).optString("headline"));
+            JSONArray series=arr(co,"series");for(int i=0;i<series.length();i++){String sum=text(objAt(series,i),"summary").strip();if(!sum.isEmpty()){d.fact("系列赛",sum);break;}}
+            String broadcast=broadcasts(arr(co,"broadcasts"));if(!broadcast.isEmpty())d.fact("转播",broadcast);
+            if(c.group.equals("足球"))soccerGoals(d,arr(co,"details"));
+            lineScores(d,co);
+        }
         teamStats(d,arr(obj(root,"boxscore"),"teams"));
         if(c.group.equals("足球"))d.stats.sort(Comparator.comparingInt(s->switch(s.label()){case "控球率 %"->0;case "射门"->1;case "射正"->2;case "角球"->3;case "成功传球"->4;case "传球"->5;default->6;}));
         if(c.group.equals("足球"))soccerRoster(d,arr(root,"rosters"),arr(root,"keyEvents"));else players(d,arr(obj(root,"boxscore"),"players"));
@@ -85,8 +91,37 @@ public final class DetailParsers {
     /** ESPN summary supplies season totals before tip-off; those are not this match's stats. */
     static void restrictPregame(MatchDetail detail) {
         if(!detail.match.id.startsWith("espn:")||!detail.match.scheduled()||detail.match.group.equals("F1"))return;
-        detail.stats.clear();detail.events.clear();
+        detail.stats.clear();detail.events.clear();detail.goals.clear();
         detail.tables.removeIf(table->table.tab.equals("overview")||(!detail.match.group.equals("足球")&&table.tab.equals("lineup")&&!table.category.equals("伤停")));
+    }
+    private static String broadcasts(JSONArray list) {
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        for (int i = 0; i < list.length(); i++) {
+            JSONObject item = list.optJSONObject(i);
+            if (item == null) continue;
+            String name = text(obj(item, "media"), "shortName").strip();
+            if (name.isEmpty()) name = text(item, "shortName").strip();
+            if (!name.isEmpty()) names.add(name);
+            if (names.size() >= 3) break;
+        }
+        return String.join(" · ", names);
+    }
+    private static void soccerGoals(MatchDetail d, JSONArray details) {
+        for (int i = 0; i < details.length(); i++) {
+            JSONObject item = details.optJSONObject(i);
+            if (item == null) continue;
+            boolean scoring = item.optBoolean("scoringPlay");
+            boolean redCard = item.optBoolean("redCard");
+            if (!scoring && !redCard) continue;
+            String teamId = text(obj(item, "team"), "id");
+            String clock = text(obj(item, "clock"), "displayValue").strip();
+            JSONArray people = arr(item, "participants");
+            JSONObject athlete = people.length() > 0 ? obj(objAt(people, 0), "athlete") : new JSONObject();
+            String player = text(athlete, "shortName").strip();
+            if (player.isEmpty()) player = DetailFormat.shortName(text(athlete, "displayName").strip());
+            if (teamId.isEmpty() || player.isEmpty()) continue;
+            d.goals.add(new MatchDetail.Goal(teamId, clock, player, item.optBoolean("penaltyKick"), item.optBoolean("ownGoal"), redCard));
+        }
     }
     private static void orderColumns(MatchDetail.Table table,List<String> preferred){List<String> columns=new ArrayList<>(table.columns);List<Integer> order=new ArrayList<>();for(String label:preferred){int index=columns.indexOf(label);if(index>=0&&!order.contains(index))order.add(index);}for(int i=0;i<columns.size();i++)if(!order.contains(i))order.add(i);table.columns.clear();for(int index:order)table.columns.add(columns.get(index));for(int i=0;i<table.rows.size();i++){List<String> before=table.rows.get(i),row=new ArrayList<>();for(int index:order)row.add(index<before.size()?before.get(index):"—");table.rows.set(i,row);}}
     private static void lineScores(MatchDetail d,JSONObject co){
@@ -120,7 +155,7 @@ public final class DetailParsers {
     }
     private static MatchDetail.Person person(JSONObject p,JSONObject team,Match match){JSONObject a=obj(p,"athlete"),position=obj(p,"position");String role=text(position,"displayName",text(obj(a,"position"),"abbreviation"));String photo=text(obj(a,"headshot"),"href");if(match.group.equals("足球"))photo=soccerPhoto(photo,text(a,"id"));String shortName=text(a,"shortName",DetailFormat.shortName(text(a,"displayName")));if((match.group.equals("NBA")||match.group.equals("NFL"))&&!text(a,"firstName").isBlank()&&!text(a,"lastName").isBlank())shortName=text(a,"firstName").substring(0,1)+". "+text(a,"lastName");return new MatchDetail.Person(text(a,"id"),text(a,"displayName"),shortName,photo,text(p,"jersey",text(a,"jersey")),label(role),text(team,"id"),text(team,"displayName"),text(team,"logo",text(team,"id").equals(match.homeId)?match.homeLogo:text(team,"id").equals(match.awayId)?match.awayLogo:""),p.optBoolean("starter"),p.optBoolean("didNotPlay"));}
     public static MatchDetail five(JSONObject root,Match previous,long now)throws Exception {
-        JSONObject match=obj(obj(root,"data"),"match");if(!root.optBoolean("success"))throw new Exception("CS2 详情读取失败");Match actual=DomesticEsports.fiveMatch(match,now,true);if(!actual.id.equals(previous.id))throw new Exception("CS2 比赛身份不匹配");MatchDetail d=new MatchDetail(actual);d.fetched=now;JSONObject mc=obj(match,"mc_info"),tt=obj(match,"tt_info");d.fact("赛事",actual.event);d.fact("级别",DetailParsers.text(tt,"grade_label"));d.fact("赛制",mc.optString("format").isBlank()?"":"BO"+mc.optString("format"));d.fact("阶段",mc.optString("tt_stage_desc"));
+        JSONObject match=obj(obj(root,"data"),"match");if(!root.optBoolean("success"))throw new Exception("CS2 详情读取失败");Match actual=DomesticEsports.fiveMatch(match,now,true);if(!actual.id.equals(previous.id))throw new Exception("CS2 比赛身份不匹配");MatchDetail d=new MatchDetail(actual);d.fetched=now;JSONObject mc=obj(match,"mc_info"),tt=obj(match,"tt_info");d.fact("赛事",actual.event);d.fact("级别",DetailParsers.text(tt,"grade_label"));d.fact("赛制",mc.optString("format").isBlank()?"":"BO"+mc.optString("format"));d.fact("阶段",mc.optString("tt_stage_desc"));d.fact("地点",DetailParsers.text(tt,"addr").strip());d.fact("奖金",DetailParsers.text(tt,"bonus").strip());
         JSONObject global=obj(match,"global_state");csPlayers(d,global,"全场",actual.home,actual.away,"t1_player_stats","t2_player_stats");
         MatchDetail.Table maps=new MatchDetail.Table("overview","地图比分","地图",actual.home,actual.away,"状态");JSONArray bouts=arr(match,"bouts_state");
         for(int i=0;i<bouts.length();i++){JSONObject b=objAt(bouts,i);String name=b.optString("map_name");if(name.isBlank())continue;String status=b.optString("status");boolean done=status.equals("2");JSONObject hs=obj(b,"t1_stats"),as=obj(b,"t2_stats");maps.row((i+1)+"  "+name,done?show(val(hs,"all_score")):"—",done?show(val(as,"all_score")):"—",done?"已结束":status.equals("1")?"进行中":"未开始");if(done){csPlayers(d,b,name,actual.home,actual.away,"t1_pr_stats","t2_pr_stats");boolean sides=hasSides(hs)&&hasSides(as);MatchDetail.Table halves=sides?new MatchDetail.Table("events",name+" · T / CT","球队","首开方","T 方","CT 方","加时","总分"):new MatchDetail.Table("events",name+" · 攻守半场","球队","上半场","下半场","加时","总分");if(sides){halves.row(actual.home,firstSide(hs),sideScore(hs,"T"),sideScore(hs,"CT"),show(val(hs,"ot_score")),show(val(hs,"all_score")));halves.row(actual.away,firstSide(as),sideScore(as,"T"),sideScore(as,"CT"),show(val(as,"ot_score")),show(val(as,"all_score")));}else{halves.row(actual.home,show(val(hs,"fh_score")),show(val(hs,"sh_score")),show(val(hs,"ot_score")),show(val(hs,"all_score")));halves.row(actual.away,show(val(as,"fh_score")),show(val(as,"sh_score")),show(val(as,"ot_score")),show(val(as,"all_score")));}d.table(halves);}}

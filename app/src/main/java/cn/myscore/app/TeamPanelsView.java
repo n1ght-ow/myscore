@@ -48,18 +48,13 @@ final class TeamPanelsView {
             return;
         }
         String title = nba ? "Player stats" : (category.equals("全场") ? "Overall player stats" : EnglishDisplay.text(category) + " player stats");
-        this.body.addView((View)this.ui.text(title, 16, this.ui.text, true));
+        this.body.addView((View)Ui.singleLine(this.ui.text(title, 16, this.ui.text, true)));
         this.ui.gap(this.body, 2);
-        TextView hint = this.ui.text(players > 0 ? "Tap a number column to sort · Tap a name for details" : "Injury report follows the source", 11, this.ui.muted, false);
+        TextView hint = Ui.singleLine(this.ui.text(players > 0 ? "Tap column to sort · Tap player for details" : "Injury report follows the source", 11, this.ui.dim, false));
         this.body.addView((View)hint);
         this.ui.gap(this.body, 8);
         List<HorizontalScrollView> scrollers = this.teams(category, nba, sort, descending, changed, scrollX, Map.of(), Map.of());
         this.bind(scrollers, savedScroll);
-        hint.post(() -> {
-            boolean scroll;
-            scroll = !scrollers.isEmpty() && (((HorizontalScrollView)scrollers.get(0)).canScrollHorizontally(1) || ((HorizontalScrollView)scrollers.get(0)).canScrollHorizontally(-1));
-            hint.setText((CharSequence)(players > 0 ? "Tap a number column to sort · " + (scroll ? "Swipe to compare both teams · " : "") + "Tap a name for details" : "Injury report follows the source"));
-        });
     }
 
     void scope(String category, String sort, boolean descending, Consumer<Sort> changed, int scrollX, IntConsumer savedScroll, Map<String, String> homeScore, Map<String, String> awayScore) {
@@ -91,8 +86,8 @@ final class TeamPanelsView {
         header.setPadding(0, this.ui.dp(2), 0, this.ui.dp(2));
         String name = this.teamName(teamId);
         header.addView((View)Logos.view(this.ui, this.teamLogo(teamId), name, 24), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(24.0f), this.ui.dp(24.0f)));
-        TextView title = this.ui.text(name, 15, this.ui.text, true);
-        title.setPadding(this.ui.dp(8.0f), 0, 0, 0);
+        TextView title = Ui.singleLine(this.ui.text(name, 15, this.ui.text, true));
+        title.setPadding(this.ui.dp(8.0f), 0, this.ui.dp(8.0f), 0);
         header.addView((View)title, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         header.addView((View)this.ui.badge(players(rows.size()), this.ui.tonal, this.ui.muted));
         header.setContentDescription((CharSequence)EnglishDisplay.text(name + ", " + players(rows.size())));
@@ -108,11 +103,11 @@ final class TeamPanelsView {
                 LinearLayout item = this.ui.column();
                 item.setGravity(1);
                 String labelText = EnglishDisplay.text(cell.getKey());
-                TextView label2 = this.ui.text(labelText, 10, this.ui.muted, true);
+                TextView label2 = Ui.singleLine(this.ui.text(labelText, 10, this.ui.muted, true));
                 label2.setGravity(17);
                 String valueText = EnglishDisplay.text(cell.getValue());
                 boolean isTotal = cell.getKey().equals("总分");
-                TextView value = this.ui.text(valueText, 14, isTotal ? this.ui.primary : this.ui.text, true);
+                TextView value = Ui.singleLine(this.ui.text(valueText, 14, isTotal ? this.ui.primary : this.ui.text, true));
                 value.setGravity(17);
                 if (isTotal) {
                     value.setTag((Object)"team-map-score-total");
@@ -187,7 +182,7 @@ final class TeamPanelsView {
         row.setMinimumHeight(this.ui.dp(44.0f));
         row.setPadding(this.ui.dp(4.0f), this.ui.dp(8.0f), this.ui.dp(4.0f), this.ui.dp(8.0f));
         LinearLayout words = this.ui.column();
-        words.addView((View)this.ui.text(name, 13, this.ui.text, true));
+        words.addView((View)Ui.singleLine(this.ui.text(name, 13, this.ui.text, true)));
         if (!noteText.isBlank()) {
             this.ui.gap(words, 3);
             words.addView((View)this.ui.text(noteText, 12, this.ui.muted, false));

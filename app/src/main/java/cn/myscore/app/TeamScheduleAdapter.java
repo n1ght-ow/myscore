@@ -113,7 +113,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
 
             // Top meta row: Date + Home/Away pill + Status/Live pill
             LinearLayout top = ui.row();
-            date = ui.text("", 12, ui.muted, true);
+            date = Ui.singleLine(ui.text("", 12, ui.muted, true));
             top.addView(date, new LinearLayout.LayoutParams(-2, -2));
             sidePill = ui.badge("", ui.tonal, ui.muted);
             LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, -2);
@@ -138,9 +138,9 @@ final class TeamScheduleAdapter extends BaseAdapter {
             main.addView(crestWrap, new LinearLayout.LayoutParams(ui.dp(38), ui.dp(38)));
 
             LinearLayout middle = ui.column();
-            opponent = ui.text("", 15, ui.text, true);
+            opponent = Ui.singleLine(ui.text("", 15, ui.text, true));
             middle.addView(opponent);
-            detail = ui.text("", 12, ui.muted, false);
+            detail = Ui.singleLine(ui.text("", 12, ui.muted, false));
             detail.setPadding(0, ui.dp(2), 0, 0);
             middle.addView(detail);
             LinearLayout.LayoutParams middleParams = new LinearLayout.LayoutParams(0, -2, 1f);
@@ -173,8 +173,10 @@ final class TeamScheduleAdapter extends BaseAdapter {
             LinearLayout.LayoutParams cip = new LinearLayout.LayoutParams(ui.dp(14), ui.dp(14));
             cip.setMarginEnd(ui.dp(6));
             footer.addView(clockIcon, cip);
-            timeText = ui.text("", 12, ui.muted, true);
-            footer.addView(timeText, new LinearLayout.LayoutParams(0, -2, 1f));
+            timeText = Ui.singleLine(ui.text("", 12, ui.muted, true));
+            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1f);
+            tlp.setMarginEnd(ui.dp(8));
+            footer.addView(timeText, tlp);
 
             remindPill = ui.row();
             remindPill.setGravity(Gravity.CENTER);
@@ -184,7 +186,7 @@ final class TeamScheduleAdapter extends BaseAdapter {
             LinearLayout.LayoutParams rip = new LinearLayout.LayoutParams(ui.dp(14), ui.dp(14));
             rip.setMarginEnd(ui.dp(5));
             remindPill.addView(remindIcon, rip);
-            remindLabel = ui.text("Remind", 12, ui.text, true);
+            remindLabel = Ui.singleLine(ui.text("Remind", 12, ui.text, true));
             remindPill.addView(remindLabel);
             remindPill.setFocusable(true);
             remindPill.setOnClickListener(v -> { if (row != null) host.toggleSubscription(row.match); });

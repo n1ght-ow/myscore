@@ -1068,7 +1068,6 @@ implements ScoreAdapter.Host {
         this.renderedScores = signature;
         long started = SystemClock.uptimeMillis();
         List<ScoreRow> rows = this.buildScoreRows(all);
-        this.scoreAdapter.setGroupedByCompetition(ScoreFeedOrganizer.GROUP_COMPETITION.equals(this.groupMode));
         boolean relaid = this.scoreAdapter.updateRows(rows);
         if (relaid) {
             this.scoreList.resetScrollTracking();
@@ -1108,7 +1107,7 @@ implements ScoreAdapter.Host {
             key.append('|').append(batch.competition.id).append(':').append(batch.error);
         }
         for (Match m : all) {
-            key.append('|').append(m.id).append(',').append(m.league).append(',').append(m.group).append(',').append(m.home).append(',').append(m.away).append(',').append(m.displayScore(true)).append(',').append(m.displayScore(false)).append(',').append(m.state).append(',').append(m.status).append(',').append(m.start).append(',').append(m.timeConfirmed).append(',').append(m.title).append(',').append(m.homeId).append(',').append(m.awayId).append(',').append(m.homeLogo).append(',').append(m.awayLogo).append(',').append(this.subscribed.contains(m.id)).append(',').append(m.live() && now - m.updated > 120000L).append(',').append(m.source).append(',').append(m.updated / 60000L);
+            key.append('|').append(m.id).append(',').append(m.league).append(',').append(m.group).append(',').append(m.home).append(',').append(m.away).append(',').append(m.homeRecord).append(',').append(m.awayRecord).append(',').append(m.displayScore(true)).append(',').append(m.displayScore(false)).append(',').append(m.state).append(',').append(m.status).append(',').append(m.start).append(',').append(m.timeConfirmed).append(',').append(m.title).append(',').append(m.homeId).append(',').append(m.awayId).append(',').append(m.homeLogo).append(',').append(m.awayLogo).append(',').append(this.subscribed.contains(m.id)).append(',').append(m.live() && now - m.updated > 120000L).append(',').append(m.source).append(',').append(m.updated / 60000L);
             WatchLinks.Link watch = this.watches.link(m);
             key.append(',').append(watch == null ? "" : watch.url).append(',').append(watch == null ? "" : watch.title);
             for (String result : m.results) {
@@ -1160,7 +1159,7 @@ implements ScoreAdapter.Host {
             for (ScoreFeedOrganizer.CompetitionGroup g : groups) {
                 rows.add(ScoreRow.competitionSection(g));
                 for (Match m : g.matches()) {
-                    rows.add(ScoreRow.match(m));
+                    rows.add(ScoreRow.match(m, true));
                 }
             }
         } else {
@@ -1175,7 +1174,7 @@ implements ScoreAdapter.Host {
                 int liveCount = "live".equals(stage) ? stageMatches.size() : 0;
                 rows.add(ScoreRow.statusSection(EnglishDisplay.text(Rules.stateLabel(stage)), stageMatches.size(), liveCount));
                 for (Match m : stageMatches) {
-                    rows.add(ScoreRow.match(m));
+                    rows.add(ScoreRow.match(m, false));
                 }
             }
         }
@@ -1207,7 +1206,7 @@ implements ScoreAdapter.Host {
             mp.setMarginEnd(this.ui.dp(10.0f));
             header.addView(brandBox, mp);
         }
-        TextView heading = this.ui.display(this.tab == 0 ? "N1ghtScore" : "Settings", 20, this.ui.text);
+        TextView heading = Ui.singleLine(this.ui.display(this.tab == 0 ? "N1ghtScore" : "Settings", 20, this.ui.text));
         header.addView((View)heading, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         if (this.tab == 0) {
             // Live counter pill (toggles Live-only lens)
@@ -1218,7 +1217,7 @@ implements ScoreAdapter.Host {
             LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(this.ui.dp(6), this.ui.dp(6));
             dp.setMarginEnd(this.ui.dp(5));
             this.headerLivePill.addView(dot, dp);
-            this.headerLiveText = this.ui.text("LIVE", 11, this.ui.live, true);
+            this.headerLiveText = Ui.singleLine(this.ui.text("LIVE", 11, this.ui.live, true));
             this.headerLivePill.addView(this.headerLiveText);
             this.headerLivePill.setFocusable(true);
             this.headerLivePill.setOnClickListener(v -> this.toggleLens(ScoreFeedOrganizer.LENS_LIVE));
@@ -1304,7 +1303,7 @@ implements ScoreAdapter.Host {
 
         if (summary.saved() > 0 || ScoreFeedOrganizer.LENS_SAVED.equals(this.lens)) {
             boolean savedOn = ScoreFeedOrganizer.LENS_SAVED.equals(this.lens);
-            TextView savedChip = this.ui.text("Saved " + summary.saved(), 11, savedOn ? this.ui.onPrimary : this.ui.primary, true);
+            TextView savedChip = Ui.singleLine(this.ui.text("Saved " + summary.saved(), 11, savedOn ? this.ui.onPrimary : this.ui.primary, true));
             savedChip.setPadding(this.ui.dp(10), this.ui.dp(4), this.ui.dp(10), this.ui.dp(4));
             this.ui.clickableDrawable(savedChip,
                 savedOn ? this.ui.shape(this.ui.primary, Ui.PILL_RADIUS)
@@ -1324,7 +1323,7 @@ implements ScoreAdapter.Host {
         pill.setPadding(this.ui.dp(12), this.ui.dp(8), this.ui.dp(12), this.ui.dp(8));
         this.ui.clickableDrawable(pill, this.ui.outlined(this.ui.warnSoft, Ui.alpha(this.ui.warn, 90), Ui.CONTROL_RADIUS), Ui.CONTROL_RADIUS);
         pill.addView(new Ui.Icon(this, "bracket", this.ui.warn), new LinearLayout.LayoutParams(this.ui.dp(16), this.ui.dp(16)));
-        TextView label = this.ui.text("CS2 Tournaments & Brackets", 12, this.ui.warn, true);
+        TextView label = Ui.singleLine(this.ui.text("CS2 Tournaments & Brackets", 12, this.ui.warn, true));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
         lp.setMarginStart(this.ui.dp(8));
         pill.addView(label, lp);
@@ -1654,10 +1653,13 @@ implements ScoreAdapter.Host {
         symbolParams.setMarginEnd(this.ui.dp(12.0f));
         row.addView((View)symbol, (ViewGroup.LayoutParams)symbolParams);
         LinearLayout text = this.ui.column();
-        text.addView((View)this.ui.text(title, 14, this.ui.text, true));
+        text.addView((View)Ui.singleLine(this.ui.text(title, 14, this.ui.text, true)));
         if (!detail.isBlank()) {
             this.ui.gap(text, 2);
-            text.addView((View)this.ui.text(detail, 12, this.ui.muted, false));
+            TextView dt = this.ui.text(detail, 12, this.ui.muted, false);
+            dt.setMaxLines(2);
+            dt.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            text.addView((View)dt);
         }
         row.addView((View)text, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
         LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(this.ui.dp(16.0f), this.ui.dp(16.0f));
@@ -2201,7 +2203,6 @@ implements ScoreAdapter.Host {
         if (this.padDetail != null) this.snapshot.updateMatch(this.padDetail.match);
         List<Match> all = this.snapshot.matches();
         this.watches.prepare(all, this::onWatchChanged);
-        this.padAdapter.setGroupedByCompetition(ScoreFeedOrganizer.GROUP_COMPETITION.equals(this.groupMode));
         this.padAdapter.updateRows(this.buildScoreRows(all));
         if (this.padFocusHost != null) this.ensurePadSelection(all);
         this.padAdapter.setSelected(this.padFocusHost == null ? "" : this.padSelectedId);
@@ -2765,10 +2766,12 @@ implements ScoreAdapter.Host {
             return;
         }
         LinearLayout eyebrow = this.ui.row();
-        TextView kicker = this.ui.text(EnglishDisplay.text(MatchLabel.of(m)), 11, this.ui.muted, true);
+        TextView kicker = Ui.singleLine(this.ui.text(EnglishDisplay.text(MatchLabel.of(m)), 11, this.ui.muted, true));
         kicker.setLetterSpacing(0.06f);
-        eyebrow.addView((View)kicker, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
-        TextView updated = this.ui.text(padUpdatedText(m), 11, this.ui.muted, false);
+        LinearLayout.LayoutParams kp = new LinearLayout.LayoutParams(0, -2, 1.0f);
+        kp.setMarginEnd(this.ui.dp(10));
+        eyebrow.addView((View)kicker, (ViewGroup.LayoutParams)kp);
+        TextView updated = Ui.singleLine(this.ui.text(padUpdatedText(m), 11, this.ui.muted, false));
         updated.setTag("pad-focus-updated");
         eyebrow.addView((View)updated);
         host.addView((View)eyebrow);
@@ -2863,6 +2866,13 @@ implements ScoreAdapter.Host {
             row.addView((View)this.padHeroTeam(m, false), (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             card.addView((View)row);
         }
+        if (this.padDetail != null && !this.padDetail.goals.isEmpty() && this.padDetail.match.id.equals(m.id)) {
+            LinearLayout scorers = this.ui.goalScorersStrip(m, this.padDetail.goals);
+            if (scorers != null) {
+                this.ui.gap(card, 12);
+                card.addView(scorers, new LinearLayout.LayoutParams(-1, -2));
+            }
+        }
         WatchLinks.Link watch = this.watches.link(m);
         if (watch != null) {
             this.ui.gap(card, 14);
@@ -2913,12 +2923,19 @@ implements ScoreAdapter.Host {
         slot.setContentDescription(available ? "View " + EnglishDisplay.text(name) + " schedule" : null);
         slot.setOnClickListener(available ? v -> this.openTeam(m, home) : null);
         row.addView((View)slot, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(52.0f), this.ui.dp(52.0f)));
-        TextView label = this.ui.text(EnglishDisplay.text(name), 16, this.ui.text, true);
+        LinearLayout nameCol = this.ui.column();
+        TextView label = Ui.singleLine(this.ui.text(EnglishDisplay.text(name), 16, this.ui.text, true));
         label.setLetterSpacing(-0.02f);
+        nameCol.addView(label);
+        String rec = home ? m.homeRecord : m.awayRecord;
+        if (!rec.isEmpty()) {
+            nameCol.addView(Ui.singleLine(this.ui.text(rec, 11, this.ui.dim, false)));
+        }
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, -2, 1.0f);
         labelParams.setMarginStart(this.ui.dp(8.0f));
-        row.addView((View)label, (ViewGroup.LayoutParams)labelParams);
-        TextView score = this.ui.fixtureScore(m.hasScore() ? m.displayScore(home) : "—", 28, this.ui.scoreColor(m, home));
+        labelParams.setMarginEnd(this.ui.dp(8.0f));
+        row.addView((View)nameCol, (ViewGroup.LayoutParams)labelParams);
+        TextView score = Ui.singleLine(this.ui.fixtureScore(m.hasScore() ? m.displayScore(home) : "—", 28, this.ui.scoreColor(m, home)));
         score.setMinWidth(this.ui.scoreColumnWidth(28,m));
         score.setGravity(Gravity.CENTER);
         score.setIncludeFontPadding(false);
@@ -2933,6 +2950,7 @@ implements ScoreAdapter.Host {
         String name = home ? m.home : m.away;
         String logo = home ? m.homeLogo : m.awayLogo;
         String id = home ? m.homeId : m.awayId;
+        String rec = home ? m.homeRecord : m.awayRecord;
         FrameLayout slot = new FrameLayout((Context)this);
         slot.addView((View)Logos.view(this.ui, logo, name, 64), (ViewGroup.LayoutParams)new FrameLayout.LayoutParams(this.ui.dp(64.0f), this.ui.dp(64.0f), 17));
         boolean available = id != null && !id.isBlank();
@@ -2942,10 +2960,18 @@ implements ScoreAdapter.Host {
         slot.setOnClickListener(available ? v -> this.openTeam(m, home) : null);
         side.addView((View)slot, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(68.0f), this.ui.dp(68.0f)));
         this.ui.gap(side, 8);
-        TextView label = this.ui.text(EnglishDisplay.text(name), 17, this.ui.text, true);
+        TextView label = this.ui.text(EnglishDisplay.text(name), 16, this.ui.text, true);
         label.setGravity(17);
+        label.setMaxLines(2);
+        label.setEllipsize(android.text.TextUtils.TruncateAt.END);
         label.setLetterSpacing(-0.02f);
         side.addView((View)label, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(-1, -2));
+        if (!rec.isEmpty()) {
+            this.ui.gap(side, 2);
+            TextView rView = Ui.singleLine(this.ui.text(rec, 11, this.ui.dim, false));
+            rView.setGravity(17);
+            side.addView(rView, new LinearLayout.LayoutParams(-1, -2));
+        }
         return side;
     }
 
@@ -2955,10 +2981,12 @@ implements ScoreAdapter.Host {
             this.padFocusHeading(left, "Match stats");
             card = this.padSurface();
             LinearLayout names = this.ui.row();
-            TextView home = this.ui.text(EnglishDisplay.text(m.home), 11, this.ui.text, true);
-            TextView away = this.ui.text(EnglishDisplay.text(m.away), 11, this.ui.text, true);
+            TextView home = Ui.singleLine(this.ui.text(EnglishDisplay.text(m.home), 11, this.ui.text, true));
+            TextView away = Ui.singleLine(this.ui.text(EnglishDisplay.text(m.away), 11, this.ui.text, true));
             away.setGravity(0x800005);
-            names.addView((View)home, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
+            LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(0, -2, 1.0f);
+            hlp.setMarginEnd(this.ui.dp(8));
+            names.addView((View)home, (ViewGroup.LayoutParams)hlp);
             names.addView((View)away, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(0, -2, 1.0f));
             card.addView((View)names);
             this.ui.gap(card, 8);
@@ -3048,8 +3076,11 @@ implements ScoreAdapter.Host {
         LinearLayout row = this.ui.row();
         row.setGravity(48);
         row.setPadding(0, this.ui.dp(8.0f), 0, this.ui.dp(8.0f));
-        TextView clock = this.ui.text(EnglishDisplay.text(e.time()), 11, this.ui.muted, true);
-        row.addView((View)clock, (ViewGroup.LayoutParams)new LinearLayout.LayoutParams(this.ui.dp(48.0f), -2));
+        TextView clock = Ui.singleLine(this.ui.text(EnglishDisplay.text(e.time()), 11, this.ui.muted, true));
+        clock.setMinWidth(this.ui.dp(50.0f));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2, -2);
+        clp.setMarginEnd(this.ui.dp(10.0f));
+        row.addView((View)clock, (ViewGroup.LayoutParams)clp);
         LinearLayout words = this.ui.column();
         String title = EnglishDisplay.text(DetailParsers.plain(e.title()));
         String text = EnglishDisplay.text(DetailParsers.plain(e.text()));
@@ -3122,7 +3153,7 @@ implements ScoreAdapter.Host {
                 this.railBars.get(g).setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
                 TextView label = this.railLabels.get(g);
                 label.setTextColor(selected ? this.ui.text : this.ui.muted);
-                label.setTypeface(label.getTypeface(), selected ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+                label.setTypeface(selected ? this.ui.medium : this.ui.regular);
             }
             TextView count = this.railCounts.get(g);
             if (count == null) continue;

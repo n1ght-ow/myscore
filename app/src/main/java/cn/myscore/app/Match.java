@@ -15,6 +15,7 @@ public final class Match {
     public String event = "", eventId = "";
     public boolean tierOne = false;
     public String home = "", away = "", homeScore = "", awayScore = "";
+    public String homeRecord = "", awayRecord = "";
     public String homeShootout = "", awayShootout = "";
     public int scoreDataVersion = 0;
     public String homeId="", awayId="", homeLogo="", awayLogo="";
@@ -65,6 +66,7 @@ public final class Match {
             o.put("id", id).put("league", league).put("group", group).put("source", source).put("title", title)
                 .put("event", event).put("eventId", eventId).put("tierOne", tierOne)
                 .put("home", home).put("away", away).put("homeScore", homeScore).put("awayScore", awayScore)
+                .put("homeRecord", homeRecord).put("awayRecord", awayRecord)
                 .put("homeShootout", homeShootout).put("awayShootout", awayShootout).put("scoreDataVersion", scoreDataVersion)
                 .put("homeId",homeId).put("awayId",awayId).put("homeLogo",homeLogo).put("awayLogo",awayLogo)
                 .put("state", state).put("status", status).put("detail", detail).put("url", url)
@@ -79,6 +81,7 @@ public final class Match {
         m.source=text(o,"source"); m.title=text(o,"title"); m.home=text(o,"home"); m.away=text(o,"away");
         m.event=text(o,"event"); m.eventId=text(o,"eventId"); m.tierOne=o.optBoolean("tierOne");
         m.homeScore=text(o,"homeScore"); m.awayScore=text(o,"awayScore"); m.state=text(o,"state","unknown");
+        m.homeRecord=text(o,"homeRecord"); m.awayRecord=text(o,"awayRecord");
         m.homeShootout=text(o,"homeShootout");m.awayShootout=text(o,"awayShootout");m.scoreDataVersion=o.optInt("scoreDataVersion");
         m.homeId=text(o,"homeId");m.awayId=text(o,"awayId");m.homeLogo=text(o,"homeLogo");m.awayLogo=text(o,"awayLogo");
         m.status=text(o,"status","状态待确认"); m.detail=text(o,"detail"); m.url=text(o,"url");

@@ -52,12 +52,20 @@ public final class DomesticEsports {
         }
         return "SPIRIT".equals(BilibiliVods.cs2Team(match.home))||"SPIRIT".equals(BilibiliVods.cs2Team(match.away));
     }
+    static String rankTag(JSONObject team) {
+        String rank = DetailParsers.text(team, "rank").trim();
+        if (!rank.matches("[1-9][0-9]*")) {
+            rank = DetailParsers.text(obj(team, "v_rank"), "rank").trim();
+        }
+        return rank.matches("[1-9][0-9]*") ? "#" + rank : "";
+    }
     private static Match fiveBase(JSONObject mc,JSONObject tournament,long fetched) {
         Match m=new Match();m.id="five:cs2:"+mc.optString("id");m.league="cs2";m.group="CS2";m.source="5EPlay";m.updated=fetched;
         JSONObject home=obj(mc,"t1_info"),away=obj(mc,"t2_info");
         m.home=teamName(home);m.away=teamName(away);
         m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");
         m.homeLogo=crest(home);m.awayLogo=crest(away);
+        m.homeRecord=rankTag(home);m.awayRecord=rankTag(away);
         // The live feed uses ts for the scheduled start; the team feed may only carry plan_ts.
         m.start=seconds(mc.optString("ts"));if(m.start==0)m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
         m.event=DetailParsers.text(tournament,"disp_name").trim();
@@ -159,6 +167,7 @@ public final class DomesticEsports {
             if(!spirit(home,away))continue;
             Match m=fiveBase(mc,obj(row,"tt_info"),fetched);m.home=teamName(home);m.away=teamName(away);m.start=seconds(mc.optString("ts"));if(m.start==0)m.start=seconds(mc.optString("plan_ts"));m.timeConfirmed=m.start>0;
             m.homeId=DetailParsers.text(home,"id");m.awayId=DetailParsers.text(away,"id");m.homeLogo=crest(home);m.awayLogo=crest(away);
+            m.homeRecord=rankTag(home);m.awayRecord=rankTag(away);
             m.state=switch(mc.optString("status")){case "past"->"final";case "future","upcoming"->"scheduled";case "live"->"live";default->"unknown";};m.status=Rules.stateLabel(m.state);
             // History is in home/opponent coordinates, not t1/t2 coordinates.
             if(!m.scheduled()){m.homeScore=score(mc,"home_score");m.awayScore=score(mc,"opponent_score");}

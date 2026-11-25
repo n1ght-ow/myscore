@@ -14,10 +14,15 @@ public final class MatchDetail {
     public final List<Stat> stats=new ArrayList<>();
     public final List<Table> tables=new ArrayList<>();
     public final List<Event> events=new ArrayList<>();
+    public final List<Goal> goals=new ArrayList<>();
     public MatchDetail(Match m){match=m;source=m.source;}
     public record Fact(String label,String value){}
     public record Stat(String label,String home,String away){}
     public record Event(String time,String title,String text){}
+    public record Goal(String teamId,String clock,String player,boolean penalty,boolean ownGoal,boolean redCard){
+        JSONObject json()throws JSONException{return new JSONObject().put("teamId",teamId).put("clock",clock).put("player",player).put("penalty",penalty).put("ownGoal",ownGoal).put("redCard",redCard);}
+        static Goal from(JSONObject o){return new Goal(o.optString("teamId"),o.optString("clock"),o.optString("player"),o.optBoolean("penalty"),o.optBoolean("ownGoal"),o.optBoolean("redCard"));}
+    }
     public record Person(String id,String name,String shortName,String photo,String jersey,String position,String teamId,String team,String teamLogo,boolean starter,boolean absent){
         JSONObject json()throws JSONException{return new JSONObject().put("id",id).put("name",name).put("shortName",shortName).put("photo",photo).put("jersey",jersey).put("position",position).put("teamId",teamId).put("team",team).put("teamLogo",teamLogo).put("starter",starter).put("absent",absent);}
         static Person from(JSONObject o){return new Person(o.optString("id"),o.optString("name"),o.optString("shortName"),o.optString("photo"),o.optString("jersey"),o.optString("position"),o.optString("teamId"),o.optString("team"),o.optString("teamLogo"),o.optBoolean("starter"),o.optBoolean("absent"));}
@@ -44,6 +49,7 @@ public final class MatchDetail {
         hash=mix(hash,source);hash=mix(hash,warning);
         hash=mix(hash,match.group);hash=mix(hash,match.state);hash=mix(hash,match.home);hash=mix(hash,match.away);
         hash=mix(hash,match.homeId);hash=mix(hash,match.awayId);hash=mix(hash,match.detail);
+        hash=mix(hash,match.homeRecord);hash=mix(hash,match.awayRecord);
         for(Fact f:facts){hash=mix(hash,f.label());hash=mix(hash,f.value());}
         for(Stat s:stats){hash=mix(hash,s.label());hash=mix(hash,s.home());hash=mix(hash,s.away());}
         for(Table t:tables){
@@ -53,17 +59,19 @@ public final class MatchDetail {
             for(Person person:t.people){hash=mix(hash,person.id());hash=mix(hash,person.name());hash=mix(hash,person.shortName());hash=mix(hash,person.photo());hash=mix(hash,person.jersey());hash=mix(hash,person.position());hash=mix(hash,person.teamId());hash=mix(hash,person.team());hash=mix(hash,person.teamLogo());hash=mix(hash,person.starter()?1:0);hash=mix(hash,person.absent()?1:0);}
         }
         for(Event e:events){hash=mix(hash,e.time());hash=mix(hash,e.title());hash=mix(hash,e.text());}
+        for(Goal g:goals){hash=mix(hash,g.teamId());hash=mix(hash,g.clock());hash=mix(hash,g.player());hash=mix(hash,(g.penalty()?1:0)+(g.ownGoal()?2:0)+(g.redCard()?4:0));}
         bodyHash=hash;bodyHashReady=true;return hash;
     }
     private static long mix(long hash,String value){return (hash^(value==null?0:value.hashCode()))*1099511628211L;}
     private static long mix(long hash,long value){return (hash^value)*1099511628211L;}
     public JSONObject json()throws JSONException {
         JSONObject root=new JSONObject().put("match",match.json()).put("fetched",fetched).put("source",source).put("warning",warning);
-        JSONArray f=new JSONArray(),s=new JSONArray(),ts=new JSONArray(),ev=new JSONArray();
+        JSONArray f=new JSONArray(),s=new JSONArray(),ts=new JSONArray(),ev=new JSONArray(),gs=new JSONArray();
         for(Fact v:facts)f.put(new JSONArray().put(v.label).put(v.value));for(Stat v:stats)s.put(new JSONArray().put(v.label).put(v.home).put(v.away));
         for(Table t:tables){JSONArray rs=new JSONArray(),people=new JSONArray();for(List<String> r:t.rows)rs.put(new JSONArray(r));for(Person person:t.people)people.put(person.json());ts.put(new JSONObject().put("tab",t.tab).put("title",t.title).put("teamId",t.teamId).put("category",t.category).put("columns",new JSONArray(t.columns)).put("rows",rs).put("people",people));}
         for(Event e:events)ev.put(new JSONArray().put(e.time).put(e.title).put(e.text));
-        return root.put("facts",f).put("stats",s).put("tables",ts).put("events",ev);
+        for(Goal g:goals)gs.put(g.json());
+        return root.put("facts",f).put("stats",s).put("tables",ts).put("events",ev).put("goals",gs);
     }
     public static MatchDetail fromJson(JSONObject root)throws JSONException {
         MatchDetail d=new MatchDetail(Match.fromJson(root.getJSONObject("match")));d.fetched=root.optLong("fetched");d.source=root.optString("source");d.warning=root.optString("warning");
@@ -71,6 +79,7 @@ public final class MatchDetail {
         a=root.getJSONArray("stats");for(int i=0;i<a.length();i++){JSONArray r=a.getJSONArray(i);d.stats.add(new Stat(r.optString(0),r.optString(1),r.optString(2)));}
         a=root.getJSONArray("tables");for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);Table t=new Table(o.getString("tab"),o.getString("title"));t.teamId=o.optString("teamId");t.category=o.optString("category");JSONArray cols=o.getJSONArray("columns");for(int j=0;j<cols.length();j++)t.columns.add(cols.optString(j));JSONArray rows=o.getJSONArray("rows");for(int j=0;j<rows.length();j++){JSONArray r=rows.getJSONArray(j);List<String> row=new ArrayList<>();for(int k=0;k<r.length();k++)row.add(r.optString(k));t.rows.add(row);}JSONArray people=o.optJSONArray("people");if(people!=null)for(int j=0;j<people.length();j++)t.people.add(Person.from(people.getJSONObject(j)));d.table(t);}
         a=root.getJSONArray("events");for(int i=0;i<a.length();i++){JSONArray r=a.getJSONArray(i);d.events.add(new Event(r.optString(0),r.optString(1),r.optString(2)));}
+        JSONArray gs=root.optJSONArray("goals");if(gs!=null)for(int i=0;i<gs.length();i++){JSONObject o=gs.optJSONObject(i);if(o!=null)d.goals.add(Goal.from(o));}
         return d;
     }
 }

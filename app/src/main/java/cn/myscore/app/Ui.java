@@ -56,7 +56,7 @@ final class Ui {
     final int live, liveSoft, info, infoSoft, warn, warnSoft, navBg;
 
     private static Typeface interRegular, interMedium, interBold;
-    private final Typeface regular, medium, heavy;
+    final Typeface regular, medium, heavy;
 
     static boolean isDark(Context context) {
         String theme = context.getSharedPreferences("settings", 0).getString("theme", "dark");
@@ -305,6 +305,14 @@ final class Ui {
         TextView v = text(s, 11, color, true);
         v.setAllCaps(true);
         v.setLetterSpacing(0.08f);
+        v.setSingleLine(true);
+        v.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        return v;
+    }
+
+    static TextView singleLine(TextView v) {
+        v.setSingleLine(true);
+        v.setEllipsize(android.text.TextUtils.TruncateAt.END);
         return v;
     }
 
@@ -442,7 +450,7 @@ final class Ui {
 
     /** Crisp status/category badge pill. */
     TextView badge(String label, int fill, int ink) {
-        TextView b = text(label, 11, ink, true);
+        TextView b = singleLine(text(label, 11, ink, true));
         b.setGravity(Gravity.CENTER);
         b.setPadding(dp(9), dp(3), dp(9), dp(3));
         b.setBackground(shape(fill, PILL_RADIUS));
@@ -459,7 +467,7 @@ final class Ui {
         LinearLayout.LayoutParams dpLp = new LinearLayout.LayoutParams(dp(6), dp(6));
         dpLp.setMarginEnd(dp(5));
         pill.addView(dot, dpLp);
-        TextView t = text(label, 11, live, true);
+        TextView t = singleLine(text(label, 11, live, true));
         t.setLetterSpacing(0.03f);
         pill.addView(t);
         return pill;
@@ -471,7 +479,7 @@ final class Ui {
         if ("W".equals(result)) { fill = primarySoft; ink = primary; }
         else if ("L".equals(result)) { fill = errorSoft; ink = error; }
         else if ("D".equals(result)) { fill = warnSoft; ink = warn; }
-        TextView v = text(result, 12, ink, true);
+        TextView v = singleLine(text(result, 12, ink, true));
         v.setGravity(Gravity.CENTER);
         v.setBackground(outlined(fill, alpha(ink, 60), 8));
         v.setLayoutParams(new LinearLayout.LayoutParams(dp(26), dp(26)));
@@ -494,16 +502,22 @@ final class Ui {
     }
 
     TextView chip(String label, boolean selected, int activeFill, int activeInk, Runnable action) {
-        TextView chip = text(label, 13, selected ? activeInk : muted, selected);
+        TextView chip = singleLine(text(label, 13, selected ? activeInk : muted, selected));
         chip.setGravity(Gravity.CENTER);
         chip.setMinHeight(dp(40));
         chip.setPadding(dp(15), dp(8), dp(15), dp(8));
-        GradientDrawable bg = selected ? shape(activeFill, PILL_RADIUS) : outlined(tonal, border, PILL_RADIUS);
-        clickableDrawable(chip, bg, PILL_RADIUS);
-        chip.setSelected(selected);
+        styleChip(chip, selected, activeFill, activeInk);
         chip.setFocusable(true);
         chip.setOnClickListener(v -> action.run());
         return chip;
+    }
+
+    void styleChip(TextView chip, boolean selected, int activeFill, int activeInk) {
+        chip.setSelected(selected);
+        chip.setTextColor(selected ? activeInk : muted);
+        chip.setTypeface(selected ? medium : regular);
+        GradientDrawable bg = selected ? shape(activeFill, PILL_RADIUS) : outlined(tonal, border, PILL_RADIUS);
+        clickableDrawable(chip, bg, PILL_RADIUS);
     }
 
     /** Modern segmented tab pill bar container. */
@@ -524,14 +538,11 @@ final class Ui {
         tab.setTypeface(selected ? medium : regular);
         tab.setIncludeFontPadding(true);
         tab.setFallbackLineSpacing(true);
+        tab.setSingleLine(true);
+        tab.setEllipsize(android.text.TextUtils.TruncateAt.END);
         tab.setGravity(Gravity.CENTER);
         tab.setMinHeight(dp(40));
-        tab.setPadding(dp(14), dp(8), dp(14), dp(8));
-        Paint measure = new Paint(tab.getPaint());
-        measure.setTypeface(regular);
-        float regularWidth = measure.measureText(display);
-        measure.setTypeface(medium);
-        tab.setMinWidth((int) Math.ceil(Math.max(regularWidth, measure.measureText(display))) + dp(28));
+        tab.setPadding(dp(12), dp(8), dp(12), dp(8));
         applyTabStyle(tab, selected);
         tab.setSelected(selected);
         tab.setFocusable(true);
@@ -556,10 +567,10 @@ final class Ui {
     }
 
     TextView button(String label, boolean filled, Runnable action) {
-        TextView b = text(label, 14, filled ? onAction : text, true);
+        TextView b = singleLine(text(label, 14, filled ? onAction : text, true));
         b.setGravity(Gravity.CENTER);
         b.setMinHeight(dp(48));
-        b.setPadding(dp(20), dp(12), dp(20), dp(12));
+        b.setPadding(dp(18), dp(12), dp(18), dp(12));
         GradientDrawable bg = filled ? shape(this.action, CONTROL_RADIUS) : outlined(tonal, border, CONTROL_RADIUS);
         clickableDrawable(b, bg, CONTROL_RADIUS);
         b.setFocusable(true);
@@ -568,10 +579,10 @@ final class Ui {
     }
 
     TextView accentButton(String label, int fill, int ink, Runnable action) {
-        TextView b = text(label, 13, ink, true);
+        TextView b = singleLine(text(label, 13, ink, true));
         b.setGravity(Gravity.CENTER);
         b.setMinHeight(dp(42));
-        b.setPadding(dp(16), dp(9), dp(16), dp(9));
+        b.setPadding(dp(14), dp(9), dp(14), dp(9));
         clickableDrawable(b, shape(fill, PILL_RADIUS), PILL_RADIUS);
         b.setFocusable(true);
         b.setOnClickListener(v -> action.run());
@@ -579,7 +590,7 @@ final class Ui {
     }
 
     TextView textButton(String label, Runnable action) {
-        TextView b = text(label, 14, primary, true);
+        TextView b = singleLine(text(label, 14, primary, true));
         b.setMinHeight(dp(44));
         b.setPadding(dp(4), dp(10), dp(12), dp(10));
         b.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
@@ -601,15 +612,20 @@ final class Ui {
         boolean awayLeads = numeric && a > h;
 
         LinearLayout header = row();
-        TextView left = text(homeVal, 14, homeLeads ? primary : text, homeLeads);
-        TextView mid = text(label, 12, muted, false);
+        TextView left = singleLine(text(homeVal, 13, homeLeads ? primary : text, homeLeads));
+        left.setMinWidth(dp(54));
+        TextView mid = singleLine(text(label, 12, muted, false));
         mid.setGravity(Gravity.CENTER);
-        TextView right = text(awayVal, 14, awayLeads ? info : text, awayLeads);
+        TextView right = singleLine(text(awayVal, 13, awayLeads ? info : text, awayLeads));
+        right.setMinWidth(dp(54));
         right.setGravity(Gravity.END);
 
-        header.addView(left, new LinearLayout.LayoutParams(dp(64), -2));
-        header.addView(mid, new LinearLayout.LayoutParams(0, -2, 1f));
-        header.addView(right, new LinearLayout.LayoutParams(dp(64), -2));
+        header.addView(left, new LinearLayout.LayoutParams(-2, -2));
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(0, -2, 1f);
+        mp.setMarginStart(dp(8));
+        mp.setMarginEnd(dp(8));
+        header.addView(mid, mp);
+        header.addView(right, new LinearLayout.LayoutParams(-2, -2));
         box.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
         if (numeric) {
@@ -633,6 +649,72 @@ final class Ui {
             box.addView(track);
         }
         return box;
+    }
+
+    /** Sleek 2-column football goal scorers & red cards strip for Match Center heroes. */
+    LinearLayout goalScorersStrip(Match match, java.util.List<MatchDetail.Goal> goals) {
+        if (match == null || goals == null || goals.isEmpty()) return null;
+        java.util.LinkedHashMap<String, java.util.List<String>> homeMap = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, java.util.List<String>> awayMap = new java.util.LinkedHashMap<>();
+        for (MatchDetail.Goal g : goals) {
+            boolean isHome = !match.homeId.isEmpty() && match.homeId.equals(g.teamId());
+            boolean isAway = !match.awayId.isEmpty() && match.awayId.equals(g.teamId());
+            if (!isHome && !isAway) continue;
+            String key = g.player() + (g.redCard() ? "|RC" : "");
+            StringBuilder stamp = new StringBuilder();
+            if (!g.clock().isEmpty()) stamp.append(g.clock());
+            if (g.penalty()) stamp.append(stamp.length() > 0 ? " P" : "P");
+            else if (g.ownGoal()) stamp.append(stamp.length() > 0 ? " OG" : "OG");
+            (isHome ? homeMap : awayMap).computeIfAbsent(key, k -> new java.util.ArrayList<>()).add(stamp.toString());
+        }
+        if (homeMap.isEmpty() && awayMap.isEmpty()) return null;
+        LinearLayout wrap = column();
+        wrap.addView(divider());
+        gap(wrap, 10);
+        LinearLayout cols = row();
+        cols.setGravity(Gravity.TOP);
+        LinearLayout left = column();
+        for (java.util.Map.Entry<String, java.util.List<String>> e : homeMap.entrySet()) {
+            left.addView(scorerLine(e.getKey(), e.getValue(), false));
+        }
+        LinearLayout right = column();
+        for (java.util.Map.Entry<String, java.util.List<String>> e : awayMap.entrySet()) {
+            right.addView(scorerLine(e.getKey(), e.getValue(), true));
+        }
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+        lp.setMarginEnd(dp(10));
+        cols.addView(left, lp);
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, -2, 1f);
+        rp.setMarginStart(dp(10));
+        cols.addView(right, rp);
+        wrap.addView(cols, new LinearLayout.LayoutParams(-1, -2));
+        return wrap;
+    }
+
+    private LinearLayout scorerLine(String key, java.util.List<String> clocks, boolean alignEnd) {
+        boolean red = key.endsWith("|RC");
+        String player = red ? key.substring(0, key.length() - 3) : key;
+        java.util.List<String> clean = new java.util.ArrayList<>();
+        for (String s : clocks) if (s != null && !s.isBlank()) clean.add(s);
+        String suffix = String.join(", ", clean);
+        LinearLayout line = row();
+        line.setGravity((alignEnd ? Gravity.END : Gravity.START) | Gravity.CENTER_VERTICAL);
+        line.setPadding(0, dp(1.5f), 0, dp(1.5f));
+        View marker = new View(c);
+        marker.setBackground(shape(red ? error : primary, red ? 2 : PILL_RADIUS));
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(dp(red ? 6 : 5), dp(red ? 9 : 5));
+        TextView tv = singleLine(text(suffix.isEmpty() ? player : (alignEnd ? suffix + "  " + player : player + "  " + suffix), 11, red ? error : muted, false));
+        tv.setGravity(alignEnd ? Gravity.END : Gravity.START);
+        if (alignEnd) {
+            line.addView(tv, new LinearLayout.LayoutParams(0, -2, 1f));
+            mp.setMarginStart(dp(6));
+            line.addView(marker, mp);
+        } else {
+            mp.setMarginEnd(dp(6));
+            line.addView(marker, mp);
+            line.addView(tv, new LinearLayout.LayoutParams(0, -2, 1f));
+        }
+        return line;
     }
 
     /** Compact media shortcut pill for match cards. */
@@ -690,12 +772,12 @@ final class Ui {
             play = new Icon(c, "play", primary);
             badge.addView(play, new FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER));
             addView(badge, new LinearLayout.LayoutParams(dp(34), dp(34)));
-            provider = text("", 14, text, true);
+            provider = singleLine(text("", 14, text, true));
             provider.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(0, -2, 1f);
             pp.setMarginStart(dp(12));
             addView(provider, pp);
-            state = text("", 12, primary, true);
+            state = singleLine(text("", 12, primary, true));
             state.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, -2);
             sp.setMarginStart(dp(10));

@@ -114,7 +114,7 @@ public final class TeamActivity extends Activity {
         LinearLayout appbar=ui.row();
         appbar.setPadding(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(2));
         appbar.addView(iconButton("back","Back",this::finish));
-        TextView title=ui.text(pageName(),16,ui.text,true);title.setGravity(Gravity.CENTER);
+        TextView title=Ui.singleLine(ui.text(pageName(),16,ui.text,true));title.setGravity(Gravity.CENTER);
         appbar.addView(title,new LinearLayout.LayoutParams(0,-2,1));
         appbar.addView(iconButton("refresh","Refresh schedule",()->load(true)));
         root.addView(appbar);
@@ -136,6 +136,7 @@ public final class TeamActivity extends Activity {
         ui.gap(names,2);
         TextView name=ui.display(team.name,20,ui.text);
         name.setMaxLines(2);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         names.addView(name);
         LinearLayout.LayoutParams namesParams=new LinearLayout.LayoutParams(0,-2,1);
         namesParams.setMarginStart(ui.dp(14));
@@ -158,7 +159,7 @@ public final class TeamActivity extends Activity {
         cardParams.setMargins(ui.dp(16),ui.dp(6),ui.dp(16),ui.dp(8));
         root.addView(hero,cardParams);
 
-        status=ui.text("",11,ui.muted,false);status.setPadding(ui.dp(4),ui.dp(12),ui.dp(4),ui.dp(4));status.setVisibility(View.GONE);
+        status=Ui.singleLine(ui.text("",11,ui.dim,false));status.setPadding(ui.dp(4),ui.dp(12),ui.dp(4),ui.dp(4));status.setVisibility(View.GONE);
         error=ui.text("",13,ui.error,false);error.setLineSpacing(ui.dp(4),1);
         error.setBackground(ui.outlined(ui.errorSoft,Ui.alpha(ui.error,80),Ui.CONTROL_RADIUS));error.setPadding(ui.dp(14),ui.dp(12),ui.dp(14),ui.dp(12));
         LinearLayout.LayoutParams errorParams=new LinearLayout.LayoutParams(-1,-2);errorParams.setMargins(ui.dp(16),0,ui.dp(16),ui.dp(8));
@@ -198,7 +199,7 @@ public final class TeamActivity extends Activity {
         LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(ui.dp(14),ui.dp(14));
         ip.setMarginEnd(ui.dp(5));
         pill.addView(ic,ip);
-        pill.addView(ui.text(shortLabel,12,ui.text,true));
+        pill.addView(Ui.singleLine(ui.text(shortLabel,12,ui.text,true)));
         Ui.Icon chev=new Ui.Icon(this,"chevron",ui.muted);
         LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(ui.dp(12),ui.dp(12));
         cp.setMarginStart(ui.dp(3));
@@ -227,8 +228,10 @@ public final class TeamActivity extends Activity {
         String record=hasDraws?(snap.wins()+"W · "+snap.draws()+"D · "+snap.losses()+"L"):(snap.wins()+"W · "+snap.losses()+"L");
         left.addView(ui.eyebrow("Season Record",ui.dim));
         ui.gap(left,2);
-        left.addView(ui.text(snap.completed()>0?record:(snap.upcoming()+" upcoming"),13,ui.text,true));
-        bar.addView(left,new LinearLayout.LayoutParams(0,-2,1));
+        left.addView(Ui.singleLine(ui.text(snap.completed()>0?record:(snap.upcoming()+" upcoming"),13,ui.text,true)));
+        LinearLayout.LayoutParams leftLp=new LinearLayout.LayoutParams(0,-2,1);
+        leftLp.setMarginEnd(ui.dp(10));
+        bar.addView(left,leftLp);
 
         if(!snap.recentForm().isEmpty()){
             LinearLayout right=ui.column();
@@ -258,7 +261,7 @@ public final class TeamActivity extends Activity {
         int accent=ui.sportAccent(team.league,"");
         LinearLayout bar=ui.row();bar.setPadding(ui.dp(12),ui.dp(10),ui.dp(16),ui.dp(10));
         bar.addView(iconButton("back","Back to matches",this::finish));
-        TextView title=ui.text(pageName(),17,ui.text,true);LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,-2,1);tp.setMarginStart(ui.dp(6));bar.addView(title,tp);
+        TextView title=Ui.singleLine(ui.text(pageName(),17,ui.text,true));LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,-2,1);tp.setMarginStart(ui.dp(6));bar.addView(title,tp);
         LinearLayout standingsPill=buildStandingsPill(accent);
         if(standingsPill!=null){
             LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);
@@ -280,9 +283,9 @@ public final class TeamActivity extends Activity {
         LinearLayout names=ui.column();LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(0,-2,1);np.setMarginStart(ui.dp(18));
         names.addView(ui.eyebrow(competitionLabel(),accent));
         ui.gap(names,2);
-        TextView name=ui.display(team.name,26,ui.text);names.addView(name);
+        TextView name=ui.display(team.name,26,ui.text);name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);names.addView(name);
         ui.gap(names,6);
-        padStatus=ui.text("Loading schedule…",11,ui.muted,false);names.addView(padStatus);
+        padStatus=Ui.singleLine(ui.text("Loading schedule…",11,ui.muted,false));names.addView(padStatus);
         padError=ui.text("",12,ui.error,false);padError.setLineSpacing(ui.dp(3),1);padError.setVisibility(View.GONE);ui.gap(names,6);names.addView(padError);
         hero.addView(names,np);
         LinearLayout stats=ui.row();
@@ -307,7 +310,7 @@ public final class TeamActivity extends Activity {
         LinearLayout left=padColumn("Upcoming","Live and starting soon",true);
         columns.addView(left,new LinearLayout.LayoutParams(0,-1,1));
         View rule=new View(this);rule.setBackgroundColor(ui.line);columns.addView(rule,new LinearLayout.LayoutParams(ui.dp(1),-1));
-        LinearLayout right=padColumn("Results","Newest first · source-confirmed scores only",false);
+        LinearLayout right=padColumn("Results","Newest first",false);
         columns.addView(right,new LinearLayout.LayoutParams(0,-1,1));
         root.addView(columns,new LinearLayout.LayoutParams(-1,0,1));
         padUpcomingList.setAdapter(padUpcomingAdapter);
@@ -329,8 +332,8 @@ public final class TeamActivity extends Activity {
         LinearLayout column=ui.column();
         LinearLayout head=ui.row();head.setPadding(ui.dp(24),ui.dp(12),ui.dp(24),ui.dp(6));
         LinearLayout words=ui.column();
-        words.addView(ui.text(title,17,ui.text,true));
-        ui.gap(words,3);words.addView(ui.text(subtitle,11,ui.muted,false));
+        words.addView(Ui.singleLine(ui.text(title,17,ui.text,true)));
+        ui.gap(words,3);words.addView(Ui.singleLine(ui.text(subtitle,11,ui.muted,false)));
         head.addView(words,new LinearLayout.LayoutParams(0,-2,1));
         TextView count=ui.text("",12,ui.muted,true);count.setGravity(Gravity.END);
         if(upcoming)padUpcomingCount=count;else padFinishedCount=count;

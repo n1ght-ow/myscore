@@ -94,6 +94,7 @@ public final class Parsers {
                         };
                     }
                     m.homeLogo=logo(obj(home,"team"));m.awayLogo=logo(obj(away,"team"));
+                    m.homeRecord=record(home);m.awayRecord=record(away);
                     if(!m.scheduled()) { m.homeScore=value(home,"score"); m.awayScore=value(away,"score"); }
                     if(c.group.equals("足球")) {
                         m.scoreDataVersion=1;
@@ -120,6 +121,25 @@ public final class Parsers {
     public static String logo(JSONObject team) {
         String direct=team.optString("logo");if(direct.startsWith("https://"))return direct;
         JSONArray logos=arr(team,"logos");for(int i=0;i<logos.length();i++){JSONObject l=logos.optJSONObject(i);if(l!=null&&l.optString("href").startsWith("https://"))return l.optString("href");}return "";
+    }
+
+    private static String record(JSONObject competitor) {
+        JSONArray records = competitor.optJSONArray("records");
+        if (records == null || records.length() == 0) records = competitor.optJSONArray("record");
+        if (records == null || records.length() == 0) return "";
+        String fallback = "";
+        for (int i = 0; i < records.length(); i++) {
+            JSONObject item = records.optJSONObject(i);
+            if (item == null) continue;
+            String type = item.optString("type", "").toLowerCase(java.util.Locale.ROOT);
+            String name = item.optString("name", "").toLowerCase(java.util.Locale.ROOT);
+            String summary = DetailParsers.text(item, "summary");
+            if (summary.isEmpty()) summary = DetailParsers.text(item, "displayValue");
+            if (summary.isEmpty() || !summary.contains("-")) continue;
+            if ("total".equals(type) || "overall".equals(name)) return summary;
+            if (fallback.isEmpty()) fallback = summary;
+        }
+        return fallback;
     }
 
     private static String shootout(JSONObject competitor) {

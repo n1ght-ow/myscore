@@ -142,6 +142,9 @@ final class EnglishDisplay {
         阶段=Stage
         级别=Tier
         赛制=Format
+        系列赛=Series
+        转播=Broadcast
+        奖金=Prize pool
         选手=Player
         球员=Player
         球队=Team

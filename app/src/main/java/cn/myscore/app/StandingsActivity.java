@@ -125,7 +125,7 @@ public final class StandingsActivity extends Activity {
         LinearLayout bar = ui.row();
         bar.setPaddingRelative(ui.dp(4), 0, ui.dp(4), 0);
         bar.addView(action("back", "Back", this::finish));
-        TextView title = ui.text("Standings", 17, ui.text, true);
+        TextView title = Ui.singleLine(ui.text("Standings", 17, ui.text, true));
         title.setGravity(Gravity.CENTER);
         title.setAccessibilityHeading(true);
         bar.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
@@ -152,7 +152,7 @@ public final class StandingsActivity extends Activity {
         scroll = new ScrollView(this);
         LinearLayout reading = ui.column();
         reading.setPaddingRelative(ui.dp(16), ui.dp(14), ui.dp(16), ui.dp(28));
-        info = ui.text("", 12, ui.muted, false);
+        info = Ui.singleLine(ui.text("", 11, ui.dim, false));
         info.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         content = ui.column();
         reading.addView(content, new LinearLayout.LayoutParams(-1, -2));
@@ -214,12 +214,8 @@ public final class StandingsActivity extends Activity {
         failed = false;
         for (Map.Entry<String, TextView> entry : sportTabs.entrySet()) {
             boolean on = entry.getKey().equals(sport);
-            TextView chip = entry.getValue();
             int accent = ui.sportAccent(entry.getKey(), "");
-            chip.setSelected(on);
-            chip.setTextColor(on ? Color.WHITE : ui.muted);
-            chip.setTypeface(null, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
-            ui.clickableDrawable(chip, on ? ui.shape(accent, Ui.PILL_RADIUS) : ui.outlined(ui.tonal, ui.border, Ui.PILL_RADIUS), Ui.PILL_RADIUS);
+            ui.styleChip(entry.getValue(), on, accent, Color.WHITE);
         }
         reveal(sportTabs.get(sport));
         shell.requestLayout();
@@ -323,11 +319,12 @@ public final class StandingsActivity extends Activity {
             banner.setOnClickListener(v -> startActivity(new Intent(this, Cs2EventActivity.class)));
             banner.addView(ui.iconBadge("bracket", accent, Ui.alpha(accent, ui.dark ? 45 : 30), 42, 20));
             LinearLayout words = ui.column();
-            words.addView(ui.text("CS2 Tournaments & Brackets", 15, ui.text, true));
+            words.addView(Ui.singleLine(ui.text("CS2 Tournaments & Brackets", 15, ui.text, true)));
             ui.gap(words, 2);
-            words.addView(ui.text("Explore active Swiss stages, playoffs & matchups", 12, ui.muted, false));
+            words.addView(Ui.singleLine(ui.text("Active Swiss stages, playoffs & matchups", 12, ui.muted, false)));
             LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(0, -2, 1f);
             wp.setMarginStart(ui.dp(12));
+            wp.setMarginEnd(ui.dp(8));
             banner.addView(words, wp);
             banner.addView(new Ui.Icon(this, "chevron", ui.muted), new LinearLayout.LayoutParams(ui.dp(18), ui.dp(18)));
             content.addView(banner, new LinearLayout.LayoutParams(-1, -2));
